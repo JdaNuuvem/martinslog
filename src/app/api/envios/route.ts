@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { DomainError, SaldoInsuficienteError } from '@/domain/errors'
 import { lerSessao } from '@/server/auth/sessao'
@@ -45,12 +46,14 @@ const pagarEnvioSchema = z.object({
 function statusParaErro(codigo: string): number {
   switch (codigo) {
     case 'ENVIO_NAO_ENCONTRADO':
+    case 'COTACAO_NAO_ENCONTRADA':
       return 404
     case 'NAO_AUTORIZADO':
       return 403
     case 'SALDO_INSUFICIENTE':
       return 402
     case 'COTACAO_EXPIRADA':
+    case 'COTACAO_NAO_CORRESPONDE':
     case 'TRANSICAO_INVALIDA':
     case 'CARTEIRA_NAO_ENCONTRADA':
       return 422
@@ -65,6 +68,38 @@ async function lerCorpo(request: NextRequest): Promise<unknown | null> {
   } catch {
     return null
   }
+}
+
+const TIMEOUT_TRANSACAO_PRISMA = 'P2028'
+
+function isTimeoutDeTransacao(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError && error.code === TIMEOUT_TRANSACAO_PRISMA
+  )
+}
+
+/**
+ * Resposta padrão para qualquer erro não tratado nas rotas de envio.
+ * `P2028` (timeout de transação do Prisma) acontece sob contenção real na
+ * mesma carteira — nada foi debitado indevidamente, então 409 com "tente
+ * de novo" é mais correto do que um 500 genérico de "erro inesperado".
+ */
+function respostaErroInesperado(error: unknown, contexto: string): NextResponse {
+  if (isTimeoutDeTransacao(error)) {
+    return NextResponse.json(
+      {
+        codigo: 'OPERACAO_EM_CONTENCAO',
+        mensagem: 'A operação demorou demais por causa de outra em andamento na mesma carteira. Tente novamente.',
+      },
+      { status: 409 },
+    )
+  }
+
+  console.error(contexto, { cause: error })
+  return NextResponse.json(
+    { codigo: 'ERRO_INTERNO', mensagem: 'Erro inesperado. Tente novamente.' },
+    { status: 500 },
+  )
 }
 
 /**
@@ -97,11 +132,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         { status: statusParaErro(error.codigo) },
       )
     }
-    console.error('Erro inesperado ao obter prévia do envio', { cause: error })
-    return NextResponse.json(
-      { codigo: 'ERRO_INTERNO', mensagem: 'Erro inesperado ao calcular a prévia do envio.' },
-      { status: 500 },
-    )
+    return respostaErroInesperado(error, 'Erro inesperado ao obter prévia do envio')
   }
 }
 
@@ -173,11 +204,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: statusParaErro(error.codigo) },
       )
     }
-    console.error('Erro inesperado ao criar envio', { cause: error })
-    return NextResponse.json(
-      { codigo: 'ERRO_INTERNO', mensagem: 'Erro inesperado ao criar o envio.' },
-      { status: 500 },
-    )
+    return respostaErroInesperado(error, 'Erro inesperado ao criar envio')
   }
 }
 
@@ -222,10 +249,6 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         { status: statusParaErro(error.codigo) },
       )
     }
-    console.error('Erro inesperado ao pagar envio', { cause: error })
-    return NextResponse.json(
-      { codigo: 'ERRO_INTERNO', mensagem: 'Erro inesperado ao pagar o envio.' },
-      { status: 500 },
-    )
+    return respostaErroInesperado(error, 'Erro inesperado ao pagar envio')
   }
 }

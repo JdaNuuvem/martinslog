@@ -1,17 +1,38 @@
+import { randomInt } from 'crypto'
 import type { User, Quote } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 
 /**
  * Fábricas de dados para testes de integração que tocam o banco de teste
- * (ver `DATABASE_URL` em `vitest.config.ts`). Cada fábrica cria dados
- * mínimos e determinísticos — nada de `faker` aleatório, para manter os
- * testes de concorrência reprodutíveis.
+ * (ver `DATABASE_URL` em `vitest.config.ts`).
  */
 
 let contador = 0
 function proximoSufixo(): string {
   contador += 1
   return `${Date.now()}${contador}`
+}
+
+/**
+ * Documento único para `User.documento` (índice único no banco).
+ *
+ * A versão anterior concatenava `Date.now()` (13 dígitos) com o contador e
+ * cortava para os últimos 11 dígitos (`slice(-11)`) — como o timestamp em
+ * milissegundos domina os 13 dígitos, o contador quase nunca sobrevivia ao
+ * corte, e dois `User` criados no mesmo milissegundo (comum quando vários
+ * arquivos de teste rodam em paralelo contra o mesmo banco, ou quando o
+ * módulo é recarregado por arquivo e `contador` reinicia em 1 para cada
+ * um) geravam o mesmo `documento` e violavam a constraint única — foi o
+ * que quebrou `route.test.ts` de `carteira/recarga` e de
+ * `envios/[id]/etiqueta` (arquivos de outras sessões que já consomem esta
+ * fábrica). Combinar o contador (garante unicidade dentro do processo) com
+ * um sorteio de 6 dígitos (reduz a chance de colisão entre processos a
+ * praticamente zero) resolve os dois casos.
+ */
+function proximoDocumento(): string {
+  contador += 1
+  const aleatorio = randomInt(0, 1_000_000).toString().padStart(6, '0')
+  return `${contador}${aleatorio}`.padStart(11, '0').slice(-11)
 }
 
 const SERVICO_ECO_ID = 'eco'
@@ -27,7 +48,7 @@ export async function criarUsuarioComSaldo(saldoCentavos: number): Promise<User>
     data: {
       tipo: 'PF',
       papel: 'CLIENTE',
-      documento: sufixo.padStart(11, '0').slice(-11),
+      documento: proximoDocumento(),
       nome: 'Usuário Teste Envio',
       email: `envio-${sufixo}@teste.com`,
       senhaHash: 'hash-fake-nao-usado-neste-teste',

@@ -1,13 +1,17 @@
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { aplicarDebito } from '@/domain/wallet/ledger'
 import { garantirTransicao, type StatusShipment } from '@/domain/shipment/estados'
 import type { OpcaoCotacao } from '@/domain/pricing/cotacao'
+import { normalizarCep } from '@/domain/pricing/cep'
 import {
   CarteiraNaoEncontradaError,
   CotacaoExpiradaError,
+  CotacaoNaoCorrespondeError,
+  CotacaoNaoEncontradaError,
   EnvioNaoEncontradoError,
   NaoAutorizadoError,
+  TransicaoInvalidaError,
 } from '@/domain/errors'
 
 /**
@@ -75,13 +79,15 @@ function somarValorDeclarado(produtos: ProdutoDeclarado[]): number {
   return produtos.reduce((total, produto) => total + produto.quantidade * produto.valorUnitarioCentavos, 0)
 }
 
+type QuoteComOpcoes = Awaited<ReturnType<typeof prisma.quote.findUnique>>
+
 /**
  * Busca a cotação do usuário e a opção de serviço escolhida dentro dela.
  * Nunca confia em nada vindo do cliente além de `quoteId`/`servicoId`: o
  * preço sempre vem do `opcoes` gravado no momento da cotação.
  *
  * Cotação inexistente OU pertencente a outro usuário resultam no mesmo
- * `EnvioNaoEncontradoError` (→ 404) — o chamador nunca distingue "não
+ * `CotacaoNaoEncontradaError` (→ 404) — o chamador nunca distingue "não
  * existe" de "não é sua", pelo mesmo motivo de `buscarEnderecoDoUsuario`
  * em `enderecos-service.ts`.
  */
@@ -89,11 +95,11 @@ async function buscarOpcaoDaCotacao(
   userId: string,
   quoteId: string,
   servicoId: string,
-): Promise<OpcaoCotacao> {
+): Promise<{ quote: NonNullable<QuoteComOpcoes>; opcao: OpcaoCotacao }> {
   const quote = await prisma.quote.findUnique({ where: { id: quoteId } })
 
   if (!quote || quote.userId !== userId) {
-    throw new EnvioNaoEncontradoError(`Cotação não encontrada: ${quoteId}`)
+    throw new CotacaoNaoEncontradaError(`Cotação não encontrada: ${quoteId}`)
   }
 
   if (quote.expiraEm.getTime() <= Date.now()) {
@@ -104,12 +110,42 @@ async function buscarOpcaoDaCotacao(
   const opcao = opcoes.find((o) => o.servicoId === servicoId && o.disponivel)
 
   if (!opcao) {
-    throw new EnvioNaoEncontradoError(
+    throw new CotacaoNaoEncontradaError(
       `Serviço ${servicoId} não está disponível na cotação ${quoteId}.`,
     )
   }
 
-  return opcao
+  return { quote, opcao }
+}
+
+/**
+ * Confere que o remetente e o destinatário informados são os mesmos CEPs
+ * que geraram o preço da cotação. Sem isso, dá para cotar uma rota barata
+ * (ex.: SP → RJ) e criar o envio com um destino bem mais caro (ex.: SP →
+ * Manaus), pagando a tarifa errada — a cotação só sabe o preço da rota que
+ * ela mesma calculou, `criarEnvio` não recalcula nada.
+ *
+ * A cotação hoje não guarda peso/dimensões próprios do envio — `Shipment`
+ * sempre herda peso/dimensões implicitamente da cotação (não há campo de
+ * peso/dimensões em `EntradaEnvio`), então não há como o cliente declarar
+ * peso ou dimensões diferentes dos cotados. Só o CEP precisa ser validado
+ * aqui.
+ */
+function validarEnderecosContraCotacao(
+  quote: NonNullable<QuoteComOpcoes>,
+  remetente: EnderecoEnvio,
+  destinatario: EnderecoEnvio,
+): void {
+  const cepOrigemEnvio = normalizarCep(remetente.cep)
+  const cepDestinoEnvio = normalizarCep(destinatario.cep)
+  const cepOrigemCotacao = normalizarCep(quote.cepOrigem)
+  const cepDestinoCotacao = normalizarCep(quote.cepDestino)
+
+  if (cepOrigemEnvio !== cepOrigemCotacao || cepDestinoEnvio !== cepDestinoCotacao) {
+    throw new CotacaoNaoCorrespondeError(
+      'Os endereços de remetente e/ou destinatário não conferem com os CEPs desta cotação. Gere uma nova cotação para esta rota.',
+    )
+  }
 }
 
 /**
@@ -122,7 +158,7 @@ export async function obterPreviaEnvio(
   quoteId: string,
   servicoId: string,
 ): Promise<PreviaEnvio> {
-  const opcao = await buscarOpcaoDaCotacao(userId, quoteId, servicoId)
+  const { opcao } = await buscarOpcaoDaCotacao(userId, quoteId, servicoId)
   return {
     servicoId: opcao.servicoId,
     servicoNome: opcao.servicoNome,
@@ -141,7 +177,8 @@ export async function obterPreviaEnvio(
  * Remetente e destinatário são gravados como cópia JSON (requisito 6).
  */
 export async function criarEnvio(userId: string, entrada: EntradaEnvio): Promise<EnvioCriado> {
-  const opcao = await buscarOpcaoDaCotacao(userId, entrada.quoteId, entrada.servicoId)
+  const { quote, opcao } = await buscarOpcaoDaCotacao(userId, entrada.quoteId, entrada.servicoId)
+  validarEnderecosContraCotacao(quote, entrada.remetente, entrada.destinatario)
   const valorDeclaradoCentavos = somarValorDeclarado(entrada.produtos)
 
   const envio = await prisma.shipment.create({
@@ -185,6 +222,20 @@ export async function criarEnvio(userId: string, entrada: EntradaEnvio): Promise
  * Pagar duas vezes o mesmo envio debita uma vez só: na segunda chamada,
  * `envio.status` já é `RELEASED` e `garantirTransicao` lança
  * `TransicaoInvalidaError` antes de qualquer débito.
+ *
+ * O `update` final do envio é condicional em `status: 'PENDING'`
+ * (`updateMany`, não `update` por `id`): pagar e cancelar o mesmo envio ao
+ * mesmo tempo não disputam o lock da carteira (cancelar não toca na
+ * carteira), então sem essa condição as duas operações liam `PENDING` e as
+ * duas escreviam por cima uma da outra em silêncio — o cancelamento
+ * "sumia" sem erro nenhum. Com a condição, quem perde a corrida encontra
+ * zero linhas afetadas e cai no branch de `TransicaoInvalidaError` abaixo,
+ * em vez de sobrescrever silenciosamente o resultado do outro.
+ *
+ * Também recusa pagar um envio cuja cotação já expirou entre a criação do
+ * envio (`PENDING`) e a tentativa de pagamento — sem isso, um envio parado
+ * por meses continuaria pagável pela tarifa congelada de uma cotação
+ * havia muito vencida.
  */
 export async function pagarEnvio(userId: string, shipmentId: string): Promise<void> {
   await prisma.$transaction(async (tx) => {
@@ -212,6 +263,15 @@ export async function pagarEnvio(userId: string, shipmentId: string): Promise<vo
 
     garantirTransicao(envio.status, 'RELEASED')
 
+    if (envio.quoteId) {
+      const quote = await tx.quote.findUnique({ where: { id: envio.quoteId } })
+      if (quote && quote.expiraEm.getTime() <= Date.now()) {
+        throw new CotacaoExpiradaError(
+          'A cotação que gerou este envio expirou. Cancele e gere uma nova cotação para continuar.',
+        )
+      }
+    }
+
     const lancamento = aplicarDebito(carteira.saldoCentavos, envio.precoCobradoCentavos)
 
     await tx.ledgerEntry.create({
@@ -231,9 +291,15 @@ export async function pagarEnvio(userId: string, shipmentId: string): Promise<vo
       data: { saldoCentavos: lancamento.saldoAposCentavos },
     })
 
-    await tx.shipment.update({
-      where: { id: envio.id },
+    const resultado = await tx.shipment.updateMany({
+      where: { id: envio.id, status: 'PENDING' },
       data: { status: 'RELEASED', pagoEm: new Date() },
     })
+
+    if (resultado.count === 0) {
+      throw new TransicaoInvalidaError(
+        `Envio ${envio.id} não está mais PENDING (alterado por outra operação concorrente, como um cancelamento).`,
+      )
+    }
   })
 }

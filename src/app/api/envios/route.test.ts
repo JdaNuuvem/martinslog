@@ -28,7 +28,10 @@ async function criarSessionId(userId: string): Promise<string> {
   return criarSessao(userId, NextResponse.json({}))
 }
 
-const enderecoValido = {
+// CEPs iguais aos que `criarCotacaoValida` grava em `cepOrigem`/`cepDestino`
+// (ver src/test/factories.ts) — o servidor recusa o envio se remetente ou
+// destinatário não baterem com os CEPs que geraram o preço da cotação.
+const remetenteValido = {
   nome: 'Fulano de Tal',
   documento: '52998224725',
   cep: '01310-100',
@@ -39,12 +42,23 @@ const enderecoValido = {
   uf: 'SP',
 }
 
+const destinatarioValido = {
+  nome: 'Ciclano de Tal',
+  documento: '52998224725',
+  cep: '20040-020',
+  logradouro: 'Av. Rio Branco',
+  numero: '100',
+  bairro: 'Centro',
+  cidade: 'Rio de Janeiro',
+  uf: 'RJ',
+}
+
 function corpoValido(quoteId: string, extra?: Record<string, unknown>) {
   return {
     quoteId,
     servicoId: 'eco',
-    remetente: enderecoValido,
-    destinatario: { ...enderecoValido, nome: 'Ciclano de Tal' },
+    remetente: remetenteValido,
+    destinatario: destinatarioValido,
     produtos: [{ nome: 'Camiseta', quantidade: 1, valorUnitarioCentavos: 3000 }],
     ...extra,
   }
@@ -100,6 +114,33 @@ describe('POST /api/envios', () => {
 
     const salvo = await prisma.shipment.findUniqueOrThrow({ where: { id: corpo.shipmentId } })
     expect(salvo.status).toBe('PENDING')
+  })
+
+  it('devolve 422 e não cria envio quando o destinatário está numa rota diferente da cotada', async () => {
+    const user = await criarUsuarioDeTeste(2000)
+    const sessionId = await criarSessionId(user.id)
+    // Cotação padrão da fábrica é São Paulo → Rio de Janeiro.
+    const cotacao = await criarCotacaoValida(user.id, { precoCentavos: 1250 })
+
+    const resposta = await POST(
+      criarRequest(
+        'POST',
+        sessionId,
+        corpoValido(cotacao.id, {
+          destinatario: { ...destinatarioValido, cep: '69000-000' }, // Manaus
+        }),
+      ),
+    )
+
+    expect(resposta.status).toBe(422)
+    const corpo = (await resposta.json()) as { codigo: string }
+    expect(corpo.codigo).toBe('COTACAO_NAO_CORRESPONDE')
+
+    const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: user.id } })
+    expect(wallet.saldoCentavos).toBe(2000)
+
+    const totalEnvios = await prisma.shipment.count({ where: { userId: user.id } })
+    expect(totalEnvios).toBe(0)
   })
 
   it('devolve 422 quando a cotação já expirou', async () => {

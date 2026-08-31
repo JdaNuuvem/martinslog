@@ -69,3 +69,9 @@ export class CodigoRastreioInvalidoError extends DomainError {
 export class ArquivoInvalidoError extends DomainError {
   readonly codigo = 'ARQUIVO_INVALIDO'
 }
+export class CotacaoNaoEncontradaError extends DomainError {
+  readonly codigo = 'COTACAO_NAO_ENCONTRADA'
+}
+export class CotacaoNaoCorrespondeError extends DomainError {
+  readonly codigo = 'COTACAO_NAO_CORRESPONDE'
+}
