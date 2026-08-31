@@ -1,0 +1,321 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TipoUser {
+  PF
+  PJ
+}
+
+enum PapelUser {
+  CLIENTE
+  ADMIN
+}
+
+enum TipoEndereco {
+  REMETENTE
+  DESTINATARIO
+}
+
+enum StatusShipment {
+  PENDING
+  RELEASED
+  GENERATED
+  POSTED
+  DELIVERED
+  CANCELLED
+  LOST
+}
+
+enum TipoLedger {
+  CREDITO
+  DEBITO
+}
+
+enum MetodoPagamento {
+  PIX
+  CARTAO
+}
+
+enum StatusPagamento {
+  PENDENTE
+  CONFIRMADO
+  EXPIRADO
+  CANCELADO
+}
+
+model User {
+  id                String    @id @default(cuid())
+  tipo              TipoUser
+  papel             PapelUser @default(CLIENTE)
+  documento         String    @unique
+  nome              String
+  email             String    @unique
+  senhaHash         String
+  telefone          String?
+  emailVerificadoEm DateTime?
+  criadoEm          DateTime  @default(now())
+
+  sessions  Session[]
+  addresses Address[]
+  quotes    Quote[]
+  shipments Shipment[]
+  wallet    Wallet?
+  paymentIntents PaymentIntent[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiraEm  DateTime
+  userAgent String?
+  ip        String?
+  criadoEm  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model AnonSession {
+  id       String   @id @default(cuid())
+  criadoEm DateTime @default(now())
+
+  quotes Quote[]
+
+  @@map("anon_sessions")
+}
+
+model Address {
+  id          String       @id @default(cuid())
+  userId      String
+  apelido     String?
+  cep         String
+  logradouro  String
+  numero      String
+  complemento String?
+  bairro      String
+  cidade      String
+  uf          String
+  latitude    Float?
+  longitude   Float?
+  tipo        TipoEndereco
+  padrao      Boolean      @default(false)
+  documento   String?
+  nome        String?
+  email       String?
+  telefone    String?
+  criadoEm    DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+model Carrier {
+  id       String    @id @default(cuid())
+  nome     String
+  slug     String    @unique
+  ativo    Boolean   @default(true)
+  logoUrl  String?
+  criadoEm DateTime  @default(now())
+
+  services Service[]
+
+  @@map("carriers")
+}
+
+model Service {
+  id               String   @id @default(cuid())
+  carrierId        String
+  codigo           String
+  nome             String
+  prazoBase        Int
+  exigePudo        Boolean  @default(false)
+  entregaSabado    Boolean  @default(false)
+  limitePesoG      Int
+  limiteDimensoes  Json
+  ativo            Boolean  @default(true)
+  criadoEm         DateTime @default(now())
+
+  carrier    Carrier     @relation(fields: [carrierId], references: [id], onDelete: Cascade)
+  priceRules PriceRule[]
+  quotes     Quote[]
+  shipments  Shipment[]
+
+  @@unique([carrierId, codigo])
+  @@map("services")
+}
+
+model PriceRule {
+  id                  String   @id @default(cuid())
+  serviceId           String
+  cepOrigemIni        Int
+  cepOrigemFim        Int
+  cepDestinoIni       Int
+  cepDestinoFim       Int
+  pesoMinG            Int
+  pesoMaxG            Int
+  precoBalcaoCentavos Int
+  precoCustoCentavos  Int
+  precoVendaCentavos  Int
+  prazoDias           Int
+  ativo               Boolean  @default(true)
+  vigenteDe           DateTime @default(now())
+  vigenteAte          DateTime?
+  criadoEm            DateTime @default(now())
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, cepOrigemIni, cepDestinoIni, pesoMinG])
+  @@map("price_rules")
+}
+
+model Quote {
+  id            String   @id @default(cuid())
+  userId        String?
+  anonSessionId String?
+  serviceId     String?
+  cepOrigem     String
+  cepDestino    String
+  formato       String
+  pesoG         Int
+  altura        Int
+  largura       Int
+  comprimento   Int
+  diametro      Int?
+  pesoCubadoG   Int
+  pesoTaxavelG  Int
+  opcionais     Json
+  opcoes        Json
+  expiraEm      DateTime
+  criadoEm      DateTime @default(now())
+
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  anonSession AnonSession? @relation(fields: [anonSessionId], references: [id], onDelete: SetNull)
+  service     Service?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  shipments   Shipment[]
+
+  @@index([userId])
+  @@index([anonSessionId])
+  @@map("quotes")
+}
+
+model Shipment {
+  id                    String         @id @default(cuid())
+  userId                String
+  quoteId               String?
+  serviceId             String
+  codigoRastreio        String?        @unique
+  status                StatusShipment @default(PENDING)
+  remetente             Json
+  destinatario          Json
+  pontoPostagemId       String?
+  precoBalcaoCentavos   Int
+  precoCobradoCentavos  Int
+  descontoCentavos      Int
+  opcionais             Json
+  valorDeclaradoCentavos Int
+  produtos              Json
+  labelUrl              String?
+  dceNumero             String?
+  criadoEm              DateTime  @default(now())
+  pagoEm                DateTime?
+  geradoEm              DateTime?
+  postadoEm             DateTime?
+  entregueEm            DateTime?
+  canceladoEm           DateTime?
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  quote          Quote?          @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  service        Service         @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  trackingEvents TrackingEvent[]
+
+  @@index([userId, status])
+  @@map("shipments")
+}
+
+model Wallet {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  saldoCentavos Int      @default(0)
+  criadoEm      DateTime @default(now())
+  atualizadoEm  DateTime @updatedAt
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries LedgerEntry[]
+
+  @@map("wallets")
+}
+
+model LedgerEntry {
+  id               String     @id @default(cuid())
+  walletId         String
+  tipo             TipoLedger
+  valorCentavos    Int
+  saldoAposCentavos Int
+  refTipo          String
+  refId            String
+  descricao        String
+  criadoEm         DateTime   @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Restrict)
+
+  @@unique([refTipo, refId, tipo])
+  @@index([walletId, criadoEm])
+  @@map("ledger_entries")
+}
+
+model PaymentIntent {
+  id            String          @id @default(cuid())
+  userId        String
+  valorCentavos Int
+  metodo        MetodoPagamento
+  status        StatusPagamento @default(PENDENTE)
+  qrCode        String?
+  expiraEm      DateTime
+  confirmadoEm  DateTime?
+  criadoEm      DateTime        @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("payment_intents")
+}
+
+model TrackingEvent {
+  id          String   @id @default(cuid())
+  shipmentId  String
+  status      String
+  descricao   String
+  local       String?
+  ocorridoEm  DateTime @default(now())
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+  @@map("tracking_events")
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  actorUserId   String?
+  acao          String
+  entidade      String
+  entidadeId    String
+  antes         Json?
+  depois        Json?
+  criadoEm      DateTime @default(now())
+
+  @@index([entidade, entidadeId])
+  @@map("audit_logs")
+}
