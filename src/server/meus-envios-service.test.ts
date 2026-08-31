@@ -104,6 +104,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await prisma.statusRastreio.deleteMany({ where: { userId: { in: usuariosCriados } } })
   await prisma.shipment.deleteMany({ where: { userId: { in: usuariosCriados } } })
   await prisma.user.deleteMany({ where: { id: { in: usuariosCriados } } })
 })
@@ -216,6 +217,59 @@ describe('listarMeusEnvios', () => {
 
     expect(cru).not.toContain('11122233344')
     expect(cru).not.toContain('Rua Secreta')
+  })
+
+  it('traduz evento de status criado pela própria conta', async () => {
+    await prisma.shipment.deleteMany({ where: { userId: donoId } })
+    await prisma.statusRastreio.create({
+      data: {
+        userId: donoId,
+        codigo: `CONFERENCIA_${sufixo}`,
+        titulo: 'Em conferência',
+        descricao: 'Objeto em conferência no centro de distribuição',
+        // Etapa extra exige os três: cenário, fração do prazo e status.
+        cenario: 'ENTREGA_NORMAL',
+        fracaoPrazo: 0.5,
+        statusResultante: 'POSTED',
+      },
+    })
+    const envio = await criarEnvio(donoId, 'GENERATED', 'Ana Julia', new Date('2026-03-01T10:00:00Z'))
+    await criarEvento(
+      envio.id,
+      `CONFERENCIA_${sufixo}`,
+      'Em conferência',
+      new Date('2026-03-02T10:00:00Z'),
+    )
+
+    const { envios } = await listarMeusEnvios(donoId, 'todos', AGORA)
+
+    expect(envios[0]?.status).toBe('POSTED')
+  })
+
+  it('um evento de código órfão não derruba a lista inteira', async () => {
+    // Etapa personalizada que gerou eventos e depois saiu do catálogo. Sem
+    // o fallback, a exceção dentro do `map` levaria a tela toda junto.
+    await prisma.shipment.deleteMany({ where: { userId: donoId } })
+    const comOrfao = await criarEnvio(
+      donoId,
+      'POSTED',
+      'Com evento órfão',
+      new Date('2026-03-01T10:00:00Z'),
+    )
+    await criarEvento(
+      comOrfao.id,
+      'CODIGO_QUE_NINGUEM_CONHECE',
+      'Etapa removida',
+      new Date('2026-03-02T10:00:00Z'),
+    )
+    await criarEnvio(donoId, 'DELIVERED', 'Saudável', new Date('2026-03-01T09:00:00Z'))
+
+    const { envios } = await listarMeusEnvios(donoId, 'todos', AGORA)
+
+    expect(envios).toHaveLength(2)
+    // Cai no status persistido do próprio envio, que continua verdadeiro.
+    expect(envios.find((e) => e.destinatarioNome === 'Com evento órfão')?.status).toBe('POSTED')
+    expect(envios.find((e) => e.destinatarioNome === 'Saudável')?.status).toBe('DELIVERED')
   })
 
   it('devolve lista vazia para quem não tem envio', async () => {
