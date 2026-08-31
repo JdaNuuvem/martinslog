@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 import {
   IconeAjuda,
   IconeCalcular,
@@ -29,6 +29,8 @@ const ITENS = [
 type SidebarProps = {
   aberta: boolean
   onFechar: () => void
+  /** Botão que abre o menu; recebe o foco de volta quando ele fecha. */
+  botaoMenuRef?: RefObject<HTMLButtonElement | null>
 }
 
 /**
@@ -37,9 +39,10 @@ type SidebarProps = {
  * disso, deslizando para dentro/fora com `translate`. Operável por
  * teclado e fechável com Escape.
  */
-export function Sidebar({ aberta, onFechar }: SidebarProps) {
+export function Sidebar({ aberta, onFechar, botaoMenuRef }: SidebarProps) {
   const pathname = usePathname()
   const navRef = useRef<HTMLElement>(null)
+  const estavaAberta = useRef(false)
 
   useEffect(() => {
     if (!aberta) return
@@ -50,6 +53,35 @@ export function Sidebar({ aberta, onFechar }: SidebarProps) {
     navRef.current?.querySelector('a')?.focus()
     return () => document.removeEventListener('keydown', aoTeclar)
   }, [aberta, onFechar])
+
+  /**
+   * Devolve o foco ao botão de menu quando ele fecha.
+   *
+   * Ao abrir, o foco é movido para dentro da sidebar; sem devolvê-lo, quem
+   * fecha o menu por teclado fica com o foco no `<body>` e recomeça a
+   * navegação do topo da página. A devolução só acontece na transição de
+   * aberta para fechada — no desktop a sidebar está sempre visível e
+   * `aberta` nunca muda, então nada é roubado de quem está digitando.
+   *
+   * E só quando o foco ficaria órfão: se ele já saiu da sidebar (o caso de
+   * clicar num link, que navega), respeita-se onde ele está em vez de
+   * puxá-lo de volta para o botão.
+   */
+  useEffect(() => {
+    if (aberta) {
+      estavaAberta.current = true
+      return
+    }
+
+    if (!estavaAberta.current) return
+    estavaAberta.current = false
+
+    const focado = document.activeElement
+    const ficouOrfao = !focado || focado === document.body || !!navRef.current?.contains(focado)
+    if (ficouOrfao) {
+      botaoMenuRef?.current?.focus()
+    }
+  }, [aberta, botaoMenuRef])
 
   return (
     <>

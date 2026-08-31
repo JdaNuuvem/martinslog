@@ -5,7 +5,14 @@ const BASE_URL = `http://localhost:${PORTA}`
 
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
+  // Um worker só, de propósito. Os testes compartilham um único banco
+  // (`frete_test`) e um único servidor de desenvolvimento: rodando em
+  // paralelo, um teste apaga no `afterAll` as linhas que outro ainda está
+  // lendo, e a falha aparece longe da causa. Enquanto os testes não tiverem
+  // isolamento por transação ou banco por worker, subir este número traz de
+  // volta falhas falsas — não "otimize" sem resolver o isolamento antes.
+  fullyParallel: false,
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: 'html',

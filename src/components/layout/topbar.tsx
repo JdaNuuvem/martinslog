@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import type { RefObject } from 'react'
 import { IconeCarteira, IconeMenu, IconeSino } from './icones'
 import { SIDEBAR_ID } from './sidebar'
 
@@ -6,6 +7,8 @@ type TopbarProps = {
   nomeUsuario: string
   menuAberto: boolean
   onAlternarMenu: () => void
+  /** Alvo para o qual a sidebar devolve o foco ao fechar. */
+  botaoMenuRef?: RefObject<HTMLButtonElement | null>
 }
 
 /**
@@ -13,12 +16,13 @@ type TopbarProps = {
  * sublinhado e clicável — não um enfeite. A carteira só nasce na Task 11;
  * até lá o link aponta para `/carteira`, que exibe a página "Em breve".
  */
-export function Topbar({ nomeUsuario, menuAberto, onAlternarMenu }: TopbarProps) {
+export function Topbar({ nomeUsuario, menuAberto, onAlternarMenu, botaoMenuRef }: TopbarProps) {
   return (
     <header className="fixed inset-x-0 top-0 z-50 flex h-topbar items-center justify-between border-b border-superficie-bloco bg-superficie-card px-4">
       <div className="flex items-center gap-3">
         <button
           type="button"
+          ref={botaoMenuRef}
           onClick={onAlternarMenu}
           aria-label={menuAberto ? 'Fechar menu de navegação' : 'Abrir menu de navegação'}
           aria-controls={SIDEBAR_ID}
