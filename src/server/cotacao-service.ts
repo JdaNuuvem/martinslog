@@ -1,5 +1,7 @@
 import { prisma } from '@/infra/db/client'
 import { cotar, EntradaCotacao, ItemCatalogo, ResultadoCotacao } from '@/domain/pricing/cotacao'
+import { geoProvider as geoProviderPadrao, GeoProvider } from '@/infra/geo'
+import { CepInvalidoError } from '@/domain/errors'
 
 const VALIDADE_COTACAO_MS = 24 * 60 * 60 * 1000
 
@@ -70,10 +72,60 @@ export async function garantirAnonSession(anonSessionIdAtual: string | null): Pr
   return nova.id
 }
 
+/**
+ * Confere se os dois CEPs existem de fato, antes de o cliente montar o envio
+ * inteiro em cima de um preço para um CEP inexistente.
+ *
+ * Resolve os dois em paralelo — cada consulta ao provedor custa ~2,5s em
+ * cache frio, e somá-las em sequência penalizaria a rota mais quente do
+ * produto. Usa `Promise.allSettled` (não `Promise.all`) para não deixar o
+ * resultado depender de qual chamada rejeita primeiro: com `allSettled` os
+ * dois desfechos ficam disponíveis e a decisão é explícita — qualquer CEP
+ * inexistente (`CepInvalidoError`) recusa a cotação, mesmo que o outro CEP
+ * tenha vindo de um provedor fora do ar.
+ *
+ * Indisponibilidade do provedor (`ServicoIndisponivelError` ou qualquer erro
+ * que não seja `CepInvalidoError`) nunca bloqueia a cotação — apenas pula a
+ * validação para aquele CEP e registra a causa em log estruturado.
+ */
+async function validarExistenciaCeps(
+  cepOrigem: string,
+  cepDestino: string,
+  provider: GeoProvider,
+): Promise<void> {
+  const [resultadoOrigem, resultadoDestino] = await Promise.allSettled([
+    provider.buscarPorCep(cepOrigem),
+    provider.buscarPorCep(cepDestino),
+  ])
+
+  if (resultadoOrigem.status === 'rejected' && resultadoOrigem.reason instanceof CepInvalidoError) {
+    throw new CepInvalidoError(`O CEP de origem informado não foi encontrado: ${cepOrigem}.`)
+  }
+  if (resultadoDestino.status === 'rejected' && resultadoDestino.reason instanceof CepInvalidoError) {
+    throw new CepInvalidoError(`O CEP de destino informado não foi encontrado: ${cepDestino}.`)
+  }
+
+  if (resultadoOrigem.status === 'rejected') {
+    console.warn('Validação de existência do CEP de origem pulada: provedor indisponível', {
+      cep: cepOrigem,
+      causa: resultadoOrigem.reason,
+    })
+  }
+  if (resultadoDestino.status === 'rejected') {
+    console.warn('Validação de existência do CEP de destino pulada: provedor indisponível', {
+      cep: cepDestino,
+      causa: resultadoDestino.reason,
+    })
+  }
+}
+
 export async function gerarCotacao(
   solicitacao: SolicitacaoCotacao,
   contexto: ContextoSessao,
+  geoProvider: GeoProvider = geoProviderPadrao,
 ): Promise<CotacaoPersistida> {
+  await validarExistenciaCeps(solicitacao.cepOrigem, solicitacao.cepDestino, geoProvider)
+
   const catalogo = await carregarCatalogo()
   const resultado = cotar(solicitacao, catalogo)
 

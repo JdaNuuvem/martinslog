@@ -186,8 +186,15 @@ describe('PATCH /api/envios (retry de pagamento)', () => {
     const pagamento = await PATCH(criarRequest('PATCH', sessionId, { shipmentId }))
     expect(pagamento.status).toBe(204)
 
-    const salvo = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })
-    expect(salvo.status).toBe('RELEASED')
+    const salvo = await prisma.shipment.findUniqueOrThrow({
+      where: { id: shipmentId },
+      include: { trackingEvents: true },
+    })
+    // pagarEnvio dispara a emissão da etiqueta automaticamente após o commit
+    // do pagamento, então o envio já nasce com etiqueta emitida.
+    expect(salvo.status).toBe('GENERATED')
+    expect(salvo.codigoRastreio).toBeTruthy()
+    expect(salvo.trackingEvents.length).toBeGreaterThan(0)
   })
 })
 
