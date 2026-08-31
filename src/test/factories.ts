@@ -66,6 +66,13 @@ export type OpcoesCotacaoValida = {
   precoCentavos?: number
   /** Se `true`, a cotação já nasce expirada (para testar CotacaoExpiradaError). */
   expirada?: boolean
+  /**
+   * CEPs da rota cotada. `criarEnvio` confere os CEPs do envio contra os da
+   * cotação, então um teste que precise de outra rota — origem e destino na
+   * mesma cidade, por exemplo — tem de cotar essa rota.
+   */
+  cepOrigem?: string
+  cepDestino?: string
 }
 
 /**
@@ -89,8 +96,8 @@ export async function criarCotacaoValida(
   return prisma.quote.create({
     data: {
       userId,
-      cepOrigem: '01310-100',
-      cepDestino: '20040-020',
+      cepOrigem: opcoes.cepOrigem ?? '01310-100',
+      cepDestino: opcoes.cepDestino ?? '20040-020',
       formato: 'CAIXA',
       pesoG: 1000,
       altura: 10,
