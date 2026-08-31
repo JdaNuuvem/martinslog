@@ -1,3 +1,4 @@
+import { ListaRastreios } from '@/components/lista-rastreios'
 import { RastreioForm } from '@/components/rastreio-form'
 
 export default function PaginaRastreio() {
@@ -6,10 +7,20 @@ export default function PaginaRastreio() {
       <div>
         <h1 className="text-2xl font-bold text-texto-principal">Rastreio</h1>
         <p className="text-sm text-texto-secundario">
-          Digite o código de rastreio do seu envio para ver as movimentações.
+          Acompanhe seus envios ou consulte qualquer código de rastreio.
         </p>
       </div>
-      <RastreioForm />
+
+      <ListaRastreios />
+
+      <details className="rounded-xl bg-superficie-card p-6">
+        <summary className="cursor-pointer text-sm font-medium text-texto-principal">
+          Consultar outro código
+        </summary>
+        <div className="pt-4">
+          <RastreioForm />
+        </div>
+      </details>
     </div>
   )
 }
