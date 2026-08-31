@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest'
 import { prisma } from '@/infra/db/client'
 import { SaldoInsuficienteError } from '@/domain/errors'
 import { criarCotacaoValida, criarUsuarioComSaldo } from '@/test/factories'
+import { cancelarEtiqueta } from './etiquetas-service'
 import { criarEnvio, pagarEnvio, type EntradaEnvio } from './shipment-service'
 import { gerarSegredo } from './webhook-service'
 
@@ -134,5 +135,31 @@ describe('pagarEnvio dispara order.released', () => {
     expect(await prisma.webhookDelivery.count({ where: { webhookApp: { userId: user.id } } })).toBe(
       0,
     )
+  })
+})
+
+describe('cancelarEtiqueta dispara order.cancelled', () => {
+  it('enfileira a entrega quando o cancelamento é confirmado', async () => {
+    const user = await criarUsuarioComWebhook(50000, ['order.cancelled'])
+    const cotacao = await criarCotacaoValida(user.id)
+    const envio = await criarEnvio(user.id, entradaEnvio(cotacao.id))
+
+    await cancelarEtiqueta(user.id, envio.id)
+
+    expect(await entregasDe(user.id, 'order.cancelled')).toHaveLength(1)
+  })
+
+  it('não enfileira nada quando o cancelamento é recusado', async () => {
+    // Envio de outro dono: a recusa acontece antes de qualquer escrita, e a
+    // notificação não pode existir sem o cancelamento ter acontecido.
+    const dono = await criarUsuarioComWebhook(50000, ['order.cancelled'])
+    const estranho = await criarUsuarioComSaldo(50000)
+    usuariosCriados.push(estranho.id)
+    const cotacao = await criarCotacaoValida(dono.id)
+    const envio = await criarEnvio(dono.id, entradaEnvio(cotacao.id))
+
+    await expect(cancelarEtiqueta(estranho.id, envio.id)).rejects.toThrow()
+
+    expect(await entregasDe(dono.id, 'order.cancelled')).toHaveLength(0)
   })
 })

@@ -1,7 +1,6 @@
-import type { StatusShipment } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
-import { statusDoEvento } from '@/domain/simulacao/roteiro'
 import { obterStatusPorCodigo } from '@/server/status-rastreio-service'
+import { derivarStatusVisivel } from '@/server/status-derivado'
 import type { EnvioResumo, FiltroEnvios } from '@/lib/meus-envios-schema'
 
 /** Status em que o envio ainda não chegou ao destino. */
@@ -48,7 +47,7 @@ export async function listarMeusEnvios(
     return {
       id: envio.id,
       codigoRastreio: envio.codigoRastreio,
-      status: ultimo ? derivarStatus(ultimo.codigo, statusPorCodigo, envio.status) : envio.status,
+      status: derivarStatusVisivel(ultimo?.codigo, envio.status, statusPorCodigo),
       ultimoEvento: ultimo?.titulo ?? null,
       ocorridoEm: ultimo?.ocorridoEm.toISOString() ?? null,
       destinatarioNome: destinatario?.nome ?? 'Destinatário',
@@ -67,29 +66,6 @@ export async function listarMeusEnvios(
   }
 
   return { envios: resumos.filter((envio) => cabeNoFiltro(envio.status, filtro)), contagem }
-}
-
-/**
- * Traduz o código do evento para o status do envio, caindo no status
- * persistido quando o código não tem tradução.
- *
- * O caso que isso cobre é o código órfão: uma etapa personalizada que gerou
- * eventos e depois foi removida do catálogo da conta. Como isto roda dentro
- * do `map` da listagem, deixar a exceção subir derrubaria a tela inteira por
- * causa de um único envio — o cliente perderia o acesso à lista toda. Um
- * status atrasado continua sendo verdadeiro; uma tela em branco não ajuda
- * ninguém.
- */
-function derivarStatus(
-  codigo: string,
-  statusPorCodigo: Readonly<Record<string, StatusShipment>>,
-  persistido: StatusShipment,
-): string {
-  try {
-    return statusDoEvento(codigo, statusPorCodigo)
-  } catch {
-    return persistido
-  }
 }
 
 function ehPendente(status: string): boolean {

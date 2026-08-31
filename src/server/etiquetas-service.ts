@@ -3,6 +3,7 @@ import { prisma } from '@/infra/db/client'
 import { CancelamentoNaoPermitidoError, EnvioNaoEncontradoError } from '@/domain/errors'
 import { podeCancelar, type StatusShipment } from '@/domain/shipment/estados'
 import { obterStatusPorCodigo } from '@/server/status-rastreio-service'
+import { enfileirarEvento } from './webhook-service'
 import { derivarStatusVisivel } from './status-derivado'
 import type {
   AbaEtiquetas,
@@ -292,6 +293,11 @@ export async function cancelarEtiqueta(
     await tx.trackingEvent.deleteMany({
       where: { shipmentId: envio.id, ocorridoEm: { gt: agora } },
     })
+
+    // Depois do cancelamento confirmado e dentro da mesma transação: um
+    // rollback leva a notificação junto, e o cliente não é avisado de um
+    // cancelamento que não aconteceu. Só grava linhas, sem I/O de rede.
+    await enfileirarEvento(envio.id, 'order.cancelled', tx)
 
     await tx.auditLog.create({
       data: {
