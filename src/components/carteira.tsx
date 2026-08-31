@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useEffect, useId, useState } from 'react'
+import { VALOR_MAXIMO_RECARGA_CENTAVOS, VALOR_MINIMO_RECARGA_CENTAVOS } from '@/lib/carteira-schema'
 
 type LancamentoResposta = {
   id: string
@@ -106,6 +107,14 @@ export function Carteira() {
     const valorCentavos = valorRecargaCentavos()
     if (valorCentavos === null) {
       setErroRecarga('Informe um valor válido, maior que zero.')
+      return
+    }
+    if (valorCentavos < VALOR_MINIMO_RECARGA_CENTAVOS) {
+      setErroRecarga(`O valor mínimo de recarga é ${formatarReais(VALOR_MINIMO_RECARGA_CENTAVOS)}.`)
+      return
+    }
+    if (valorCentavos > VALOR_MAXIMO_RECARGA_CENTAVOS) {
+      setErroRecarga(`O valor máximo de recarga é ${formatarReais(VALOR_MAXIMO_RECARGA_CENTAVOS)}.`)
       return
     }
 
@@ -219,6 +228,7 @@ export function Carteira() {
                   type="text"
                   inputMode="decimal"
                   placeholder="0,00"
+                  aria-describedby={`${idValor}-faixa`}
                   className={classeCampo}
                   value={valorLivre}
                   onChange={(event) => {
@@ -226,6 +236,10 @@ export function Carteira() {
                     setValorSelecionado(null)
                   }}
                 />
+                <p id={`${idValor}-faixa`} className="text-xs text-texto-secundario">
+                  Valor entre {formatarReais(VALOR_MINIMO_RECARGA_CENTAVOS)} e{' '}
+                  {formatarReais(VALOR_MAXIMO_RECARGA_CENTAVOS)}.
+                </p>
               </fieldset>
 
               {erroRecarga && (

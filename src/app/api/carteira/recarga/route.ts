@@ -28,14 +28,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const analisado = recargaRequestSchema.safeParse(corpo)
   if (!analisado.success) {
-    return NextResponse.json(
-      {
-        codigo: 'CORPO_INVALIDO',
-        mensagem: 'Valor de recarga inválido.',
-        campos: analisado.error.flatten().fieldErrors,
-      },
-      { status: 400 },
-    )
+    const campos = analisado.error.flatten().fieldErrors
+    const mensagem = campos.valorCentavos?.[0] ?? 'Valor de recarga inválido.'
+    return NextResponse.json({ codigo: 'CORPO_INVALIDO', mensagem, campos }, { status: 400 })
   }
 
   try {
