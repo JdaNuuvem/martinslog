@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-type Resultado = { entregues: number; falhas: number; desistidas: number }
+type Resultado = { entregues: number; falhas: number; desistidas: number; restantes: number }
 
 /**
  * Disparo manual da fila de webhooks.
@@ -83,6 +83,14 @@ export function DispararWebhooks() {
             <dd className="text-xl font-bold text-erro">{resultado.desistidas}</dd>
           </div>
         </dl>
+      ) : null}
+
+      {resultado && resultado.restantes > 0 ? (
+        <p role="status" className="rounded-lg bg-info-bg p-4 text-sm text-info-text">
+          {resultado.restantes} {resultado.restantes === 1 ? 'entrega venceu' : 'entregas venceram'} e
+          não coube{resultado.restantes === 1 ? '' : 'ram'} no tempo desta rodada. Clique de novo
+          para continuar de onde parou.
+        </p>
       ) : null}
 
       {resultado ? (

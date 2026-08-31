@@ -24,10 +24,22 @@ export const EVENTOS = [
 export type Evento = (typeof EVENTOS)[number]
 
 /** Tempo máximo de uma tentativa. Endpoint lento não segura a fila. */
-const TIMEOUT_MS = 10_000
+const TIMEOUT_MS = 5_000
 
 /** Quantas entregas um disparo processa por vez. */
-const LOTE_PADRAO = 50
+const LOTE_PADRAO = 20
+
+/**
+ * Teto de tempo do disparo inteiro.
+ *
+ * O laço é sequencial, então sem este teto um lote de destinos lentos
+ * multiplica o tempo limite individual pelo tamanho do lote e prende a
+ * requisição por minutos — o suficiente para ocupar o servidor e fazer a
+ * aplicação inteira parecer travada. Quando o orçamento acaba, o disparo
+ * devolve o que conseguiu; o que sobrou continua na fila, vencido, e sai na
+ * próxima chamada.
+ */
+const ORCAMENTO_MS = 20_000
 
 /**
  * Gera o segredo de assinatura. 32 bytes de aleatoriedade criptográfica —
@@ -198,7 +210,13 @@ export const resolverDnsPadrao: ResolvedorDns = async (host) => {
   return enderecos.map(({ address }) => address)
 }
 
-export type ResultadoDisparo = { entregues: number; falhas: number; desistidas: number }
+export type ResultadoDisparo = {
+  entregues: number
+  falhas: number
+  desistidas: number
+  /** Vencidas que não couberam no orçamento de tempo desta chamada. */
+  restantes: number
+}
 
 /**
  * Processa as entregas vencidas.
@@ -227,9 +245,17 @@ export async function dispararPendentes(
     take: limite,
   })
 
-  const resultado: ResultadoDisparo = { entregues: 0, falhas: 0, desistidas: 0 }
+  const resultado: ResultadoDisparo = { entregues: 0, falhas: 0, desistidas: 0, restantes: 0 }
+  const limiteDeTempo = Date.now() + ORCAMENTO_MS
 
-  for (const entrega of pendentes) {
+  for (const [indice, entrega] of pendentes.entries()) {
+    if (Date.now() >= limiteDeTempo) {
+      // Sem efeito colateral nenhum sobre as não processadas: seguem
+      // vencidas na fila, com as mesmas tentativas, para a próxima chamada.
+      resultado.restantes = pendentes.length - indice
+      break
+    }
+
     const tentativas = entrega.tentativas + 1
     const corpo = JSON.stringify(entrega.payload)
 

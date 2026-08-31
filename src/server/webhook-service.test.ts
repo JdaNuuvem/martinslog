@@ -320,7 +320,7 @@ describe('dispararPendentes', () => {
     const resultado = await dispararPendentes()
 
     expect(espiao).not.toHaveBeenCalled()
-    expect(resultado).toEqual({ entregues: 0, falhas: 0, desistidas: 0 })
+    expect(resultado).toEqual({ entregues: 0, falhas: 0, desistidas: 0, restantes: 0 })
   })
 
   it('para de tentar depois do limite de tentativas', async () => {

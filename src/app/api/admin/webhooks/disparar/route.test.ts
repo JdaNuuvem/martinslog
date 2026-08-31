@@ -112,6 +112,7 @@ describe('POST /api/admin/webhooks/disparar', () => {
       entregues: expect.any(Number),
       falhas: expect.any(Number),
       desistidas: expect.any(Number),
+      restantes: expect.any(Number),
     })
     vi.restoreAllMocks()
   })
