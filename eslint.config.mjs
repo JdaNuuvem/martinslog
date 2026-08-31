@@ -26,6 +26,15 @@ const eslintConfig = [
           patterns: ['@prisma/client', 'next/*', 'next', 'fs', 'node:*', '@/infra/*'],
         },
       ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "ImportExpression[source.value=/^(@prisma\\/client|next(\\/.*)?|fs|node:.*|@\\/infra\\/.*)$/]",
+          message:
+            'O domínio não pode fazer I/O, nem por import dinâmico: import() proibido para @prisma/client, next, next/*, fs, node:* e @/infra/*.',
+        },
+      ],
     },
   },
 ]

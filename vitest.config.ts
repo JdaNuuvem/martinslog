@@ -5,7 +5,7 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     env: {
-      DATABASE_URL: 'postgresql://frete:frete@localhost:5432/frete_test',
+      DATABASE_URL: 'postgresql://frete:frete@localhost:5433/frete_test',
       SESSION_SECRET: 'x'.repeat(32),
       NODE_ENV: 'test',
     },
