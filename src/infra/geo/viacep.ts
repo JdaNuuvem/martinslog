@@ -30,7 +30,7 @@ export class ViaCepProvider implements GeoProvider {
 
       // Verificar se ViaCEP retornou erro (CEP não existe)
       if (data.erro) {
-        throw new CepInvalidoError()
+        throw new CepInvalidoError('CEP não encontrado.')
       }
 
       // Verificar se todos os campos obrigatórios estão presentes
