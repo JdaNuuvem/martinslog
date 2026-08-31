@@ -67,6 +67,23 @@ const TEXTOS: Readonly<Record<CodigoEvento, { titulo: string; descricao: string 
 }
 
 /**
+ * Texto embutido de um código do roteiro padrão, ou `null` para um código que
+ * o motor não conhece.
+ *
+ * Exposto para quem precisa escrever um evento avulso na timeline — o
+ * "aplicar status agora" do painel — sem duplicar as frases que o cliente já
+ * lê no restante do rastreio.
+ */
+export function textoPadrao(codigo: string): { titulo: string; descricao: string } | null {
+  return TEXTOS[codigo as CodigoEvento] ?? null
+}
+
+/** Códigos que o motor conhece, para as telas oferecerem a lista. */
+export function codigosPadraoDoMotor(): string[] {
+  return Object.keys(TEXTOS)
+}
+
+/**
  * Status resultante de cada código, conforme a seção 5 da spec. O status do
  * envio é sempre derivado do último evento visível — nunca escrito em
  * paralelo. `DEVOLVIDO` também resulta em `DELIVERED`; a marcação de
@@ -138,7 +155,8 @@ export function validarRoteiro(
 
 /** Etapa já pronta para virar evento, com código possivelmente customizado. */
 interface EtapaResolvida {
-  fracao: number
+  /** Offset final em minutos, já resolvido entre fração do prazo e dias. */
+  offsetMinutos: number
   codigo: string
   unidadeOrigem: string | null
   unidadeDestino: string | null
@@ -311,25 +329,63 @@ export function gerarRoteiro(entrada: EntradaRoteiro): EventoRoteiro[] {
   }
 
   const totalMinutos = entrada.prazoDias * MINUTOS_POR_DIA
-  const doCenario: EtapaResolvida[] = [...espinha(entrada), ...desfecho(entrada)]
+  const etapasCenario = [...espinha(entrada), ...desfecho(entrada)]
+  const posicoes = entrada.posicoesDias ?? {}
+
+  // Fração da PRIMEIRA ocorrência de cada código. `TRANSFERENCIA` aparece
+  // duas vezes no roteiro de rota interestadual; reposicionar as duas para o
+  // mesmo dia as empilharia no mesmo instante. Em vez disso, a posição em
+  // dias vale para a primeira ocorrência e as seguintes preservam o intervalo
+  // que tinham em relação a ela — a etapa se move, o desenho do trajeto não
+  // se desfaz.
+  const fracaoBase = new Map<string, number>()
+  for (const etapa of etapasCenario) {
+    if (!fracaoBase.has(etapa.codigo)) {
+      fracaoBase.set(etapa.codigo, etapa.fracao)
+    }
+  }
+
+  const doCenario: EtapaResolvida[] = etapasCenario.map((etapa) => {
+    const dias = posicoes[etapa.codigo]
+    const base = fracaoBase.get(etapa.codigo) ?? etapa.fracao
+    const offsetMinutos =
+      dias === undefined
+        ? etapa.fracao * totalMinutos
+        : dias * MINUTOS_POR_DIA + (etapa.fracao - base) * totalMinutos
+
+    return {
+      offsetMinutos,
+      codigo: etapa.codigo,
+      unidadeOrigem: etapa.unidadeOrigem,
+      unidadeDestino: etapa.unidadeDestino,
+      local: etapa.local,
+    }
+  })
 
   // Só as etapas do cenário deste envio: uma etapa criada para o ATRASO não
   // pode aparecer numa entrega normal.
   const extras: EtapaResolvida[] = (entrada.etapasExtras ?? [])
     .filter((extra) => extra.cenario === entrada.cenario)
-    .map((extra) => ({
-      fracao: extra.fracao,
-      codigo: extra.codigo,
-      unidadeOrigem: null,
-      unidadeDestino: null,
-      local: extra.fracao >= 0.5 ? entrada.destino : entrada.origem,
-      texto: { titulo: extra.titulo, descricao: extra.descricao },
-    }))
+    .map((extra) => {
+      const offsetMinutos =
+        extra.dias === undefined ? extra.fracao * totalMinutos : extra.dias * MINUTOS_POR_DIA
 
-  // `sort` estável: empate de fração mantém a etapa do cenário antes da
+      return {
+        offsetMinutos,
+        codigo: extra.codigo,
+        unidadeOrigem: null,
+        unidadeDestino: null,
+        // Metade do caminho para trás é origem; daí em diante, destino. Com
+        // posição em dias a referência é o offset resolvido, não a fração.
+        local: offsetMinutos >= totalMinutos / 2 ? entrada.destino : entrada.origem,
+        texto: { titulo: extra.titulo, descricao: extra.descricao },
+      }
+    })
+
+  // `sort` estável: empate de instante mantém a etapa do cenário antes da
   // extra, para que uma etapa da conta em 1,0·P não se meta na frente da
   // entrega.
-  const ordenadas = [...doCenario, ...extras].sort((a, b) => a.fracao - b.fracao)
+  const ordenadas = [...doCenario, ...extras].sort((a, b) => a.offsetMinutos - b.offsetMinutos)
 
   const eventos = ordenadas.map((etapa, indice) => {
     // A etapa da conta traz o próprio texto; para as do cenário vale a
@@ -343,7 +399,7 @@ export function gerarRoteiro(entrada: EntradaRoteiro): EventoRoteiro[] {
 
     return {
       sequencia: indice + 1,
-      offsetMinutos: Math.round(etapa.fracao * totalMinutos),
+      offsetMinutos: Math.round(etapa.offsetMinutos),
       codigo: etapa.codigo,
       titulo: texto.titulo,
       descricao: texto.descricao,

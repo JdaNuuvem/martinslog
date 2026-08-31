@@ -7,18 +7,20 @@ import { prisma } from '@/infra/db/client'
  * ausência seja explícita em vez de parecer um link quebrado.
  */
 export default async function PaginaAdmin() {
-  const [regras, envios, usuarios, auditoria, webhooksNaFila, cotacoes] = await Promise.all([
-    prisma.priceRule.count(),
-    prisma.shipment.count(),
-    prisma.user.count(),
-    prisma.auditLog.count(),
-    // Só o que ainda vai ser tentado: entrega concluída ou desistida não é
-    // trabalho pendente, e contá-la faria o número nunca baixar.
-    prisma.webhookDelivery.count({
-      where: { entregueEm: null, proximaTentativaEm: { not: null } },
-    }),
-    prisma.quote.count(),
-  ])
+  const [regras, envios, usuarios, auditoria, webhooksNaFila, cotacoes, statusPadrao] =
+    await Promise.all([
+      prisma.priceRule.count(),
+      prisma.shipment.count(),
+      prisma.user.count(),
+      prisma.auditLog.count(),
+      // Só o que ainda vai ser tentado: entrega concluída ou desistida não é
+      // trabalho pendente, e contá-la faria o número nunca baixar.
+      prisma.webhookDelivery.count({
+        where: { entregueEm: null, proximaTentativaEm: { not: null } },
+      }),
+      prisma.quote.count(),
+      prisma.statusRastreio.count({ where: { userId: null } }),
+    ])
 
   const cartoes = [
     { titulo: 'Regras de preço', valor: regras, href: '/admin/tabelas', pronto: true },
@@ -27,6 +29,7 @@ export default async function PaginaAdmin() {
     { titulo: 'Cotações', valor: cotacoes, href: '/admin/cotacoes', pronto: true },
     { titulo: 'Usuários', valor: usuarios, href: '/admin/usuarios', pronto: true },
     { titulo: 'Registros de auditoria', valor: auditoria, href: '/admin/auditoria', pronto: true },
+    { titulo: 'Status de rastreio', valor: statusPadrao, href: '/admin/status-rastreio', pronto: true },
   ]
 
   return (

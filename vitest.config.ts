@@ -10,6 +10,22 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    /**
+     * Arquivos rodam um de cada vez.
+     *
+     * A suíte é de integração contra um Postgres real, e parte do estado é
+     * **global por natureza**: o catálogo padrão de status (`status_rastreio`
+     * com `userId` nulo) e o registro único de `SimulacaoConfig` valem para
+     * todos os envios. Com arquivos em paralelo, um teste que configura a
+     * cadência de status altera a linha do tempo que outro arquivo está
+     * emitindo naquele instante — e o vermelho que aparece não é bug, é
+     * corrida entre suítes.
+     *
+     * O preço é tempo de parede (~110 s contra ~15 s). Vale: teste vermelho
+     * que não significa bug destrói o valor da suíte inteira, e foi
+     * exatamente isso que apareceu ao cobrir a cadência em dias.
+     */
+    fileParallelism: false,
     env: {
       // Banco de teste por sessão. Várias sessões rodando a suíte ao mesmo
       // tempo contra o mesmo banco produzem falhas intermitentes por corrida

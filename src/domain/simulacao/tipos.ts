@@ -38,6 +38,8 @@ export interface LocalidadeSimulacao {
  */
 export interface EtapaExtraRoteiro {
   fracao: number
+  /** Posição em dias após a emissão. Preenchida, ignora `fracao`. */
+  dias?: number
   codigo: string
   titulo: string
   descricao: string
@@ -60,6 +62,11 @@ export interface EntradaRoteiro {
   textos?: Readonly<Record<string, { titulo: string; descricao: string }>>
   /** Etapas da conta, fundidas nas do cenário pela fração do prazo. */
   etapasExtras?: readonly EtapaExtraRoteiro[]
+  /**
+   * Reposiciona, em dias após a emissão, as etapas que o motor gera sozinho.
+   * É o que permite "muda de status a cada X dias" sem tocar nos cenários.
+   */
+  posicoesDias?: Readonly<Record<string, number>>
 }
 
 export interface EventoRoteiro {
