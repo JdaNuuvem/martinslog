@@ -11,7 +11,15 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     env: {
-      DATABASE_URL: 'postgresql://frete:frete@localhost:5433/frete_test',
+      // Banco de teste por sessão. Várias sessões rodando a suíte ao mesmo
+      // tempo contra o mesmo banco produzem falhas intermitentes por corrida
+      // entre elas (colisão de documento/e-mail, carrier em upsert, envios de
+      // outra sessão no meio de um teste de concorrência) — e teste vermelho
+      // que não significa bug destrói o valor da suíte. Exporte
+      // DATABASE_URL_TEST apontando para um banco próprio para se isolar; sem
+      // ela, o comportamento é o padrão de sempre.
+      DATABASE_URL:
+        process.env.DATABASE_URL_TEST ?? 'postgresql://frete:frete@localhost:5433/frete_test',
       SESSION_SECRET: 'x'.repeat(32),
       NODE_ENV: 'test',
     },
