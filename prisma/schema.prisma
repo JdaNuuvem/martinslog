@@ -37,6 +37,14 @@ enum TipoLedger {
   DEBITO
 }
 
+enum CenarioSimulacao {
+  ENTREGA_NORMAL
+  ATRASO
+  TENTATIVA_FALHA
+  EXTRAVIO
+  DEVOLUCAO
+}
+
 enum MetodoPagamento {
   PIX
   CARTAO
@@ -62,11 +70,11 @@ model User {
   cepOrigemPadrao   String?
   criadoEm          DateTime  @default(now())
 
-  sessions  Session[]
-  addresses Address[]
-  quotes    Quote[]
-  shipments Shipment[]
-  wallet    Wallet?
+  sessions       Session[]
+  addresses      Address[]
+  quotes         Quote[]
+  shipments      Shipment[]
+  wallet         Wallet?
   paymentIntents PaymentIntent[]
 
   @@map("users")
@@ -125,12 +133,12 @@ model Address {
 }
 
 model Carrier {
-  id       String    @id @default(cuid())
+  id       String   @id @default(cuid())
   nome     String
-  slug     String    @unique
-  ativo    Boolean   @default(true)
+  slug     String   @unique
+  ativo    Boolean  @default(true)
   logoUrl  String?
-  criadoEm DateTime  @default(now())
+  criadoEm DateTime @default(now())
 
   services Service[]
 
@@ -138,17 +146,17 @@ model Carrier {
 }
 
 model Service {
-  id               String   @id @default(cuid())
-  carrierId        String
-  codigo           String
-  nome             String
-  prazoBase        Int
-  exigePudo        Boolean  @default(false)
-  entregaSabado    Boolean  @default(false)
-  limitePesoG      Int
-  limiteDimensoes  Json
-  ativo            Boolean  @default(true)
-  criadoEm         DateTime @default(now())
+  id              String   @id @default(cuid())
+  carrierId       String
+  codigo          String
+  nome            String
+  prazoBase       Int
+  exigePudo       Boolean  @default(false)
+  entregaSabado   Boolean  @default(false)
+  limitePesoG     Int
+  limiteDimensoes Json
+  ativo           Boolean  @default(true)
+  criadoEm        DateTime @default(now())
 
   carrier    Carrier     @relation(fields: [carrierId], references: [id], onDelete: Cascade)
   priceRules PriceRule[]
@@ -160,7 +168,7 @@ model Service {
 }
 
 model PriceRule {
-  id                  String   @id @default(cuid())
+  id                  String    @id @default(cuid())
   serviceId           String
   cepOrigemIni        Int
   cepOrigemFim        Int
@@ -172,10 +180,10 @@ model PriceRule {
   precoCustoCentavos  Int
   precoVendaCentavos  Int
   prazoDias           Int
-  ativo               Boolean  @default(true)
-  vigenteDe           DateTime @default(now())
+  ativo               Boolean   @default(true)
+  vigenteDe           DateTime  @default(now())
   vigenteAte          DateTime?
-  criadoEm            DateTime @default(now())
+  criadoEm            DateTime  @default(now())
 
   service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
@@ -214,29 +222,33 @@ model Quote {
 }
 
 model Shipment {
-  id                    String         @id @default(cuid())
-  userId                String
-  quoteId               String?
-  serviceId             String
-  codigoRastreio        String?        @unique
-  status                StatusShipment @default(PENDING)
-  remetente             Json
-  destinatario          Json
-  pontoPostagemId       String?
-  precoBalcaoCentavos   Int
-  precoCobradoCentavos  Int
-  descontoCentavos      Int
-  opcionais             Json
+  id                     String           @id @default(cuid())
+  userId                 String
+  quoteId                String?
+  serviceId              String
+  codigoRastreio         String?          @unique
+  status                 StatusShipment   @default(PENDING)
+  remetente              Json
+  destinatario           Json
+  pontoPostagemId        String?
+  precoBalcaoCentavos    Int
+  precoCobradoCentavos   Int
+  descontoCentavos       Int
+  opcionais              Json
   valorDeclaradoCentavos Int
-  produtos              Json
-  labelUrl              String?
-  dceNumero             String?
-  criadoEm              DateTime  @default(now())
-  pagoEm                DateTime?
-  geradoEm              DateTime?
-  postadoEm             DateTime?
-  entregueEm            DateTime?
-  canceladoEm           DateTime?
+  produtos               Json
+  labelUrl               String?
+  dceNumero              String?
+  cenario                CenarioSimulacao @default(ENTREGA_NORMAL)
+  simulacaoIniciadaEm    DateTime?
+  fatorSimulacao         Int              @default(1)
+  criadoEm               DateTime         @default(now())
+  pagoEm                 DateTime?
+  geradoEm               DateTime?
+  postadoEm              DateTime?
+  entregueEm             DateTime?
+  devolvidoEm            DateTime?
+  canceladoEm            DateTime?
 
   user           User            @relation(fields: [userId], references: [id], onDelete: Restrict)
   quote          Quote?          @relation(fields: [quoteId], references: [id], onDelete: SetNull)
@@ -261,15 +273,15 @@ model Wallet {
 }
 
 model LedgerEntry {
-  id               String     @id @default(cuid())
-  walletId         String
-  tipo             TipoLedger
-  valorCentavos    Int
+  id                String     @id @default(cuid())
+  walletId          String
+  tipo              TipoLedger
+  valorCentavos     Int
   saldoAposCentavos Int
-  refTipo          String
-  refId            String
-  descricao        String
-  criadoEm         DateTime   @default(now())
+  refTipo           String
+  refId             String
+  descricao         String
+  criadoEm          DateTime   @default(now())
 
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Restrict)
 
@@ -296,28 +308,50 @@ model PaymentIntent {
 }
 
 model TrackingEvent {
-  id          String   @id @default(cuid())
-  shipmentId  String
-  status      String
-  descricao   String
-  local       String?
-  ocorridoEm  DateTime @default(now())
+  id             String   @id @default(cuid())
+  shipmentId     String
+  sequencia      Int
+  offsetMinutos  Int
+  codigo         String
+  status         String
+  titulo         String
+  descricao      String
+  local          String?
+  unidadeOrigem  String?
+  unidadeDestino String?
+  cidade         String
+  uf             String
+  forcado        Boolean  @default(false)
+  ocorridoEm     DateTime @default(now())
 
   shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
 
-  @@index([shipmentId])
+  @@unique([shipmentId, sequencia])
+  @@index([shipmentId, ocorridoEm])
   @@map("tracking_events")
 }
 
+/// Registro único de configuração global da simulação de transporte.
+/// O fator é copiado para o envio na geração da etiqueta, então alterar
+/// aqui só afeta envios novos — ver spec 2026-08-31, seção 2.
+model SimulacaoConfig {
+  id              String   @id @default("singleton")
+  fatorVelocidade Int      @default(1)
+  operador        String   @default("DE ENCOMENDAS")
+  atualizadoEm    DateTime @updatedAt
+
+  @@map("simulacao_config")
+}
+
 model AuditLog {
-  id            String   @id @default(cuid())
-  actorUserId   String?
-  acao          String
-  entidade      String
-  entidadeId    String
-  antes         Json?
-  depois        Json?
-  criadoEm      DateTime @default(now())
+  id          String   @id @default(cuid())
+  actorUserId String?
+  acao        String
+  entidade    String
+  entidadeId  String
+  antes       Json?
+  depois      Json?
+  criadoEm    DateTime @default(now())
 
   @@index([entidade, entidadeId])
   @@map("audit_logs")
