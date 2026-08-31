@@ -70,13 +70,14 @@ model User {
   cepOrigemPadrao   String?
   criadoEm          DateTime  @default(now())
 
-  sessions       Session[]
-  addresses      Address[]
-  quotes         Quote[]
-  shipments      Shipment[]
-  wallet         Wallet?
-  paymentIntents PaymentIntent[]
-  webhookApps    WebhookApp[]
+  sessions        Session[]
+  addresses       Address[]
+  quotes          Quote[]
+  shipments       Shipment[]
+  wallet          Wallet?
+  paymentIntents  PaymentIntent[]
+  webhookApps     WebhookApp[]
+  statusRastreios StatusRastreio[]
 
   @@map("users")
 }
@@ -397,4 +398,33 @@ model WebhookDelivery {
   @@index([proximaTentativaEm, entregueEm])
   @@index([webhookAppId, criadoEm])
   @@map("webhook_deliveries")
+}
+
+/// Catálogo de status de rastreio, personalizável por conta.
+///
+/// `userId` nulo é a linha do catálogo padrão da plataforma. A resolução
+/// para um envio sobrepõe o padrão com as linhas do dono, de modo que
+/// personalizar uma copy não faz a conta perder as demais.
+///
+/// `cenario`, `fracaoPrazo` e `statusResultante` só são preenchidos em
+/// status criados pelo cliente, que entram no roteiro automático. Um status
+/// que apenas reescreve o texto de um código existente deixa os três nulos e
+/// não altera a forma da timeline.
+model StatusRastreio {
+  id               String            @id @default(cuid())
+  userId           String?
+  codigo           String
+  titulo           String
+  descricao        String
+  cenario          CenarioSimulacao?
+  fracaoPrazo      Float?
+  statusResultante StatusShipment?
+  ativo            Boolean           @default(true)
+  criadoEm         DateTime          @default(now())
+  atualizadoEm     DateTime          @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("status_rastreio")
 }
