@@ -57,3 +57,9 @@ export class ServicoIndisponivelError extends DomainError {
 export class EnderecoNaoEncontradoError extends DomainError {
   readonly codigo = 'ENDERECO_NAO_ENCONTRADO'
 }
+export class PagamentoNaoEncontradoError extends DomainError {
+  readonly codigo = 'PAGAMENTO_NAO_ENCONTRADO'
+}
+export class EnvioNaoEncontradoError extends DomainError {
+  readonly codigo = 'ENVIO_NAO_ENCONTRADO'
+}

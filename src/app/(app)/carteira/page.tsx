@@ -1,5 +1,5 @@
-import { EmBreve } from '@/components/layout/em-breve'
+import { Carteira } from '@/components/carteira'
 
 export default function PaginaCarteira() {
-  return <EmBreve titulo="Carteira" />
+  return <Carteira />
 }
