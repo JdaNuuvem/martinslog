@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useId, useState, type FormEvent } from 'react'
+import { ConstrutorTemplateRastreio } from './construtor-template-rastreio'
 import {
   CENARIOS,
   STATUS_RESULTANTES,
@@ -161,6 +162,11 @@ export function PainelStatusRastreio() {
           {erro}
         </p>
       ) : null}
+
+      {/* Antes das copies: escolher o percurso é a decisão maior, e
+          personalizar texto de uma etapa só faz sentido depois de saber
+          quais etapas existem. */}
+      <ConstrutorTemplateRastreio />
 
       <form onSubmit={salvar} className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
         <h2 className="text-lg font-bold text-texto-principal">Novo status ou personalização</h2>

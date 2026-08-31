@@ -28,24 +28,30 @@ async function criarUsuario(): Promise<string> {
   return user.id
 }
 
+/**
+ * Código exclusivo desta execução para a linha de catálogo padrão.
+ *
+ * Não usa `POSTADO`: o catálogo padrão é estado global, e a suíte
+ * administrativa apaga `userId: null` inteiro no próprio setup. Depender de
+ * uma linha compartilhada fazia estes testes falharem conforme a ordem em
+ * que os arquivos rodavam — verde isolados, vermelhos na suíte completa.
+ */
+const CODIGO_PADRAO = `PADRAO_TESTE_${Date.now()}`
+const TITULO_PADRAO = 'Texto padrão da plataforma'
+
 beforeAll(async () => {
-  // Uma linha de catálogo padrão, para provar a sobreposição.
-  const existente = await prisma.statusRastreio.findFirst({
-    where: { userId: null, codigo: 'POSTADO' },
+  await prisma.statusRastreio.create({
+    data: {
+      userId: null,
+      codigo: CODIGO_PADRAO,
+      titulo: TITULO_PADRAO,
+      descricao: TITULO_PADRAO,
+    },
   })
-  if (!existente) {
-    await prisma.statusRastreio.create({
-      data: {
-        userId: null,
-        codigo: 'POSTADO',
-        titulo: 'Objeto postado',
-        descricao: 'Objeto postado',
-      },
-    })
-  }
 })
 
 afterAll(async () => {
+  await prisma.statusRastreio.deleteMany({ where: { codigo: CODIGO_PADRAO } })
   await prisma.statusRastreio.deleteMany({ where: { userId: { in: usuariosCriados } } })
   await prisma.user.deleteMany({ where: { id: { in: usuariosCriados } } })
 })
@@ -126,22 +132,22 @@ describe('catalogoDoUsuario', () => {
     const umaConta = await criarUsuario()
     const outraConta = await criarUsuario()
 
-    await salvarStatus(umaConta, { nome: 'POSTADO', titulo: 'Só desta conta', descricao: 'x' })
+    await salvarStatus(umaConta, { nome: CODIGO_PADRAO, titulo: 'Só desta conta', descricao: 'x' })
 
-    expect((await catalogoDoUsuario(umaConta)).textos.POSTADO?.titulo).toBe('Só desta conta')
-    expect((await catalogoDoUsuario(outraConta)).textos.POSTADO?.titulo).toBe('Objeto postado')
+    expect((await catalogoDoUsuario(umaConta)).textos[CODIGO_PADRAO]?.titulo).toBe('Só desta conta')
+    expect((await catalogoDoUsuario(outraConta)).textos[CODIGO_PADRAO]?.titulo).toBe(TITULO_PADRAO)
   })
 })
 
 describe('removerStatus', () => {
   it('devolve o código ao texto padrão em vez de sumir com ele', async () => {
     const userId = await criarUsuario()
-    await salvarStatus(userId, { nome: 'POSTADO', titulo: 'Personalizado', descricao: 'x' })
+    await salvarStatus(userId, { nome: CODIGO_PADRAO, titulo: 'Personalizado', descricao: 'x' })
 
     const linha = (await listarStatusDaConta(userId))[0]!
     await removerStatus(userId, linha.id)
 
-    expect((await catalogoDoUsuario(userId)).textos.POSTADO?.titulo).toBe('Objeto postado')
+    expect((await catalogoDoUsuario(userId)).textos[CODIGO_PADRAO]?.titulo).toBe(TITULO_PADRAO)
   })
 
   it('não deixa uma conta remover o status de outra', async () => {

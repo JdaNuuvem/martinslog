@@ -70,14 +70,15 @@ model User {
   cepOrigemPadrao   String?
   criadoEm          DateTime  @default(now())
 
-  sessions        Session[]
-  addresses       Address[]
-  quotes          Quote[]
-  shipments       Shipment[]
-  wallet          Wallet?
-  paymentIntents  PaymentIntent[]
-  webhookApps     WebhookApp[]
-  statusRastreios StatusRastreio[]
+  sessions         Session[]
+  addresses        Address[]
+  quotes           Quote[]
+  shipments        Shipment[]
+  wallet           Wallet?
+  paymentIntents   PaymentIntent[]
+  webhookApps      WebhookApp[]
+  statusRastreios  StatusRastreio[]
+  rastreioTemplate RastreioTemplate?
 
   @@map("users")
 }
@@ -428,4 +429,24 @@ model StatusRastreio {
 
   @@index([userId])
   @@map("status_rastreio")
+}
+
+/// Template de percurso do rastreio, montado pela conta.
+///
+/// Substitui o roteiro automático por cenário nos envios desta conta. Sem
+/// template ativo, vale o caminho padrão da simulação.
+///
+/// `passos` é a lista ordenada de etapas em JSON — a ordem é o dado, e eles
+/// são sempre lidos e gravados juntos.
+model RastreioTemplate {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  ativo        Boolean  @default(true)
+  passos       Json
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("rastreio_templates")
 }
