@@ -3,6 +3,7 @@ import { EnvioNaoEncontradoError } from '@/domain/errors'
 import { statusDoEvento } from '@/domain/simulacao/roteiro'
 import type { CodigoEvento } from '@/domain/simulacao/tipos'
 import type { RastreioResposta } from '@/lib/rastreio-schema'
+import { sincronizarStatus } from './sincronizar-envio-service'
 
 /**
  * Consulta pública de um envio pelo código de rastreio
@@ -22,6 +23,25 @@ export async function rastrearEnvio(
   codigoRastreio: string,
   agora: Date = new Date(),
 ): Promise<RastreioResposta> {
+  // A consulta sincroniza o status persistido antes de ler. Sem isto, o
+  // `Shipment.status` no banco fica congelado no valor da emissão para
+  // sempre: nada mais no sistema percebe a passagem do tempo, e listagens,
+  // filtros e relatórios que leem o campo mostram um envio entregue como
+  // recém-emitido.
+  //
+  // Usa `sincronizarStatus`, e não `sincronizarEnvio`: esta rota é anônima
+  // e protegida apenas por rate limit, então não pode ser o gatilho do
+  // estorno de extravio. Mover status é idempotente e barato; mover dinheiro
+  // fica com os caminhos autenticados.
+  const envioParaSincronizar = await prisma.shipment.findFirst({
+    where: { codigoRastreio },
+    select: { id: true },
+  })
+
+  if (envioParaSincronizar) {
+    await sincronizarStatus(envioParaSincronizar.id, agora)
+  }
+
   const envio = await prisma.shipment.findFirst({
     where: { codigoRastreio },
     include: {

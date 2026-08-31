@@ -4,7 +4,7 @@ import { EnvioNaoEncontradoError } from '@/domain/errors'
 import { criarUsuarioComSaldo, criarCotacaoValida } from '@/test/factories'
 import { criarEnvio, pagarEnvio, type EnderecoEnvio } from './shipment-service'
 import { ID_CONFIG_SIMULACAO } from './simulacao-config'
-import { sincronizarEnvio } from './sincronizar-envio-service'
+import { sincronizarEnvio, sincronizarStatus } from './sincronizar-envio-service'
 
 const usuariosCriados: string[] = []
 
@@ -239,6 +239,37 @@ describe('sincronizarEnvio', () => {
 
     const envio = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })
     expect(envio.status).toBe('LOST')
+  })
+
+  it('sincronizarStatus avança o status sem tocar em dinheiro', async () => {
+    const { userId, shipmentId } = await emitirNoCenario('EXTRAVIO')
+    const agora = await depoisDoEvento(shipmentId, 'EXTRAVIADO')
+    const saldoAntes = await saldo(userId)
+
+    const status = await sincronizarStatus(shipmentId, agora)
+
+    expect(status).toBe('LOST')
+    // O status andou, mas a carteira não foi tocada: é esta separação que
+    // permite a consulta pública progredir sem mover dinheiro.
+    expect(await saldo(userId)).toBe(saldoAntes)
+    expect(await creditosDeEstorno(userId, shipmentId)).toBe(0)
+  })
+
+  it('estorna mesmo quando outra chamada já levou o envio a LOST', async () => {
+    const { userId, shipmentId } = await emitirNoCenario('EXTRAVIO')
+    const agora = await depoisDoEvento(shipmentId, 'EXTRAVIADO')
+    const saldoAntes = await saldo(userId)
+
+    // Simula o que a consulta pública faz: leva a LOST sem estornar.
+    await sincronizarStatus(shipmentId, agora)
+
+    // A sincronização completa chega depois e encontra o envio já terminal.
+    // O estorno não pode depender de ter sido ela a fazer a transição.
+    const status = await sincronizarEnvio(shipmentId, agora)
+
+    expect(status).toBe('LOST')
+    expect(await saldo(userId)).toBe(saldoAntes + PRECO_CENTAVOS)
+    expect(await creditosDeEstorno(userId, shipmentId)).toBe(1)
   })
 
   it('lança EnvioNaoEncontradoError para envio inexistente', async () => {

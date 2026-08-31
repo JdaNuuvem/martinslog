@@ -113,7 +113,20 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  const envios = await prisma.shipment.findMany({
+    where: { userId: { in: usuariosCriados } },
+    select: { id: true },
+  })
+  const carteiras = await prisma.wallet.findMany({ where: { userId: { in: usuariosCriados } } })
+
+  await prisma.trackingEvent.deleteMany({
+    where: { shipmentId: { in: envios.map((e) => e.id) } },
+  })
+  await prisma.ledgerEntry.deleteMany({
+    where: { walletId: { in: carteiras.map((c) => c.id) } },
+  })
   await prisma.shipment.deleteMany({ where: { userId: { in: usuariosCriados } } })
+  await prisma.wallet.deleteMany({ where: { userId: { in: usuariosCriados } } })
   await prisma.user.deleteMany({ where: { id: { in: usuariosCriados } } })
 })
 
@@ -268,5 +281,47 @@ describe('rastrearEnvio', () => {
 
   it('recusa código sem envio correspondente', async () => {
     await expect(rastrearEnvio(proximoCodigo())).rejects.toBeInstanceOf(EnvioNaoEncontradoError)
+  })
+})
+
+describe('rastrearEnvio mantém o status persistido em dia', () => {
+  it('persiste o avanço do status ao consultar, sem creditar carteira', async () => {
+    const codigo = proximoCodigo()
+    const envio = await criarEnvio(donoId, codigo)
+    await prisma.wallet.upsert({
+      where: { userId: donoId },
+      update: {},
+      create: { userId: donoId, saldoCentavos: 0 },
+    })
+
+    const passado = new Date(Date.now() - 60 * 60 * 1000)
+    await criarEventos(envio.id, [
+      { sequencia: 1, codigo: 'POSTADO', descricao: 'Objeto postado', ocorridoEm: passado },
+      {
+        sequencia: 2,
+        codigo: 'EXTRAVIADO',
+        descricao: 'Objeto extraviado',
+        ocorridoEm: passado,
+      },
+    ])
+
+    const carteiraAntes = await prisma.wallet.findUniqueOrThrow({ where: { userId: donoId } })
+
+    await rastrearEnvio(codigo)
+
+    // O status persistido acompanhou o relógio: sem isto, o campo ficaria
+    // congelado em GENERATED e toda listagem que filtra por status mentiria.
+    const depois = await prisma.shipment.findUniqueOrThrow({ where: { id: envio.id } })
+    expect(depois.status).toBe('LOST')
+
+    // A rota é anônima: pode mover status, nunca dinheiro. O estorno fica
+    // para os caminhos autenticados, via `sincronizarEnvio`.
+    const carteiraDepois = await prisma.wallet.findUniqueOrThrow({ where: { userId: donoId } })
+    expect(carteiraDepois.saldoCentavos).toBe(carteiraAntes.saldoCentavos)
+    expect(
+      await prisma.ledgerEntry.count({
+        where: { walletId: carteiraDepois.id, refTipo: 'SHIPMENT', refId: envio.id },
+      }),
+    ).toBe(0)
   })
 })
