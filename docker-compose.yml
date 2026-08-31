@@ -5,7 +5,7 @@ services:
       POSTGRES_USER: frete
       POSTGRES_PASSWORD: frete
       POSTGRES_DB: frete
-    ports: ["5432:5432"]
+    ports: ["5434:5432"]
   db_test:
     image: postgres:16
     environment:
