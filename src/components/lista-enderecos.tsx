@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { EnderecoForm } from './endereco-form'
+import { EnderecosArquivados } from './enderecos-arquivados'
 import type { EnderecoResposta } from '@/lib/endereco-schema'
 
 type Tipo = 'REMETENTE' | 'DESTINATARIO'
@@ -148,6 +149,9 @@ export function ListaEnderecos() {
   const [enderecos, setEnderecos] = useState<EnderecoResposta[]>([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
+  // Incrementado a cada arquivamento, para a seção de arquivados recarregar
+  // e mostrar o endereço que acabou de sair desta lista.
+  const [versaoArquivados, setVersaoArquivados] = useState(0)
 
   useEffect(() => {
     let cancelado = false
@@ -198,6 +202,13 @@ export function ListaEnderecos() {
 
   function onApagado(id: string) {
     setEnderecos((atual) => atual.filter((e) => e.id !== id))
+    setVersaoArquivados((atual) => atual + 1)
+  }
+
+  // O endereço volta sempre como não-padrão (ver `reativarEndereco`), então
+  // nenhum padrão existente precisa ser desmarcado aqui.
+  function onReativado(endereco: EnderecoResposta) {
+    setEnderecos((atual) => [endereco, ...atual])
   }
 
   return (
@@ -233,6 +244,7 @@ export function ListaEnderecos() {
         onAtualizado={onAtualizado}
         onApagado={onApagado}
       />
+      <EnderecosArquivados versao={versaoArquivados} onReativado={onReativado} />
     </div>
   )
 }

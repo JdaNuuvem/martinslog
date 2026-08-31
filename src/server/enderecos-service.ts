@@ -179,6 +179,49 @@ export async function arquivarEndereco(userId: string, id: string): Promise<void
 }
 
 /**
+ * Lista os endereços arquivados do usuário, mais recentes primeiro. Serve à
+ * tela de reativação: sem ela, arquivar era um caminho sem volta pela
+ * interface, apesar de a exclusão ser lógica desde o começo.
+ */
+export async function listarEnderecosArquivados(userId: string) {
+  return prisma.address.findMany({
+    where: { userId, arquivadoEm: { not: null } },
+    orderBy: { arquivadoEm: 'desc' },
+  })
+}
+
+/**
+ * Reativa um endereço arquivado, desfazendo `arquivarEndereco`.
+ *
+ * **Sempre volta como não-padrão**, mesmo que fosse o padrão antes de ser
+ * arquivado. Enquanto ele esteve fora, o usuário pode ter eleito outro
+ * padrão; ressuscitar o antigo nesse posto despromoveria em silêncio uma
+ * escolha deliberada — e esbarraria no índice único parcial
+ * `(userId, tipo) WHERE padrao = true AND arquivadoEm IS NULL`, entregando
+ * um erro cru de banco a quem só clicou em "Reativar". Quem quiser o antigo
+ * de volta como padrão promove em seguida, explicitamente.
+ *
+ * A checagem de dono é a mesma do resto do módulo: endereço inexistente,
+ * de outro usuário, ou que não está arquivado produzem todos
+ * `EnderecoNaoEncontradoError` (→ 404). Um intruso não consegue nem
+ * confirmar que o id existe.
+ */
+export async function reativarEndereco(userId: string, id: string) {
+  const arquivado = await prisma.address.findFirst({
+    where: { id, userId, arquivadoEm: { not: null } },
+  })
+
+  if (!arquivado) {
+    throw new EnderecoNaoEncontradoError(`Endereço arquivado não encontrado: ${id}`)
+  }
+
+  return prisma.address.update({
+    where: { id },
+    data: { arquivadoEm: null, padrao: false },
+  })
+}
+
+/**
  * Busca os dados de um CEP no provedor de geolocalização, para o
  * preenchimento automático do formulário. Erros (`CepInvalidoError`,
  * `ServicoIndisponivelError`) não são tratados aqui — o handler HTTP decide
