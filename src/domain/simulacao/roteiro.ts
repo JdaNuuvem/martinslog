@@ -1,5 +1,5 @@
 import { ValorInvalidoError } from '../errors'
-import type { StatusShipment } from '../shipment/estados'
+import { garantirTransicao, type StatusShipment } from '../shipment/estados'
 import type {
   CodigoEvento,
   EntradaRoteiro,
@@ -86,8 +86,65 @@ const STATUS_POR_CODIGO: Readonly<Record<CodigoEvento, StatusShipment>> = {
   DEVOLVIDO: 'DELIVERED',
 }
 
-export function statusDoEvento(codigo: CodigoEvento): StatusShipment {
-  return STATUS_POR_CODIGO[codigo]
+/**
+ * Status de envio produzido por um evento.
+ *
+ * Aceita `string` porque o código pode ter sido criado por uma conta, e
+ * **lança** quando não conhece o código, em vez de devolver `undefined`.
+ * Devolver `undefined` era pior que um erro: em `sincronizarEnvio` o valor
+ * caía num `includes` que dava falso e o laço parava em silêncio — o
+ * rastreio congelava no primeiro evento customizado e ninguém percebia até
+ * um cliente reclamar.
+ */
+export function statusDoEvento(
+  codigo: string,
+  statusPorCodigo?: Readonly<Record<string, StatusShipment>>,
+): StatusShipment {
+  const status = statusPorCodigo?.[codigo] ?? STATUS_POR_CODIGO[codigo as CodigoEvento]
+
+  if (!status) {
+    throw new ValorInvalidoError(
+      `Código de evento sem status correspondente: ${codigo}. Um status criado pela conta precisa informar o status resultante.`,
+    )
+  }
+
+  return status
+}
+
+/**
+ * Percorre o roteiro já ordenado e exige que cada mudança de status seja uma
+ * transição válida.
+ *
+ * Precisa existir separada da validação do painel porque a validade só
+ * aparece na **sequência**: uma etapa perfeitamente válida isolada pode cair
+ * entre duas outras e produzir, por exemplo, `DELIVERED → POSTED`. Ao salvar
+ * no painel não se conhecem os vizinhos, que dependem do cenário e do prazo
+ * do serviço do envio.
+ */
+export function validarRoteiro(
+  eventos: readonly { codigo: string }[],
+  statusPorCodigo?: Readonly<Record<string, StatusShipment>>,
+): void {
+  let anterior: StatusShipment | null = null
+
+  for (const evento of eventos) {
+    const atual = statusDoEvento(evento.codigo, statusPorCodigo)
+    if (anterior && anterior !== atual) {
+      garantirTransicao(anterior, atual)
+    }
+    anterior = atual
+  }
+}
+
+/** Etapa já pronta para virar evento, com código possivelmente customizado. */
+interface EtapaResolvida {
+  fracao: number
+  codigo: string
+  unidadeOrigem: string | null
+  unidadeDestino: string | null
+  local: LocalidadeSimulacao
+  /** Presente nas etapas da conta, que trazem o próprio texto. */
+  texto?: { titulo: string; descricao: string }
 }
 
 /** Etapa do roteiro antes de virar minutos: a fração é do prazo do serviço. */
@@ -254,18 +311,63 @@ export function gerarRoteiro(entrada: EntradaRoteiro): EventoRoteiro[] {
   }
 
   const totalMinutos = entrada.prazoDias * MINUTOS_POR_DIA
+  const doCenario: EtapaResolvida[] = [...espinha(entrada), ...desfecho(entrada)]
 
-  return [...espinha(entrada), ...desfecho(entrada)].map((etapa, indice) => ({
-    sequencia: indice + 1,
-    offsetMinutos: Math.round(etapa.fracao * totalMinutos),
-    codigo: etapa.codigo,
-    titulo: TEXTOS[etapa.codigo].titulo,
-    descricao: TEXTOS[etapa.codigo].descricao,
-    unidadeOrigem: etapa.unidadeOrigem,
-    unidadeDestino: etapa.unidadeDestino,
-    cidade: etapa.local.cidade,
-    uf: etapa.local.uf,
-  }))
+  // Só as etapas do cenário deste envio: uma etapa criada para o ATRASO não
+  // pode aparecer numa entrega normal.
+  const extras: EtapaResolvida[] = (entrada.etapasExtras ?? [])
+    .filter((extra) => extra.cenario === entrada.cenario)
+    .map((extra) => ({
+      fracao: extra.fracao,
+      codigo: extra.codigo,
+      unidadeOrigem: null,
+      unidadeDestino: null,
+      local: extra.fracao >= 0.5 ? entrada.destino : entrada.origem,
+      texto: { titulo: extra.titulo, descricao: extra.descricao },
+    }))
+
+  // `sort` estável: empate de fração mantém a etapa do cenário antes da
+  // extra, para que uma etapa da conta em 1,0·P não se meta na frente da
+  // entrega.
+  const ordenadas = [...doCenario, ...extras].sort((a, b) => a.fracao - b.fracao)
+
+  const eventos = ordenadas.map((etapa, indice) => {
+    // A etapa da conta traz o próprio texto; para as do cenário vale a
+    // sobreposição da conta e, na falta dela, o texto padrão.
+    const texto =
+      entrada.textos?.[etapa.codigo] ?? etapa.texto ?? TEXTOS[etapa.codigo as CodigoEvento]
+
+    if (!texto) {
+      throw new ValorInvalidoError(`Código de evento sem texto correspondente: ${etapa.codigo}`)
+    }
+
+    return {
+      sequencia: indice + 1,
+      offsetMinutos: Math.round(etapa.fracao * totalMinutos),
+      codigo: etapa.codigo,
+      titulo: texto.titulo,
+      descricao: texto.descricao,
+      unidadeOrigem: etapa.unidadeOrigem,
+      unidadeDestino: etapa.unidadeDestino,
+      cidade: etapa.local.cidade,
+      uf: etapa.local.uf,
+    }
+  })
+
+  // Barreira real: nada inválido chega a virar TrackingEvent no banco. O
+  // painel valida antes só para dar erro compreensível na tela.
+  validarRoteiro(eventos, statusPorCodigoExtras(entrada))
+
+  return eventos
+}
+
+/** Mapa código→status das etapas da conta, para resolver os códigos livres. */
+function statusPorCodigoExtras(entrada: EntradaRoteiro): Record<string, StatusShipment> {
+  const mapa: Record<string, StatusShipment> = {}
+  for (const extra of entrada.etapasExtras ?? []) {
+    mapa[extra.codigo] = extra.statusResultante as StatusShipment
+  }
+  return mapa
 }
 
 /**

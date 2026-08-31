@@ -32,6 +32,19 @@ export interface LocalidadeSimulacao {
   uf: string
 }
 
+/**
+ * Etapa criada por uma conta, encaixada no roteiro pela fração do prazo.
+ * Ver `src/domain/rastreio/catalogo-status.ts`.
+ */
+export interface EtapaExtraRoteiro {
+  fracao: number
+  codigo: string
+  titulo: string
+  descricao: string
+  cenario: CenarioSimulacao
+  statusResultante: string
+}
+
 export interface EntradaRoteiro {
   cenario: CenarioSimulacao
   /** Prazo do serviço em dias úteis. Escala todos os offsets. */
@@ -40,12 +53,20 @@ export interface EntradaRoteiro {
   destino: LocalidadeSimulacao
   /** Nome do operador nas unidades. Neutro por padrão — nunca "DOS CORREIOS". */
   operador?: string
+  /**
+   * Sobrescreve título e descrição por código. Ausente, valem os textos
+   * padrão — o comportamento de quem nunca personalizou nada.
+   */
+  textos?: Readonly<Record<string, { titulo: string; descricao: string }>>
+  /** Etapas da conta, fundidas nas do cenário pela fração do prazo. */
+  etapasExtras?: readonly EtapaExtraRoteiro[]
 }
 
 export interface EventoRoteiro {
   sequencia: number
   offsetMinutos: number
-  codigo: CodigoEvento
+  /** `CodigoEvento` para as etapas padrão; livre para as criadas pela conta. */
+  codigo: string
   titulo: string
   descricao: string
   unidadeOrigem: string | null
