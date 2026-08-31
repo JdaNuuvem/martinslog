@@ -63,3 +63,6 @@ export class PagamentoNaoEncontradoError extends DomainError {
 export class EnvioNaoEncontradoError extends DomainError {
   readonly codigo = 'ENVIO_NAO_ENCONTRADO'
 }
+export class CodigoRastreioInvalidoError extends DomainError {
+  readonly codigo = 'CODIGO_RASTREIO_INVALIDO'
+}
