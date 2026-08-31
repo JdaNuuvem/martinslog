@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 
 test('topbar mostra saldo em verde, sublinhado e clicável para /carteira', async ({ page }) => {
   await page.goto('/')
+  await page.waitForLoadState('networkidle')
   const saldo = page.getByRole('link', { name: 'R$ 0,00' })
   await expect(saldo).toBeVisible()
   await saldo.click()

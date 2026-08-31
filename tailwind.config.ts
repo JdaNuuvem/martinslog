@@ -6,9 +6,16 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          DEFAULT: '#0E8A5F',
-          light: '#12A66F',
+          // Preenchimento de botão (texto branco em cima) — 6,28:1 sobre branco.
+          DEFAULT: '#0A6E4A',
+          // Hover do preenchimento — 5,15:1 sobre branco.
+          light: '#0C7D54',
           bg: '#D6F5E6',
+          // Verde para texto/links sobre fundo claro (branco ou cinza de página) —
+          // 5,36:1 sobre branco, 4,95:1 sobre `superficie.pagina`. Mais claro que
+          // `DEFAULT` seria reprovado nessas duas superfícies (a paleta de
+          // referência original, #0E8A5F, ficava em 4,36:1 sobre branco).
+          texto: '#0B7A52',
         },
         alerta: {
           DEFAULT: '#F59E0B',
@@ -19,12 +26,19 @@ const config: Config = {
         },
         texto: {
           principal: '#1A1A1A',
-          secundario: '#6B7280',
+          // 5,98:1 sobre branco, 5,53:1 sobre `superficie.pagina` (a referência
+          // original, #6B7280, ficava em 4,47:1 sobre o fundo de página).
+          secundario: '#5B6472',
+          // Preço riscado / valor secundário em cards — 4,84:1 sobre branco.
+          riscado: '#6B7280',
         },
         superficie: {
           pagina: '#F5F6F7',
           card: '#FFFFFF',
           bloco: '#F0F1F2',
+        },
+        borda: {
+          campo: '#CBD5E1',
         },
       },
       borderRadius: {

@@ -59,7 +59,7 @@ function paraNumero(valor: string): number | undefined {
 }
 
 const classeCampo =
-  'w-full border-0 border-b border-slate-300 bg-transparent px-1 py-2 text-sm text-texto-principal focus:border-brand focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand'
+  'w-full border-0 border-b border-borda-campo bg-transparent px-1 py-2 text-sm text-texto-principal focus:border-brand focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand'
 
 export function CalculadoraForm() {
   const [form, setForm] = useState<EstadoFormulario>(ESTADO_INICIAL)
@@ -264,7 +264,7 @@ export function CalculadoraForm() {
             </div>
 
             {mensagemSalvar ? (
-              <p role="status" className="mt-2 text-sm text-brand">
+              <p role="status" className="mt-2 text-sm text-brand-texto">
                 {mensagemSalvar}
               </p>
             ) : null}
@@ -339,7 +339,7 @@ export function CalculadoraForm() {
                 <label htmlFor={`${idBase}-altura`} className="text-xs font-medium text-texto-secundario">
                   Altura (cm)
                 </label>
-                <div className="flex items-center border-b border-slate-300 focus-within:border-brand">
+                <div className="flex items-center border-b border-borda-campo focus-within:border-brand">
                   <input
                     id={`${idBase}-altura`}
                     name="alturaCm"
@@ -366,7 +366,7 @@ export function CalculadoraForm() {
                 <label htmlFor={`${idBase}-largura`} className="text-xs font-medium text-texto-secundario">
                   Largura (cm)
                 </label>
-                <div className="flex items-center border-b border-slate-300 focus-within:border-brand">
+                <div className="flex items-center border-b border-borda-campo focus-within:border-brand">
                   <input
                     id={`${idBase}-largura`}
                     name="larguraCm"
@@ -393,7 +393,7 @@ export function CalculadoraForm() {
                 <label htmlFor={`${idBase}-comprimento`} className="text-xs font-medium text-texto-secundario">
                   Comprimento (cm)
                 </label>
-                <div className="flex items-center border-b border-slate-300 focus-within:border-brand">
+                <div className="flex items-center border-b border-borda-campo focus-within:border-brand">
                   <input
                     id={`${idBase}-comprimento`}
                     name="comprimentoCm"
@@ -465,7 +465,7 @@ export function CalculadoraForm() {
                 href="https://buscacepinter.correios.com.br/app/endereco/index.php"
                 target="_blank"
                 rel="noreferrer"
-                className="shrink-0 text-sm font-medium text-brand underline underline-offset-2 hover:text-brand-light"
+                className="shrink-0 text-sm font-medium text-brand-texto underline underline-offset-2 hover:text-brand-light"
               >
                 Pesquisar CEP
               </a>

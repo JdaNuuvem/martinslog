@@ -47,19 +47,19 @@ export function OpcaoFreteCard({ opcao }: OpcaoFreteCardProps) {
 
       <div className="flex flex-col items-start gap-1 sm:items-end">
         {opcao.descontoPercentual > 0 ? (
-          <span className="rounded-pilula bg-brand-bg px-2 py-0.5 text-xs font-bold text-brand">
+          <span className="rounded-pilula bg-brand-bg px-2 py-0.5 text-xs font-bold text-brand-texto">
             {opcao.descontoPercentual}% OFF
           </span>
         ) : null}
         {opcao.descontoCentavos > 0 ? (
           <span
-            className="text-sm text-slate-400 line-through"
+            className="text-sm text-texto-riscado line-through"
             aria-label={`Preço de balcão: ${formatarReais(opcao.precoBalcaoCentavos)}`}
           >
             {formatarReais(opcao.precoBalcaoCentavos)}
           </span>
         ) : null}
-        <span className="text-2xl font-extrabold text-emerald-700">
+        <span className="text-2xl font-extrabold text-brand-texto">
           {formatarReais(opcao.precoFinalCentavos)}
         </span>
       </div>

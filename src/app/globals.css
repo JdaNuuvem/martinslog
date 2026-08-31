@@ -3,14 +3,17 @@
 @tailwind utilities;
 
 :root {
-  --cor-marca: #0e8a5f;
-  --cor-marca-clara: #12a66f;
+  --cor-marca: #0a6e4a;
+  --cor-marca-clara: #0c7d54;
   --cor-marca-fundo: #d6f5e6;
+  --cor-marca-texto: #0b7a52;
   --cor-texto-principal: #1a1a1a;
-  --cor-texto-secundario: #6b7280;
+  --cor-texto-secundario: #5b6472;
+  --cor-texto-riscado: #6b7280;
   --cor-fundo-pagina: #f5f6f7;
   --cor-superficie: #ffffff;
   --cor-bloco: #f0f1f2;
+  --cor-borda-campo: #cbd5e1;
   --cor-alerta: #f59e0b;
   --cor-info-fundo: #e8f4fd;
   --cor-info-texto: #1e3a8a;

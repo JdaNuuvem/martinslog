@@ -14,6 +14,8 @@ import {
   IconeRastreio,
 } from './icones'
 
+export const SIDEBAR_ID = 'menu-navegacao'
+
 const ITENS = [
   { rotulo: 'Calcular', href: '/', Icone: IconeCalcular },
   { rotulo: 'Etiquetas', href: '/etiquetas', Icone: IconeEtiquetas },
@@ -61,6 +63,7 @@ export function Sidebar({ aberta, onFechar }: SidebarProps) {
       ) : null}
 
       <aside
+        id={SIDEBAR_ID}
         className={`${aberta ? 'fixed flex shadow-xl' : 'hidden'} bottom-0 left-0 top-topbar z-40 w-sidebar border-r border-superficie-bloco bg-superficie-card lg:fixed lg:flex`}
       >
         <nav ref={navRef} aria-label="Navegação principal" className="flex h-full flex-col gap-1 p-3">
@@ -86,7 +89,7 @@ export function Sidebar({ aberta, onFechar }: SidebarProps) {
                 aria-current={ativo ? 'page' : undefined}
                 className={`flex items-center gap-3 rounded-r-lg border-l-4 px-3 py-2 text-sm font-medium transition ${
                   ativo
-                    ? 'border-brand bg-brand-bg text-brand'
+                    ? 'border-brand bg-brand-bg text-brand-texto'
                     : 'border-transparent text-texto-secundario hover:bg-superficie-bloco'
                 }`}
               >

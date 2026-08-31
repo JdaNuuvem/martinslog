@@ -25,7 +25,7 @@ test('calcula o frete e mostra ao menos uma opção com desconto', async ({ page
     if ((await opcao.getAttribute('data-disponivel')) !== 'true') continue
 
     const precoBalcaoTexto = await opcao.locator('span.line-through').textContent()
-    const precoFinalTexto = await opcao.locator('span.text-emerald-700').last().textContent()
+    const precoFinalTexto = await opcao.locator('span.text-brand-texto').last().textContent()
     if (!precoBalcaoTexto || !precoFinalTexto) continue
 
     const precoBalcao = Number(precoBalcaoTexto.replace(/[^\d,]/g, '').replace(',', '.'))

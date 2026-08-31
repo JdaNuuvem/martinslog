@@ -45,13 +45,27 @@ Todas as telas autenticadas compartilham o mesmo esqueleto:
 **Conteúdo**: fundo cinza muito claro (`#F5F6F7` aproximado), conteúdo centralizado com largura
 máxima em torno de 760px nas telas de formulário e mais largo nas de tabela.
 
-**Paleta** (extraída das capturas):
-- Verde primário (botões, links, valores): `#0E8A5F` a `#12A66F`
+**Paleta** (extraída das capturas, com ajuste de contraste — ver nota abaixo):
+- Verde de preenchimento de botão (texto branco em cima): `#0A6E4A` — 6,28:1 sobre branco.
+- Verde de texto/links sobre fundo claro (branco ou cinza de página): `#0B7A52` — 5,36:1 sobre
+  branco, 4,95:1 sobre o fundo de página.
 - Verde claro de fundo de selo: `#D6F5E6`
-- Texto principal: `#1A1A1A`; secundário: `#6B7280`
+- Texto principal: `#1A1A1A`; secundário: `#5B6472` — 5,98:1 sobre branco, 5,53:1 sobre o fundo
+  de página. Texto riscado (preço de balcão sobre card branco): `#6B7280` — 4,84:1 sobre branco.
 - Fundo de página: `#F5F6F7`; superfícies: `#FFFFFF`; blocos de formulário: `#F0F1F2`
+- Borda de campo: `#CBD5E1`
 - Laranja de alerta: `#F59E0B` com texto branco
 - Azul de informação: `#E8F4FD` com texto azul-escuro
+
+> **Nota de contraste (2026-08-31, rodada de correção 2 da Task 7.5):** os tons de verde e de
+> cinza secundário desta paleta foram **escurecidos em relação à captura original do
+> concorrente**. As capturas usavam `#0E8A5F` (verde) e `#6B7280` (cinza secundário), que medem
+> 4,36:1 e 4,47:1 respectivamente contra os fundos onde aparecem — abaixo do mínimo de 4,5:1
+> do WCAG 2.1 AA para texto normal. O app de origem falha esse critério; não replicamos a
+> falha. Os valores acima (`#0A6E4A`, `#0B7A52`, `#5B6472`) foram medidos e confirmados acima de
+> 4,5:1 nas combinações onde são usados. **Não reverta para os tons originais** sem repetir essa
+> medição — veja `src/components/layout/*.tsx` e `tailwind.config.ts` (tokens `brand`,
+> `brand.texto`, `texto.secundario`) para onde cada tom é consumido.
 
 Tipografia sem serifa, títulos em peso bold, rótulos de seção em **maiúsculas com espaçamento
 entre letras** (`INFORME A ORIGEM`).
