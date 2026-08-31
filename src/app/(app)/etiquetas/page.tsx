@@ -1,5 +1,25 @@
-import { EmBreve } from '@/components/layout/em-breve'
+import { ListaEtiquetas } from '@/components/lista-etiquetas'
 
+/**
+ * Gestão das etiquetas do cliente: o que ele contratou e o que pode fazer
+ * com cada envio.
+ *
+ * Não há impressão de etiqueta aqui — por decisão do produto, a geração de
+ * PDF não faz parte desta tela. As ações são ver detalhes, rastrear e
+ * cancelar enquanto o envio não saiu para entrega.
+ */
 export default function PaginaEtiquetas() {
-  return <EmBreve titulo="Etiquetas" />
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="text-2xl font-bold text-texto-principal">Etiquetas</h1>
+        <p className="text-sm text-texto-secundario">
+          Seus envios, por situação. O cancelamento é possível até a postagem e não devolve o
+          valor pago.
+        </p>
+      </div>
+
+      <ListaEtiquetas />
+    </div>
+  )
 }
