@@ -76,6 +76,7 @@ model User {
   shipments      Shipment[]
   wallet         Wallet?
   paymentIntents PaymentIntent[]
+  webhookApps    WebhookApp[]
 
   @@map("users")
 }
@@ -355,4 +356,45 @@ model AuditLog {
 
   @@index([entidade, entidadeId])
   @@map("audit_logs")
+}
+
+/// Assinatura de webhook de um cliente: para onde notificar e com que
+/// segredo assinar. O segredo é gerado pelo servidor e mostrado uma única
+/// vez no cadastro — depois disso só o cliente tem a cópia legível.
+model WebhookApp {
+  id       String   @id @default(cuid())
+  userId   String
+  url      String
+  eventos  Json
+  segredo  String
+  ativo    Boolean  @default(true)
+  criadoEm DateTime @default(now())
+
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([userId, ativo])
+  @@map("webhook_apps")
+}
+
+/// Uma entrega enfileirada. O payload é congelado no momento do evento: se
+/// o envio mudar depois, a notificação continua descrevendo o que de fato
+/// aconteceu naquele instante, e não o estado atual.
+model WebhookDelivery {
+  id                 String    @id @default(cuid())
+  webhookAppId       String
+  evento             String
+  payload            Json
+  tentativas         Int       @default(0)
+  statusHttp         Int?
+  erro               String?
+  proximaTentativaEm DateTime?
+  entregueEm         DateTime?
+  criadoEm           DateTime  @default(now())
+
+  webhookApp WebhookApp @relation(fields: [webhookAppId], references: [id], onDelete: Cascade)
+
+  @@index([proximaTentativaEm, entregueEm])
+  @@index([webhookAppId, criadoEm])
+  @@map("webhook_deliveries")
 }
