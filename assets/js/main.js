@@ -387,13 +387,20 @@
     }
 
     function renderEtapas(indice) {
+      // Na última etapa a entrega acabou: ela recebe o visto de concluída em
+      // vez do marcador pulsante, que anunciaria algo ainda em andamento.
+      var finalizada = indice >= ETAPAS.length - 1;
+
       var lista = criar('div', 'etapas');
       lista.setAttribute('aria-label', 'Progresso da entrega');
       ETAPAS.forEach(function (nome, i) {
-        var item = criar('div', 'etapa' + (i < indice ? ' etapa--feita' : i === indice ? ' etapa--atual' : ''));
+        var feita = i < indice || (finalizada && i <= indice);
+        var atual = !finalizada && i === indice;
+
+        var item = criar('div', 'etapa' + (feita ? ' etapa--feita' : atual ? ' etapa--atual' : ''));
         var marca = criar('span', 'etapa__marca');
         marca.setAttribute('aria-hidden', 'true');
-        if (i < indice) {
+        if (feita) {
           marca.innerHTML = '<svg viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></svg>';
         }
         item.appendChild(marca);
