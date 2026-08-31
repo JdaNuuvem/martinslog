@@ -1,7 +1,7 @@
 export abstract class DomainError extends Error {
   abstract readonly codigo: string
-  constructor(mensagem: string) {
-    super(mensagem)
+  constructor(mensagem: string, opcoes?: { cause?: unknown }) {
+    super(mensagem, opcoes)
     this.name = new.target.name
   }
 }
@@ -35,4 +35,7 @@ export class CarteiraNaoEncontradaError extends DomainError {
 }
 export class NaoAutorizadoError extends DomainError {
   readonly codigo = 'NAO_AUTORIZADO'
+}
+export class ServicoIndisponivelError extends DomainError {
+  readonly codigo = 'SERVICO_INDISPONIVEL'
 }
