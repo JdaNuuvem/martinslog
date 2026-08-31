@@ -59,6 +59,24 @@ Valem todas as restrições globais da Fase 1: Node 22, pnpm, TypeScript strict,
 
 **Aceite:** filtro por status, período e serviço; busca por código, nome do destinatário e CEP; paginação por cursor com total; consulta de 10.000 envios responde em menos de 300ms com os índices da Fase 1.
 
+### Tarefa 2.7: Limite de etiquetas por usuário
+
+**Arquivos:** criar `src/domain/shipment/limite.ts`, `src/server/limite-service.ts`; schema (`User.limiteEtiquetas`, `User.limiteUsado`).
+
+**Referência:** `docs/ui/referencia-visual.md` seção 3 — barra "Limite restante 5 de 5" e link "Pedir aumento de limite".
+
+**Aceite:** usuário novo começa com limite baixo (5); a barra reflete o consumo; atingido o limite, a emissão é recusada com mensagem clara e caminho para pedir aumento; admin concede aumento com `AuditLog`. É controle de risco: quem acabou de se cadastrar não emite 500 etiquetas.
+
+### Tarefa 2.8: Diferença de peso/medida e pendências
+
+**Arquivos:** criar `src/domain/wallet/pendencia.ts`, `src/server/pendencia-service.ts`; schema (`Pendencia`, `Shipment.dimensoesPostadas`, `Shipment.pesoPostadoG`).
+
+**Referência:** spec seção 10.1 e `docs/ui/referencia-visual.md` seção 4.
+
+**Regra decidida:** a carteira **nunca** fica negativa. A diferença apurada vira `Pendencia` aberta, que bloqueia novos envios até a quitação.
+
+**Aceite:** apurar diferença cria pendência sem tocar na carteira; checkout com pendência aberta recusa com `PendenciaAbertaError` citando valor e envio de origem; quitação debita normalmente (exige saldo) e referencia o `LedgerEntry`; quitar duas vezes credita/debita uma só vez; admin cancela pendência com justificativa e `AuditLog`; o detalhe do envio mostra dimensão emitida contra dimensão postada, com destaque quando divergem.
+
 ### Tarefa 2.6: Importação de tabela por planilha
 
 **Arquivos:** modificar `src/server/admin/importar-tabela.ts`.
@@ -188,6 +206,14 @@ GET  /api/v0/user/info       → dados e saldo
 **Arquivos:** criar `src/app/(app)/relatorios/page.tsx`, `src/server/relatorio-service.ts`.
 
 **Aceite:** economia acumulada (soma de `descontoCentavos`), volume por período, gasto por transportadora e ticket médio; exportação CSV; consultas agregadas usam índice e respondem em menos de 1s com 100.000 envios.
+
+### Tarefa 5.5: Notificações na topbar e rastreio manual de terceiros
+
+**Arquivos:** criar `src/app/(app)/rastreio/adicionar/**`, `src/server/rastreio-externo-service.ts`, componente de sino na topbar; schema (`RastreioExterno`).
+
+**Referência:** `docs/ui/referencia-visual.md` seções 1 e 5 — sino na topbar e botão flutuante `+` na tela de Rastreio.
+
+**Aceite:** sino exibe contagem de não lidas e abre lista de notificações do usuário; o botão `+` permite acompanhar encomenda que **não** foi emitida na plataforma, informando o código e a transportadora; esse rastreio aparece na lista junto dos próprios, visualmente distinguível; nenhum rastreio externo pode ser confundido com envio pago nosso, nem entrar em relatório de volume.
 
 *Observação sobre gamificação:* o SuperFrete tem níveis e pontos (`level`, `superpoints`). Deixei fora por decisão de prioridade — é o item de menor retorno por esforço de tudo que eles têm, e não muda a economia do cliente. Se quiser, entra como Tarefa 5.5 depois que os relatórios mostrarem quem são os clientes de alto volume.
 

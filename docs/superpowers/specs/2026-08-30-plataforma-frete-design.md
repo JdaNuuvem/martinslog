@@ -309,6 +309,50 @@ relatórios de economia e volume.
 e do `SimulatedPix` por Pix real. Nenhuma mudança de domínio prevista — só novas
 implementações das interfaces.
 
+## 10.1. Adendo de 2026-08-31 — paridade visual e funcionalidades reveladas
+
+Capturas do app logado do SuperFrete (ver `docs/ui/referencia-visual.md`) revelaram
+funcionalidades ausentes desta especificação. Decisão do usuário: entram todas, distribuídas
+por fase. Replicamos layout, fluxo e comportamento; não replicamos marca.
+
+| Funcionalidade | Fase |
+|---|---|
+| Shell da aplicação: topbar com saldo, sidebar de 7 itens, paleta | 1 |
+| Copiar código de rastreio | 1 |
+| Compartilhar rastreio | 1 |
+| CEP de origem salvo como padrão | 1 |
+| Limite de etiquetas por usuário, com barra e pedido de aumento | 2 |
+| Diferença de peso/medida com cobrança posterior | 2 |
+| Dimensão emitida vs. dimensão postada no detalhe | 2 |
+| Ponto de postagem exibido no detalhe do envio | 3 |
+| Notificações (sino na topbar) | 5 |
+| Adicionar rastreio manual de encomenda de terceiro | 5 |
+
+### Diferença de peso/medida — regra decidida
+
+A transportadora remede o pacote na postagem e pode cobrar a diferença **depois** do envio já
+pago. Exemplo real observado: declarado 15×15×15 cm e 0,3 kg, postado 25×52×32 cm e 8,95 kg,
+com débito de R$ 28,80.
+
+**Decisão: a carteira nunca fica negativa.** A diferença vira uma `Pendencia` — dívida
+registrada em separado, que **bloqueia a emissão de novas etiquetas até ser quitada**. Isso
+mantém o saldo da carteira sempre confiável como número, ao custo de um conceito a mais.
+
+```
+Pendencia   id, userId, shipmentId, valorCentavos, motivo, status(ABERTA|QUITADA|CANCELADA),
+            criadoEm, quitadaEm, ledgerEntryId (preenchido na quitação)
+Shipment    + dimensoesPostadas(json), pesoPostadoG, diferencaApuradaEm
+```
+
+Regras:
+- Apurada a diferença, cria-se `Pendencia` com status `ABERTA`. Nada é debitado da carteira
+  nesse momento.
+- O checkout recusa novo envio enquanto houver `Pendencia` aberta, com erro
+  `PendenciaAbertaError` e mensagem explicando o valor e o envio que a originou.
+- Quitação: débito normal na carteira (exige saldo), gerando `LedgerEntry` referenciado pela
+  pendência. Recarregar a carteira não quita sozinho — a quitação é ação explícita.
+- Pendência cancelada pelo admin exige justificativa e grava `AuditLog`.
+
 ## 11. Fora de escopo
 
 App nativo, emissão de NF-e, DC-e oficial junto aos Correios (o MVP emite declaração de
