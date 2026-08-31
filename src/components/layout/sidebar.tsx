@@ -56,12 +56,12 @@ export function Sidebar({ aberta, onFechar }: SidebarProps) {
           type="button"
           aria-label="Fechar menu de navegação"
           onClick={onFechar}
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          className="fixed inset-x-0 bottom-0 top-topbar z-30 bg-black/40 lg:hidden"
         />
       ) : null}
 
       <aside
-        className={`${aberta ? 'fixed flex shadow-xl' : 'hidden'} inset-y-0 left-0 z-40 w-sidebar border-r border-superficie-bloco bg-superficie-card lg:sticky lg:top-topbar lg:flex lg:h-[calc(100vh-64px)]`}
+        className={`${aberta ? 'fixed flex shadow-xl' : 'hidden'} bottom-0 left-0 top-topbar z-40 w-sidebar border-r border-superficie-bloco bg-superficie-card lg:fixed lg:flex`}
       >
         <nav ref={navRef} aria-label="Navegação principal" className="flex h-full flex-col gap-1 p-3">
           <div className="mb-2 flex items-center justify-between lg:hidden">

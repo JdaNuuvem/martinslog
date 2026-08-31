@@ -13,7 +13,7 @@ type TopbarProps = {
  */
 export function Topbar({ nomeUsuario, onAbrirMenu }: TopbarProps) {
   return (
-    <header className="sticky top-0 z-20 flex h-topbar items-center justify-between border-b border-superficie-bloco bg-superficie-card px-4">
+    <header className="fixed inset-x-0 top-0 z-50 flex h-topbar items-center justify-between border-b border-superficie-bloco bg-superficie-card px-4">
       <div className="flex items-center gap-3">
         <button
           type="button"

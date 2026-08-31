@@ -255,7 +255,7 @@ export function CalculadoraForm() {
                 <button
                   type="button"
                   onClick={aoLimparOrigem}
-                  className="flex items-center gap-1 rounded-pilula border border-brand px-4 py-2 text-xs font-bold uppercase text-brand hover:bg-brand-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                  className="flex items-center gap-1 rounded-pilula bg-brand px-4 py-2 text-xs font-bold uppercase text-white hover:bg-brand-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                 >
                   <IconeLimpar width={16} height={16} />
                   Limpar
@@ -332,7 +332,9 @@ export function CalculadoraForm() {
                   ) : null}
                 </div>
               ) : null}
+            </div>
 
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="flex flex-col gap-1">
                 <label htmlFor={`${idBase}-altura`} className="text-xs font-medium text-texto-secundario">
                   Altura (cm)

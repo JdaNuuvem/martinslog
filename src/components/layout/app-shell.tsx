@@ -20,10 +20,10 @@ export function AppShell({ children, nomeUsuario = 'VISITANTE' }: AppShellProps)
   return (
     <div className="min-h-screen bg-superficie-pagina">
       <Topbar nomeUsuario={nomeUsuario} onAbrirMenu={() => setMenuAberto(true)} />
-      <div className="flex">
-        <Sidebar aberta={menuAberto} onFechar={() => setMenuAberto(false)} />
-        <main className="min-w-0 flex-1 px-4 py-8">{children}</main>
-      </div>
+      <Sidebar aberta={menuAberto} onFechar={() => setMenuAberto(false)} />
+      <main className="min-w-0 px-4 pb-8 pt-topbar lg:pl-sidebar">
+        <div className="pt-8">{children}</div>
+      </main>
     </div>
   )
 }
