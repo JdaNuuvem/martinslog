@@ -16,6 +16,26 @@ describe('normalizarCep', () => {
   it('rejeita CEP com letra', () => {
     expect(() => normalizarCep('0100100A')).toThrow(CepInvalidoError)
   })
+
+  it('rejeita entrada malformada com dígitos suficientes no meio', () => {
+    expect(() => normalizarCep('0100-100A0')).toThrow(CepInvalidoError)
+  })
+
+  it('rejeita string vazia', () => {
+    expect(() => normalizarCep('')).toThrow(CepInvalidoError)
+  })
+
+  it('rejeita oito caracteres sem dígito nenhum', () => {
+    expect(() => normalizarCep('abcdefgh')).toThrow(CepInvalidoError)
+  })
+
+  it('rejeita espaço no meio', () => {
+    expect(() => normalizarCep('0100 1000')).toThrow(CepInvalidoError)
+  })
+
+  it('retorna CEP sem hífen quando entrada é válida', () => {
+    expect(normalizarCep('01001000')).toBe('01001000')
+  })
 })
 
 describe('cepParaNumero', () => {

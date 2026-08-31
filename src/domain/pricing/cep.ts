@@ -1,11 +1,11 @@
 import { CepInvalidoError } from '../errors'
 
 export function normalizarCep(entrada: string): string {
-  const limpo = entrada.replace(/\D/g, '')
-  if (limpo.length !== 8) {
+  const trimado = entrada.trim()
+  if (!/^\d{5}-?\d{3}$/.test(trimado)) {
     throw new CepInvalidoError(`CEP inválido: ${entrada}`)
   }
-  return limpo
+  return trimado.replace('-', '')
 }
 
 export function cepParaNumero(cep: string): number {
