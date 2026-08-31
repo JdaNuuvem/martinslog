@@ -4,6 +4,7 @@ import { EnvioNaoEncontradoError } from '@/domain/errors'
 import { criarUsuarioComSaldo, criarCotacaoValida } from '@/test/factories'
 import { criarEnvio, pagarEnvio, type EnderecoEnvio } from './shipment-service'
 import { ID_CONFIG_SIMULACAO } from './simulacao-config'
+import { rastrearEnvio } from './rastreio-service'
 import {
   sincronizarEnvio,
   sincronizarEnviosPendentesDoUsuario,
@@ -319,5 +320,74 @@ describe('sincronizarEnviosPendentesDoUsuario', () => {
       where: { id: alheio.shipmentId },
     })
     expect(envioAlheio.status).toBe('GENERATED')
+  })
+})
+
+describe('sincronizarEnvio diante de código de evento da conta', () => {
+  /**
+   * Insere um evento com código que não existe no catálogo padrão, imitando
+   * um status criado pelo cliente no painel.
+   */
+  async function acrescentarEventoCustomizado(shipmentId: string, ocorridoEm: Date) {
+    const ultimo = await prisma.trackingEvent.findFirstOrThrow({
+      where: { shipmentId },
+      orderBy: { sequencia: 'desc' },
+    })
+
+    return prisma.trackingEvent.create({
+      data: {
+        shipmentId,
+        sequencia: ultimo.sequencia + 1,
+        offsetMinutos: ultimo.offsetMinutos + 1,
+        codigo: 'CONFERIDO_NO_CD',
+        status: 'CONFERIDO_NO_CD',
+        titulo: 'Objeto conferido no centro de distribuição',
+        descricao: 'Conferência interna da conta',
+        cidade: 'Rio de Janeiro',
+        uf: 'RJ',
+        ocorridoEm,
+      },
+    })
+  }
+
+  it('não derruba a sincronização quando o código não está no catálogo padrão', async () => {
+    const { shipmentId } = await emitirNoCenario('ENTREGA_NORMAL')
+    const postado = await depoisDoEvento(shipmentId, 'POSTADO')
+    await acrescentarEventoCustomizado(shipmentId, postado)
+
+    // Sem o mapa da conta, o código é desconhecido. A sincronização não pode
+    // estourar: `rastrearEnvio` a chama, e um throw aqui viraria 500 na
+    // página pública de um cliente por causa de configuração de outro.
+    const status = await sincronizarEnvio(shipmentId, postado)
+
+    expect(status).toBe('POSTED')
+  })
+
+  it('avança pelo evento da conta quando o mapa de status é informado', async () => {
+    const { shipmentId } = await emitirNoCenario('ENTREGA_NORMAL')
+    const postado = await depoisDoEvento(shipmentId, 'POSTADO')
+    await acrescentarEventoCustomizado(shipmentId, postado)
+
+    const status = await sincronizarEnvio(shipmentId, postado, {
+      CONFERIDO_NO_CD: 'POSTED',
+    })
+
+    expect(status).toBe('POSTED')
+    const envio = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })
+    expect(envio.status).toBe('POSTED')
+  })
+
+  it('a consulta pública sobrevive a um evento de código desconhecido', async () => {
+    const { shipmentId } = await emitirNoCenario('ENTREGA_NORMAL')
+    const envio = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })
+    const postado = await depoisDoEvento(shipmentId, 'POSTADO')
+    await acrescentarEventoCustomizado(shipmentId, postado)
+
+    const rastreio = await rastrearEnvio(envio.codigoRastreio!, postado)
+
+    // O evento aparece na timeline; o status cai no persistido em vez de
+    // explodir.
+    expect(rastreio.eventos.some((e) => e.codigo === 'CONFERIDO_NO_CD')).toBe(true)
+    expect(['GENERATED', 'POSTED']).toContain(rastreio.status)
   })
 })

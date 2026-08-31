@@ -1,7 +1,7 @@
 import { prisma } from '@/infra/db/client'
 import { EnvioNaoEncontradoError } from '@/domain/errors'
 import { statusDoEvento } from '@/domain/simulacao/roteiro'
-import type { CodigoEvento } from '@/domain/simulacao/tipos'
+import type { StatusShipment } from '@/domain/shipment/estados'
 import type { RastreioResposta } from '@/lib/rastreio-schema'
 import { sincronizarEnvio } from './sincronizar-envio-service'
 
@@ -19,6 +19,26 @@ import { sincronizarEnvio } from './sincronizar-envio-service'
  * no futuro. A consulta corta em `agora`: evento futuro não aparece nem
  * esmaecido.
  */
+/**
+ * Status a exibir para o último evento visível, com queda para o status
+ * persistido quando o código não é reconhecido.
+ *
+ * Um status criado pela conta cujo código este caminho não sabe traduzir não
+ * pode derrubar a consulta: a página do cliente mostra o status persistido,
+ * que está atrasado mas é verdadeiro, em vez de um erro.
+ */
+function statusVisivel(codigo: string | undefined, persistido: StatusShipment): StatusShipment {
+  if (!codigo) {
+    return persistido
+  }
+
+  try {
+    return statusDoEvento(codigo)
+  } catch {
+    return persistido
+  }
+}
+
 export async function rastrearEnvio(
   codigoRastreio: string,
   agora: Date = new Date(),
@@ -37,7 +57,17 @@ export async function rastrearEnvio(
   })
 
   if (envioParaSincronizar) {
-    await sincronizarEnvio(envioParaSincronizar.id, agora)
+    // A sincronização é benefício, não requisito da consulta: se ela falhar,
+    // a leitura ainda tem de responder. Um erro aqui deixa o status
+    // persistido atrasado, o que a derivação do último evento visível
+    // compensa na resposta.
+    try {
+      await sincronizarEnvio(envioParaSincronizar.id, agora)
+    } catch (error) {
+      console.error('Falha ao sincronizar envio durante a consulta de rastreio', {
+        cause: error,
+      })
+    }
   }
 
   const envio = await prisma.shipment.findFirst({
@@ -62,7 +92,7 @@ export async function rastrearEnvio(
     // O status persistido pode estar atrás do relógio até a próxima
     // sincronização; o último evento visível é a fonte da verdade do que o
     // cliente pode ver agora.
-    status: ultimoVisivel ? statusDoEvento(ultimoVisivel.codigo as CodigoEvento) : envio.status,
+    status: statusVisivel(ultimoVisivel?.codigo, envio.status),
     servico: envio.service.nome,
     prazoDias: envio.service.prazoBase,
     criadoEm: envio.criadoEm.toISOString(),

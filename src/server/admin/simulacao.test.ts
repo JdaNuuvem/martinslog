@@ -348,3 +348,47 @@ describe('reiniciarLinhaDoTempo', () => {
     await expect(reiniciarLinhaDoTempo(ator, envio.id)).rejects.toBeInstanceOf(ValorInvalidoError)
   })
 })
+
+describe('forcarProximoEvento com código de evento da conta', () => {
+  it('antecipa o evento e preserva o status quando o código é desconhecido', async () => {
+    const ator = await criarAtor()
+    const shipmentId = await emitirEnvio()
+
+    const ultimo = await prisma.trackingEvent.findFirstOrThrow({
+      where: { shipmentId },
+      orderBy: { sequencia: 'desc' },
+    })
+    await prisma.trackingEvent.deleteMany({
+      where: { shipmentId, sequencia: { gt: 1 } },
+    })
+    const customizado = await prisma.trackingEvent.create({
+      data: {
+        shipmentId,
+        sequencia: 2,
+        offsetMinutos: ultimo.offsetMinutos + 1,
+        codigo: 'CONFERIDO_NO_CD',
+        status: 'CONFERIDO_NO_CD',
+        titulo: 'Objeto conferido no centro de distribuição',
+        descricao: 'Conferência interna da conta',
+        cidade: 'Rio de Janeiro',
+        uf: 'RJ',
+        ocorridoEm: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    })
+
+    const antes = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })
+
+    // A ação principal é antecipar o evento. Não saber traduzir o código não
+    // pode impedir isso, nem fazer o painel gravar status inválido.
+    await forcarProximoEvento(ator, shipmentId)
+
+    const forcado = await prisma.trackingEvent.findUniqueOrThrow({
+      where: { id: customizado.id },
+    })
+    expect(forcado.forcado).toBe(true)
+    expect(forcado.ocorridoEm.getTime()).toBeLessThanOrEqual(Date.now())
+
+    const depois = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })
+    expect(depois.status).toBe(antes.status)
+  })
+})

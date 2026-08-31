@@ -2,11 +2,8 @@ import type { CenarioSimulacao, Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { EnvioNaoEncontradoError, ValorInvalidoError } from '@/domain/errors'
 import { calcularOcorridoEm, gerarRoteiro, statusDoEvento } from '@/domain/simulacao/roteiro'
-import type {
-  CodigoEvento,
-  EventoRoteiro,
-  LocalidadeSimulacao,
-} from '@/domain/simulacao/tipos'
+import type { EventoRoteiro, LocalidadeSimulacao } from '@/domain/simulacao/tipos'
+import type { StatusShipment } from '@/domain/shipment/estados'
 import { ID_CONFIG_SIMULACAO, obterConfigSimulacao } from '@/server/simulacao-config'
 
 /**
@@ -267,10 +264,20 @@ export async function forcarProximoEvento(
       })
     }
 
-    const alvo = statusDoEvento(proximo.codigo as CodigoEvento)
+    // Um status criado pela conta pode não ter tradução conhecida aqui. Nesse
+    // caso o evento é antecipado do mesmo jeito — é a ação que o administrador
+    // pediu — e o status do envio fica como está, em vez de o painel gravar um
+    // valor inventado ou recusar a operação inteira.
+    let alvo: StatusShipment | null
+    try {
+      alvo = statusDoEvento(proximo.codigo)
+    } catch {
+      alvo = null
+    }
+
     const dados: Prisma.ShipmentUpdateInput = {}
 
-    if (alvo !== envio.status) {
+    if (alvo !== null && alvo !== envio.status) {
       dados.status = alvo
       if (alvo === 'POSTED') dados.postadoEm = agora
       if (alvo === 'DELIVERED') dados.entregueEm = agora

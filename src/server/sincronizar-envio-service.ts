@@ -7,7 +7,6 @@ import {
   type StatusShipment,
 } from '@/domain/shipment/estados'
 import { statusDoEvento } from '@/domain/simulacao/roteiro'
-import type { CodigoEvento } from '@/domain/simulacao/tipos'
 
 /**
  * Sincronização do status do envio com o relógio da simulação.
@@ -27,6 +26,35 @@ import type { CodigoEvento } from '@/domain/simulacao/tipos'
  * O status é sempre **derivado do último evento visível** (spec seção 5),
  * nunca escrito à mão em paralelo à timeline.
  */
+
+/**
+ * Mapa de status por código de evento criado pela conta do cliente
+ * (`StatusRastreio`). Quando ausente, só os códigos do catálogo padrão são
+ * reconhecidos.
+ */
+export type StatusPorCodigo = Readonly<Record<string, StatusShipment>>
+
+/**
+ * Resolve o status de um evento **sem estourar** diante de código
+ * desconhecido.
+ *
+ * `statusDoEvento` lança de propósito: um código sem status é defeito de
+ * configuração e falhar alto é o certo em quem gera a timeline. Aqui, não:
+ * esta função é chamada na leitura, inclusive na consulta pública de
+ * rastreio. Um cliente não pode receber 500 na página dele porque outra
+ * conta criou um status sem informar o status resultante — o pior aceitável
+ * é o envio parar de avançar, mostrando um status atrasado mas verdadeiro.
+ */
+function statusOuNulo(
+  codigo: string,
+  statusPorCodigo?: StatusPorCodigo,
+): StatusShipment | null {
+  try {
+    return statusDoEvento(codigo, statusPorCodigo)
+  } catch {
+    return null
+  }
+}
 
 /** Estados terminais: não avançam mais, aconteça o que acontecer no relógio. */
 function estadoTerminal(status: StatusShipment): boolean {
@@ -72,6 +100,7 @@ function datasDoStatus(
 export async function sincronizarEnvio(
   shipmentId: string,
   agora: Date = new Date(),
+  statusPorCodigo?: StatusPorCodigo,
 ): Promise<StatusShipment> {
   const envio = await prisma.shipment.findUnique({
     where: { id: shipmentId },
@@ -100,7 +129,14 @@ export async function sincronizarEnvio(
   let status = envio.status
 
   for (const evento of eventos) {
-    const alvo = statusDoEvento(evento.codigo as CodigoEvento)
+    const alvo = statusOuNulo(evento.codigo, statusPorCodigo)
+
+    if (alvo === null) {
+      // Código que este chamador não sabe traduzir — sem o catálogo da conta,
+      // por exemplo. Para aqui: avançar por cima dele inventaria uma
+      // transição que o cliente não configurou.
+      break
+    }
 
     if (alvo === status) {
       continue
@@ -183,7 +219,8 @@ export async function sincronizarEnviosPendentesDoUsuario(
       return false
     }
 
-    return statusDoEvento(ultimo.codigo as CodigoEvento) !== envio.status
+    const derivado = statusOuNulo(ultimo.codigo)
+    return derivado !== null && derivado !== envio.status
   })
 
   let sincronizados = 0
