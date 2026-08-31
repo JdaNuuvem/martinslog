@@ -17,8 +17,12 @@ function isViolacaoUnicidade(error: unknown): boolean {
  * existir) e devolve a linha bloqueada (`SELECT ... FOR UPDATE`) dentro da
  * transação corrente. O lock serializa créditos/débitos concorrentes da
  * mesma carteira, o que evita "lost update" no saldo materializado.
+ *
+ * Exportada para que os ajustes manuais do painel administrativo
+ * (`src/server/admin/carteira.ts`) usem exatamente o mesmo lock destes
+ * lançamentos, em vez de abrirem um caminho paralelo até o saldo.
  */
-async function obterCarteiraBloqueada(
+export async function obterCarteiraBloqueada(
   tx: Prisma.TransactionClient,
   userId: string,
 ): Promise<{ id: string; saldoCentavos: number }> {
