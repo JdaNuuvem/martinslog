@@ -174,3 +174,65 @@ export async function sincronizarEnvio(
 
   return status
 }
+
+/** Status que não avançam mais — usados para excluir envios da seleção. */
+const STATUS_TERMINAIS: StatusShipment[] = (
+  ['PENDING', 'RELEASED', 'GENERATED', 'POSTED', 'DELIVERED', 'CANCELLED', 'LOST'] as const
+).filter(estadoTerminal)
+
+/**
+ * Sincroniza, de uma vez, os envios do usuário que o relógio já deixou
+ * atrasados, e devolve quantos foram efetivamente atualizados.
+ *
+ * Existe para ser chamada de um caminho autenticado do próprio dono — a
+ * carteira, por exemplo — porque é a única forma de o estorno de extravio
+ * chegar ao cliente sem intervenção administrativa. A consulta pública de
+ * rastreio usa `sincronizarStatus` e deliberadamente não move dinheiro.
+ *
+ * O filtro está aqui, e não em quem chama, para que a disciplina contra o
+ * N+1 exista num lugar só: **uma** consulta traz os candidatos com o último
+ * evento visível de cada um, o status é derivado em memória e só os envios
+ * cujo status persistido realmente divergiu abrem transação. Cliente com
+ * cinquenta envios em dia não paga cinquenta transações por abrir a
+ * carteira.
+ */
+export async function sincronizarEnviosPendentesDoUsuario(
+  userId: string,
+  agora: Date = new Date(),
+): Promise<number> {
+  const candidatos = await prisma.shipment.findMany({
+    where: {
+      userId,
+      status: { notIn: STATUS_TERMINAIS },
+      trackingEvents: { some: { ocorridoEm: { lte: agora } } },
+    },
+    select: {
+      id: true,
+      status: true,
+      trackingEvents: {
+        where: { ocorridoEm: { lte: agora } },
+        orderBy: [{ ocorridoEm: 'desc' }, { sequencia: 'desc' }],
+        take: 1,
+        select: { codigo: true },
+      },
+    },
+  })
+
+  const desatualizados = candidatos.filter((envio) => {
+    const ultimo = envio.trackingEvents.at(0)
+    if (!ultimo) {
+      return false
+    }
+
+    return statusDoEvento(ultimo.codigo as CodigoEvento) !== envio.status
+  })
+
+  let sincronizados = 0
+
+  for (const envio of desatualizados) {
+    await sincronizarEnvio(envio.id, agora)
+    sincronizados += 1
+  }
+
+  return sincronizados
+}

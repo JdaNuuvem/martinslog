@@ -4,7 +4,11 @@ import { EnvioNaoEncontradoError } from '@/domain/errors'
 import { criarUsuarioComSaldo, criarCotacaoValida } from '@/test/factories'
 import { criarEnvio, pagarEnvio, type EnderecoEnvio } from './shipment-service'
 import { ID_CONFIG_SIMULACAO } from './simulacao-config'
-import { sincronizarEnvio, sincronizarStatus } from './sincronizar-envio-service'
+import {
+  sincronizarEnvio,
+  sincronizarEnviosPendentesDoUsuario,
+  sincronizarStatus,
+} from './sincronizar-envio-service'
 
 const usuariosCriados: string[] = []
 
@@ -299,5 +303,56 @@ describe('sincronizarEnvio', () => {
       new Date(postado.ocorridoEm.getTime() + 1000),
     )
     expect(status).toBe('POSTED')
+  })
+})
+
+describe('sincronizarEnviosPendentesDoUsuario', () => {
+  it('sincroniza os envios vencidos do usuário e estorna o extravio uma vez', async () => {
+    const { userId, shipmentId } = await emitirNoCenario('EXTRAVIO')
+    const agora = await depoisDoEvento(shipmentId, 'EXTRAVIADO')
+    const saldoAntes = await saldo(userId)
+
+    const sincronizados = await sincronizarEnviosPendentesDoUsuario(userId, agora)
+
+    expect(sincronizados).toBe(1)
+    const envio = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })
+    expect(envio.status).toBe('LOST')
+    expect(await saldo(userId)).toBe(saldoAntes + PRECO_CENTAVOS)
+    expect(await creditosDeEstorno(userId, shipmentId)).toBe(1)
+  })
+
+  it('não faz trabalho quando nenhum envio tem evento vencido', async () => {
+    const { userId, simulacaoIniciadaEm } = await emitirNoCenario('ENTREGA_NORMAL')
+
+    // No instante da emissão só o primeiro evento venceu, e ele já
+    // corresponde ao status atual: não há o que sincronizar.
+    expect(await sincronizarEnviosPendentesDoUsuario(userId, simulacaoIniciadaEm)).toBe(0)
+  })
+
+  it('ignora envio já terminal e não credita de novo', async () => {
+    const { userId, shipmentId } = await emitirNoCenario('EXTRAVIO')
+    const agora = await depoisDoEvento(shipmentId, 'EXTRAVIADO')
+
+    await sincronizarEnviosPendentesDoUsuario(userId, agora)
+    const saldoDepoisDaPrimeira = await saldo(userId)
+
+    // Segunda passada: o envio já está em LOST, então nem entra na seleção.
+    expect(await sincronizarEnviosPendentesDoUsuario(userId, agora)).toBe(0)
+    expect(await saldo(userId)).toBe(saldoDepoisDaPrimeira)
+    expect(await creditosDeEstorno(userId, shipmentId)).toBe(1)
+  })
+
+  it('não toca em envio de outro usuário', async () => {
+    const alheio = await emitirNoCenario('EXTRAVIO')
+    const proprio = await emitirNoCenario('ENTREGA_NORMAL')
+    const agora = await depoisDoEvento(alheio.shipmentId, 'EXTRAVIADO')
+
+    await sincronizarEnviosPendentesDoUsuario(proprio.userId, agora)
+
+    const envioAlheio = await prisma.shipment.findUniqueOrThrow({
+      where: { id: alheio.shipmentId },
+    })
+    expect(envioAlheio.status).toBe('GENERATED')
+    expect(await creditosDeEstorno(alheio.userId, alheio.shipmentId)).toBe(0)
   })
 })
