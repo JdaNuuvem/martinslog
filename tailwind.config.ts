@@ -26,6 +26,9 @@ const config: Config = {
         // 4,46:1 sobre `superficie.pagina` — reprovado no fundo de página.
         erro: {
           DEFAULT: '#B91C1C',
+          // Fundo suave para blocos de erro (ex.: mensagem geral de
+          // formulário). Texto `erro.DEFAULT` sobre este fundo — 5,92:1.
+          fundo: '#FEF2F2',
         },
         info: {
           bg: '#E8F4FD',

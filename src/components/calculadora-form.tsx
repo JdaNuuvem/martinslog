@@ -484,7 +484,7 @@ export function CalculadoraForm() {
 
       <div aria-live="polite" aria-atomic="true" className="flex flex-col gap-4">
         {erroGeral ? (
-          <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          <p role="alert" className="rounded-lg bg-erro-fundo p-3 text-sm text-erro">
             {erroGeral}
           </p>
         ) : null}
