@@ -26,9 +26,10 @@ async function criarUsuarioComSessao(papel: 'ADMIN' | 'CLIENTE', indice: number)
   return { userId: user.id, sessionId: await criarSessao(user.id, NextResponse.json({})) }
 }
 
-function requisitar(sessionId: string | null) {
+function requisitar(sessionId: string | null, authorization?: string) {
   const headers = new Headers()
   if (sessionId) headers.set('cookie', `${SESSION_COOKIE}=${sessionId}`)
+  if (authorization) headers.set('authorization', authorization)
   return POST(
     new NextRequest('http://localhost/api/admin/webhooks/disparar', { method: 'POST', headers }),
   )
@@ -89,7 +90,20 @@ describe('POST /api/admin/webhooks/disparar', () => {
     vi.restoreAllMocks()
   })
 
+  it('recusa token de cron quando WEBHOOK_CRON_TOKEN não está configurado', async () => {
+    // O ambiente de teste não define a variável: a via do agendador fica
+    // fechada e a rota responde como para qualquer não-administrador.
+    const resposta = await requisitar(null, `Bearer ${'a'.repeat(48)}`)
+
+    expect(resposta.status).toBe(404)
+  })
+
   it('processa a fila para um administrador e devolve o resumo', async () => {
+    // A fila é global e outros arquivos de teste enfileiram entregas com URL
+    // fictícia: sem este mock, o disparo tentaria resolver e alcançar hosts
+    // de verdade, e o teste passaria a depender de rede e de tempo.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('ok', { status: 200 }))
+
     const resposta = await requisitar(sessaoAdmin)
 
     expect(resposta.status).toBe(200)
@@ -99,5 +113,6 @@ describe('POST /api/admin/webhooks/disparar', () => {
       falhas: expect.any(Number),
       desistidas: expect.any(Number),
     })
+    vi.restoreAllMocks()
   })
 })

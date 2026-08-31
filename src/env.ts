@@ -15,6 +15,17 @@ const schema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  /**
+   * Token que permite a um agendador externo processar a fila de webhooks
+   * sem sessão de administrador. Opcional: sem ele, a rota aceita apenas
+   * administradores autenticados e a fila só anda pelo botão do painel.
+   *
+   * O mínimo de 32 caracteres não é enfeite — este token substitui o login
+   * de um administrador em uma rota que dispara requisições para fora, e um
+   * valor curto é adivinhável por força bruta. Gere aleatório
+   * (`openssl rand -hex 32`) e trate como senha.
+   */
+  WEBHOOK_CRON_TOKEN: z.string().min(32).optional(),
 })
 
 export type Env = z.infer<typeof schema>
