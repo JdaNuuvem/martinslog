@@ -8,9 +8,23 @@ import { prisma } from '@/infra/db/client'
  */
 
 let contador = 0
+
+/**
+ * Sufixo único para `User.email` (índice único no banco).
+ *
+ * `Date.now()` + contador local não bastam: dois processos de teste
+ * (workers de arquivos diferentes, ou sessões de Claude distintas rodando
+ * contra o mesmo banco) podem gerar o mesmo par timestamp+contador no mesmo
+ * milissegundo — o contador reinicia em 1 a cada módulo carregado, então
+ * "o mesmo primeiro `criarUsuarioComSaldo` de dois processos simultâneos"
+ * colide. `randomInt` de 9 dígitos acrescenta entropia por chamada,
+ * suficiente para tornar a colisão entre processos praticamente impossível
+ * sem depender de nenhum estado compartilhado entre eles.
+ */
 function proximoSufixo(): string {
   contador += 1
-  return `${Date.now()}${contador}`
+  const aleatorio = randomInt(0, 1_000_000_000).toString().padStart(9, '0')
+  return `${Date.now()}${contador}${aleatorio}`
 }
 
 /**
