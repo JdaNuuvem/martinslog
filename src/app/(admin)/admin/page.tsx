@@ -7,7 +7,7 @@ import { prisma } from '@/infra/db/client'
  * ausência seja explícita em vez de parecer um link quebrado.
  */
 export default async function PaginaAdmin() {
-  const [regras, envios, usuarios, auditoria, webhooksNaFila, cotacoes, statusPadrao] =
+  const [regras, envios, usuarios, auditoria, webhooksNaFila, cotacoes, statusPadrao, servicos] =
     await Promise.all([
       prisma.priceRule.count(),
       prisma.shipment.count(),
@@ -20,6 +20,7 @@ export default async function PaginaAdmin() {
       }),
       prisma.quote.count(),
       prisma.statusRastreio.count({ where: { userId: null } }),
+      prisma.service.count({ where: { ativo: true } }),
     ])
 
   const cartoes = [
@@ -30,6 +31,7 @@ export default async function PaginaAdmin() {
     { titulo: 'Usuários', valor: usuarios, href: '/admin/usuarios', pronto: true },
     { titulo: 'Registros de auditoria', valor: auditoria, href: '/admin/auditoria', pronto: true },
     { titulo: 'Status de rastreio', valor: statusPadrao, href: '/admin/status-rastreio', pronto: true },
+    { titulo: 'Serviços', valor: servicos, href: '/admin/servicos', pronto: true },
   ]
 
   return (
