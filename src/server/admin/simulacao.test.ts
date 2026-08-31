@@ -3,7 +3,6 @@ import { prisma } from '@/infra/db/client'
 import { EnvioNaoEncontradoError, ValorInvalidoError } from '@/domain/errors'
 import { criarUsuarioComSaldo, criarCotacaoValida } from '@/test/factories'
 import { criarEnvio, pagarEnvio, type EnderecoEnvio } from '@/server/shipment-service'
-import { emitirEtiqueta } from '@/server/emitir-etiqueta-service'
 import { ID_CONFIG_SIMULACAO } from '@/server/simulacao-config'
 import {
   definirFatorVelocidade,
@@ -87,8 +86,8 @@ async function emitirEnvio(): Promise<string> {
     produtos: [{ nome: 'Camiseta', quantidade: 1, valorUnitarioCentavos: 5000 }],
   })
 
+  // `pagarEnvio` já emite a etiqueta pelo gancho posterior ao pagamento.
   await pagarEnvio(user.id, envio.id)
-  await emitirEtiqueta(envio.id)
 
   return envio.id
 }
@@ -126,13 +125,19 @@ describe('definirFatorVelocidade', () => {
 
   it.each([0, -1, 1.5, Number.NaN])('recusa fator inválido: %s', async (fator) => {
     const ator = await criarAtor()
+    // Captura o valor corrente em vez de presumir 1: `SimulacaoConfig` é uma
+    // linha única global e os arquivos de teste rodam em paralelo contra o
+    // mesmo banco. O que se afirma é que a chamada inválida não mudou nada.
+    const antes = await prisma.simulacaoConfig.findUniqueOrThrow({
+      where: { id: ID_CONFIG_SIMULACAO },
+    })
 
     await expect(definirFatorVelocidade(ator, fator)).rejects.toBeInstanceOf(ValorInvalidoError)
 
-    const config = await prisma.simulacaoConfig.findUniqueOrThrow({
+    const depois = await prisma.simulacaoConfig.findUniqueOrThrow({
       where: { id: ID_CONFIG_SIMULACAO },
     })
-    expect(config.fatorVelocidade).toBe(1)
+    expect(depois.fatorVelocidade).toBe(antes.fatorVelocidade)
   })
 
   it('não altera a linha do tempo de envio já em curso', async () => {

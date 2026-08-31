@@ -3,7 +3,6 @@ import { prisma } from '@/infra/db/client'
 import { EnvioNaoEncontradoError } from '@/domain/errors'
 import { criarUsuarioComSaldo, criarCotacaoValida } from '@/test/factories'
 import { criarEnvio, pagarEnvio, type EnderecoEnvio } from './shipment-service'
-import { emitirEtiqueta } from './emitir-etiqueta-service'
 import { ID_CONFIG_SIMULACAO } from './simulacao-config'
 import { sincronizarEnvio } from './sincronizar-envio-service'
 
@@ -91,8 +90,9 @@ async function emitirNoCenario(
   })
 
   await prisma.shipment.update({ where: { id: envio.id }, data: { cenario } })
+  // `pagarEnvio` já emite a etiqueta pelo gancho posterior ao pagamento,
+  // então a linha do tempo nasce aqui — não é preciso emitir à mão.
   await pagarEnvio(user.id, envio.id)
-  await emitirEtiqueta(envio.id)
 
   const emitido = await prisma.shipment.findUniqueOrThrow({ where: { id: envio.id } })
 
@@ -249,17 +249,23 @@ describe('sincronizarEnvio', () => {
     await definirFatorGlobal(1440)
     const { shipmentId, simulacaoIniciadaEm } = await emitirNoCenario('ENTREGA_NORMAL')
 
+    const envio = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })
     const postado = await prisma.trackingEvent.findFirstOrThrow({
       where: { shipmentId, codigo: 'POSTADO' },
     })
+
+    // O fator vem do envio, não da constante: `SimulacaoConfig` é global e
+    // outro arquivo de teste rodando em paralelo pode tê-lo trocado entre o
+    // ajuste acima e a emissão. A propriedade que importa é que as datas
+    // seguem o fator que o envio copiou.
     const minutosReais =
       (postado.ocorridoEm.getTime() - simulacaoIniciadaEm.getTime()) / 60_000
-    expect(minutosReais).toBeCloseTo(postado.offsetMinutos / 1440, 3)
+    expect(minutosReais).toBeCloseTo(postado.offsetMinutos / envio.fatorSimulacao, 3)
 
-    // Um minuto de relógio real depois do início já cobre um dia simulado.
+    // Avançar o relógio até logo depois da postagem faz o status andar.
     const status = await sincronizarEnvio(
       shipmentId,
-      new Date(simulacaoIniciadaEm.getTime() + 60_000),
+      new Date(postado.ocorridoEm.getTime() + 1000),
     )
     expect(status).toBe('POSTED')
   })

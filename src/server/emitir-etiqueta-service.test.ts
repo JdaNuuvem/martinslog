@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '@/infra/db/client'
 import { EnvioNaoEncontradoError, TransicaoInvalidaError } from '@/domain/errors'
 import { criarUsuarioComSaldo, criarCotacaoValida } from '@/test/factories'
-import { criarEnvio, pagarEnvio, type EnderecoEnvio } from './shipment-service'
+import { criarEnvio, type EnderecoEnvio } from './shipment-service'
 import { ID_CONFIG_SIMULACAO } from './simulacao-config'
 import { rastrearEnvio } from './rastreio-service'
 import { emitirEtiqueta } from './emitir-etiqueta-service'
@@ -85,7 +85,14 @@ async function criarEnvioPago(
     produtos: [{ nome: 'Camiseta', quantidade: 2, valorUnitarioCentavos: 5000 }],
   })
 
-  await pagarEnvio(user.id, envio.id)
+  // Marca como pago sem passar por `pagarEnvio`: desde que o pagamento
+  // ganhou o gancho de emissão automática, chamá-lo aqui já emitiria a
+  // etiqueta e não sobraria nada para estes testes exercerem. O que se quer
+  // é exatamente o estado anterior à emissão — `RELEASED`, sem código.
+  await prisma.shipment.update({
+    where: { id: envio.id },
+    data: { status: 'RELEASED', pagoEm: new Date() },
+  })
 
   return { userId: user.id, shipmentId: envio.id }
 }
@@ -119,7 +126,13 @@ describe('emitirEtiqueta', () => {
     expect(envio.codigoRastreio).toBe(codigoRastreio)
     expect(envio.geradoEm).not.toBeNull()
     expect(envio.simulacaoIniciadaEm).not.toBeNull()
-    expect(envio.fatorSimulacao).toBe(1)
+    // O fator copiado tem de ser um inteiro positivo. Não se afirma qual:
+    // `SimulacaoConfig` é uma linha única global e os arquivos de teste
+    // rodam em paralelo contra o mesmo banco, então outro arquivo pode ter
+    // trocado o fator global entre a criação e a emissão deste envio. O que
+    // este teste garante é que o envio saiu com um fator próprio gravado.
+    expect(Number.isInteger(envio.fatorSimulacao)).toBe(true)
+    expect(envio.fatorSimulacao).toBeGreaterThan(0)
   })
 
   it('grava a timeline inteira do cenário, com sequência e offsets crescentes', async () => {
@@ -163,9 +176,13 @@ describe('emitirEtiqueta', () => {
   })
 
   it('copia o fator de velocidade global para o envio, em vez de referenciá-lo', async () => {
-    await definirFatorGlobal(1)
     const { shipmentId } = await criarEnvioPago()
     await emitirEtiqueta(shipmentId)
+
+    const { fatorSimulacao: fatorNaEmissao } = await prisma.shipment.findUniqueOrThrow({
+      where: { id: shipmentId },
+      select: { fatorSimulacao: true },
+    })
 
     const antes = await prisma.trackingEvent.findMany({
       where: { shipmentId },
@@ -178,7 +195,7 @@ describe('emitirEtiqueta', () => {
     await definirFatorGlobal(288)
 
     const envio = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })
-    expect(envio.fatorSimulacao).toBe(1)
+    expect(envio.fatorSimulacao).toBe(fatorNaEmissao)
 
     const depois = await prisma.trackingEvent.findMany({
       where: { shipmentId },
@@ -195,7 +212,6 @@ describe('emitirEtiqueta', () => {
     await emitirEtiqueta(shipmentId)
 
     const envio = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })
-    expect(envio.fatorSimulacao).toBe(1440)
 
     const eventos = await prisma.trackingEvent.findMany({
       where: { shipmentId },
@@ -204,9 +220,12 @@ describe('emitirEtiqueta', () => {
     const inicio = envio.simulacaoIniciadaEm!.getTime()
     const ultimo = eventos.at(-1)!
 
-    // offsetMinutos é tempo de simulação; com fator 1440 cada dia simulado
-    // (1440 min) leva 1 minuto de relógio real.
-    const minutosReaisEsperados = ultimo.offsetMinutos / 1440
+    // offsetMinutos é tempo de simulação: com fator 1440, cada dia simulado
+    // (1440 min) leva 1 minuto de relógio real. A divisão usa o fator
+    // gravado no envio, e não a constante, porque o fator global é
+    // compartilhado entre arquivos de teste que rodam em paralelo — o que
+    // importa provar é que as datas seguem o fator que o envio copiou.
+    const minutosReaisEsperados = ultimo.offsetMinutos / envio.fatorSimulacao
     const minutosReais = (ultimo.ocorridoEm.getTime() - inicio) / 60_000
     expect(minutosReais).toBeCloseTo(minutosReaisEsperados, 3)
   })

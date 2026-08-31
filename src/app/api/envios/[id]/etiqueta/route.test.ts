@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/infra/db/client'
 import { criarSessao, SESSION_COOKIE } from '@/server/auth/sessao'
 import { criarUsuarioComSaldo, criarCotacaoValida } from '@/test/factories'
-import { criarEnvio, pagarEnvio, type EnderecoEnvio } from '@/server/shipment-service'
+import { criarEnvio, type EnderecoEnvio } from '@/server/shipment-service'
 import { POST } from './route'
 
 const usuariosCriados: string[] = []
@@ -73,7 +73,12 @@ async function criarEnvioDe(userId: string, pago: boolean): Promise<string> {
   })
 
   if (pago) {
-    await pagarEnvio(userId, envio.id)
+    // Sem passar por `pagarEnvio`: o pagamento hoje já emite a etiqueta
+    // pelo gancho, e estes testes precisam do estado anterior à emissão.
+    await prisma.shipment.update({
+      where: { id: envio.id },
+      data: { status: 'RELEASED', pagoEm: new Date() },
+    })
   }
 
   return envio.id
