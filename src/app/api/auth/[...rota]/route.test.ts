@@ -120,6 +120,73 @@ describe('POST /api/auth/cadastro', () => {
     const quoteAtualizada = await prisma.quote.findUnique({ where: { id: quote.id } })
     expect(quoteAtualizada?.userId).toBe(json.userId)
   })
+
+  it('IMP-1: cadastrar com o anon_session_id de uma AnonSession já consumida não rouba a Quote da vítima', async () => {
+    const anonSession = await prisma.anonSession.create({ data: {} })
+    const quoteDaVitima = await prisma.quote.create({
+      data: {
+        anonSessionId: anonSession.id,
+        cepOrigem: '01001000',
+        cepDestino: '20040002',
+        formato: 'CAIXA',
+        pesoG: 300,
+        altura: 4,
+        largura: 12,
+        comprimento: 18,
+        pesoCubadoG: 300,
+        pesoTaxavelG: 300,
+        opcionais: {},
+        opcoes: [],
+        expiraEm: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    })
+
+    // A vítima se cadastra normalmente com o cookie da própria AnonSession:
+    // isto consome a sessão (marca `consumidaEm`) e migra a cotação para ela.
+    const emailVitima = `vitima-${Date.now()}@teste.com`
+    emailsCriados.push(emailVitima)
+    const respostaVitima = await chamarRota(
+      ['cadastro'],
+      {
+        nome: 'Vítima Legítima',
+        documento: '56543092696',
+        email: emailVitima,
+        senha: 'SenhaForte123!',
+      },
+      { cookie: `anon_session_id=${anonSession.id}` },
+    )
+    expect(respostaVitima.status).toBe(201)
+    const jsonVitima = await respostaVitima.json()
+
+    const quoteAposVitima = await prisma.quote.findUnique({ where: { id: quoteDaVitima.id } })
+    expect(quoteAposVitima?.userId).toBe(jsonVitima.userId)
+
+    const anonSessionApos = await prisma.anonSession.findUnique({ where: { id: anonSession.id } })
+    expect(anonSessionApos?.consumidaEm).not.toBeNull()
+
+    // O atacante captura (ou enumera) o mesmo anon_session_id — já usado —
+    // e tenta se cadastrar mandando o mesmo cookie, esperando herdar a
+    // cotação da vítima.
+    const emailAtacante = `atacante-${Date.now()}@teste.com`
+    emailsCriados.push(emailAtacante)
+    const respostaAtacante = await chamarRota(
+      ['cadastro'],
+      {
+        nome: 'Atacante',
+        documento: '04030222404',
+        email: emailAtacante,
+        senha: 'SenhaForte123!',
+      },
+      { cookie: `anon_session_id=${anonSession.id}` },
+    )
+    expect(respostaAtacante.status).toBe(201)
+    const jsonAtacante = await respostaAtacante.json()
+
+    // A cotação da vítima continua com a vítima — o ataque falha.
+    const quoteAposAtaque = await prisma.quote.findUnique({ where: { id: quoteDaVitima.id } })
+    expect(quoteAposAtaque?.userId).toBe(jsonVitima.userId)
+    expect(quoteAposAtaque?.userId).not.toBe(jsonAtacante.userId)
+  })
 })
 
 describe('POST /api/auth/login', () => {
@@ -198,5 +265,64 @@ describe('POST /api/auth/login', () => {
 
     const sexta = await chamarRota(['login'], { email, senha: 'senha-errada' }, { ip: '10.0.0.9' })
     expect(sexta.status).toBe(429)
+  })
+
+  it('IMP-2: trocar o X-Forwarded-For a cada tentativa não escapa do rate limit (sem proxy confiável)', async () => {
+    const email = `login-rate-limit-spoof-${Date.now()}@teste.com`
+
+    for (let i = 0; i < 5; i += 1) {
+      // Cada tentativa chega com um IP "de origem" diferente, forjado pelo
+      // próprio chamador. Sem TRUST_PROXY_HEADERS=true, esse cabeçalho é
+      // ignorado, então o eixo por e-mail ainda barra a 6ª tentativa.
+      const resposta = await chamarRota(['login'], { email, senha: 'senha-errada' }, { ip: `10.0.0.${i}` })
+      expect(resposta.status).toBe(401)
+    }
+
+    const sexta = await chamarRota(['login'], { email, senha: 'senha-errada' }, { ip: '10.0.0.99' })
+    expect(sexta.status).toBe(429)
+  })
+
+  it('IMP-3: seis logins corretos seguidos continuam funcionando (sucesso não consome cota)', async () => {
+    const email = `login-sucesso-repetido-${Date.now()}@teste.com`
+    emailsCriados.push(email)
+    const senha = 'SenhaForte123!'
+
+    await chamarRota(['cadastro'], {
+      nome: 'Sucesso Repetido',
+      documento: '24967451926',
+      email,
+      senha,
+    })
+
+    for (let i = 0; i < 6; i += 1) {
+      const resposta = await chamarRota(['login'], { email, senha })
+      expect(resposta.status).toBe(200)
+    }
+  })
+
+  it('IMP-3: cinco falhas seguidas de um acerto — o acerto não é barrado pelo rate limit', async () => {
+    const email = `login-zera-apos-sucesso-${Date.now()}@teste.com`
+    emailsCriados.push(email)
+    const senha = 'SenhaForte123!'
+
+    await chamarRota(['cadastro'], {
+      nome: 'Zera Após Sucesso',
+      documento: '32647126798',
+      email,
+      senha,
+    })
+
+    for (let i = 0; i < 5; i += 1) {
+      const resposta = await chamarRota(['login'], { email, senha: 'senha-errada' })
+      expect(resposta.status).toBe(401)
+    }
+
+    // A cota só é verificada/consumida no caminho de falha: mesmo depois
+    // de 5 senhas erradas seguidas para este e-mail, a senha certa ainda
+    // autentica — não é pré-bloqueada pelo rate limit. A prova detalhada
+    // de que o contador de e-mail é zerado no sucesso (permitindo uma
+    // nova sequência de falhas do zero) está em `rate-limit.test.ts`.
+    const acerto = await chamarRota(['login'], { email, senha })
+    expect(acerto.status).toBe(200)
   })
 })

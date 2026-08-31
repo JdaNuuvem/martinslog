@@ -1,19 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
+import { env } from '@/env'
 import { DomainError } from '@/domain/errors'
 import { cadastroRequestSchema, loginRequestSchema } from '@/lib/auth-schema'
 import { cadastrarUsuario } from '@/server/auth/cadastro'
 import { autenticar, MENSAGEM_CREDENCIAIS_INVALIDAS } from '@/server/auth/login'
 import { criarSessao, encerrarSessao } from '@/server/auth/sessao'
-import { registrarTentativa } from '@/server/auth/rate-limit'
+import { limiteExcedido, limparPorEmail, registrarFalha, registrarTentativa } from '@/server/auth/rate-limit'
 
 const ANON_SESSION_COOKIE = 'anon_session_id'
 
+/**
+ * Determina o IP de origem para o rate limit. `x-forwarded-for` e
+ * `x-real-ip` são cabeçalhos que o próprio cliente pode enviar — só são
+ * confiáveis quando um proxy reverso na frente da aplicação os sobrescreve
+ * (sinalizado por `TRUST_PROXY_HEADERS`). Sem um proxy confiável, usá-los
+ * permite contornar o rate limit por IP trocando o cabeçalho a cada
+ * tentativa; por isso, quando `TRUST_PROXY_HEADERS` é falso, eles são
+ * ignorados por completo e todas as requisições caem no mesmo IP
+ * "desconhecido" (o rate limit por e-mail continua valendo normalmente).
+ *
+ * Quando confiável, prioriza `x-real-ip` (tipicamente fixado pelo proxy
+ * para o IP real de um único salto) e, na ausência dele, usa o *último*
+ * salto de `x-forwarded-for` — o mais próximo do proxy e, portanto, o
+ * único trecho da cadeia que o proxy realmente controla; o primeiro salto
+ * é escrito pelo cliente e pode ser qualquer coisa.
+ */
 function obterIp(request: NextRequest): string {
+  if (!env.TRUST_PROXY_HEADERS) {
+    return 'desconhecido'
+  }
+
+  const realIp = request.headers.get('x-real-ip')
+  if (realIp) {
+    return realIp.trim()
+  }
+
   const encaminhado = request.headers.get('x-forwarded-for')
   if (encaminhado) {
-    return encaminhado.split(',')[0]!.trim()
+    const saltos = encaminhado.split(',').map((s) => s.trim())
+    const ultimoSalto = saltos[saltos.length - 1]
+    if (ultimoSalto) {
+      return ultimoSalto
+    }
   }
+
   return 'desconhecido'
 }
 
@@ -106,19 +137,28 @@ async function tratarLogin(request: NextRequest): Promise<NextResponse> {
   const entrada = analisado.data
   const ip = obterIp(request)
 
-  if (!registrarTentativa('login', ip, entrada.email)) {
-    return NextResponse.json(
-      { codigo: 'LIMITE_TENTATIVAS_EXCEDIDO', mensagem: 'Muitas tentativas. Tente novamente mais tarde.' },
-      { status: 429 },
-    )
-  }
-
+  // A cota é verificada e consumida somente no caminho de falha (no catch
+  // abaixo) — não antes de tentar autenticar. Isso garante que uma senha
+  // correta nunca é barrada pelo rate limit, mesmo vindo logo depois de
+  // várias tentativas erradas: só quem erra a senha paga a cota, e o 6º
+  // login *correto* seguido do mesmo usuário continua funcionando.
   try {
     const resposta = NextResponse.json({}, { status: 200 })
     const resultado = await autenticar({ email: entrada.email, senha: entrada.senha }, resposta)
+    // Sucesso: zera o contador de e-mail para não deixar falhas antigas
+    // bloqueando o próximo login legítimo da mesma pessoa.
+    limparPorEmail('login', entrada.email)
     return NextResponse.json({ userId: resultado.userId }, { status: 200, headers: resposta.headers })
   } catch (error) {
     if (error instanceof DomainError) {
+      if (limiteExcedido('login', ip, entrada.email)) {
+        return NextResponse.json(
+          { codigo: 'LIMITE_TENTATIVAS_EXCEDIDO', mensagem: 'Muitas tentativas. Tente novamente mais tarde.' },
+          { status: 429 },
+        )
+      }
+
+      registrarFalha('login', ip, entrada.email)
       return NextResponse.json({ codigo: error.codigo, mensagem: MENSAGEM_CREDENCIAIS_INVALIDAS }, { status: 401 })
     }
 

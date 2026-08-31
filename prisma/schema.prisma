@@ -86,8 +86,9 @@ model Session {
 }
 
 model AnonSession {
-  id       String   @id @default(cuid())
-  criadoEm DateTime @default(now())
+  id          String    @id @default(uuid())
+  criadoEm    DateTime  @default(now())
+  consumidaEm DateTime?
 
   quotes Quote[]
 

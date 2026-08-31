@@ -24,6 +24,16 @@ export type ResultadoCadastro = {
  * uma `AnonSession` associada (cookie do visitante anônimo), migra as
  * cotações (`Quote`) daquela sessão para o novo usuário, também na mesma
  * transação — é o que faz a cotação sobreviver ao cadastro.
+ *
+ * A migração é de uso único: `AnonSession.id` não é um segredo (mesmo como
+ * UUID, o cookie pode ser copiado por outro processo em algum ponto da
+ * rede), então a prova real de posse é o cadastro chegar primeiro. Dentro
+ * da transação, o `updateMany` só marca `consumidaEm` se ele ainda for
+ * nulo — se duas cadastros concorrentes citarem a mesma `AnonSession`,
+ * apenas o primeiro a commitar consegue `count === 1` e migra as cotações;
+ * o segundo não migra nada. Só cotações com `userId` ainda nulo são
+ * movidas, então uma `AnonSession` já consumida (ou forjada apontando para
+ * cotações que já têm dono) nunca transfere nada.
  */
 export async function cadastrarUsuario(
   dados: DadosCadastro,
@@ -68,10 +78,17 @@ export async function cadastrarUsuario(
     })
 
     if (contexto.anonSessionId) {
-      await tx.quote.updateMany({
-        where: { anonSessionId: contexto.anonSessionId },
-        data: { userId: user.id },
+      const consumida = await tx.anonSession.updateMany({
+        where: { id: contexto.anonSessionId, consumidaEm: null },
+        data: { consumidaEm: new Date() },
       })
+
+      if (consumida.count === 1) {
+        await tx.quote.updateMany({
+          where: { anonSessionId: contexto.anonSessionId, userId: null },
+          data: { userId: user.id },
+        })
+      }
     }
 
     return user.id
