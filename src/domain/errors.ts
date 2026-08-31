@@ -36,6 +36,18 @@ export class CarteiraNaoEncontradaError extends DomainError {
 export class NaoAutorizadoError extends DomainError {
   readonly codigo = 'NAO_AUTORIZADO'
 }
+export class EmailJaCadastradoError extends DomainError {
+  readonly codigo = 'EMAIL_JA_CADASTRADO'
+}
+export class DocumentoInvalidoError extends DomainError {
+  readonly codigo = 'DOCUMENTO_INVALIDO'
+}
+export class CredenciaisInvalidasError extends DomainError {
+  readonly codigo = 'CREDENCIAIS_INVALIDAS'
+}
+export class LimiteTentativasExcedidoError extends DomainError {
+  readonly codigo = 'LIMITE_TENTATIVAS_EXCEDIDO'
+}
 export class ServicoIndisponivelError extends DomainError {
   readonly codigo = 'SERVICO_INDISPONIVEL'
 }

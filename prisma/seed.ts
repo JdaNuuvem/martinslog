@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client'
-import { hash } from '@node-rs/argon2'
+import { hashSenha } from '../src/server/auth/senha'
 
 const prisma = new PrismaClient()
 
@@ -63,7 +63,7 @@ async function upsertUsuarioComCarteira(params: {
   papel: 'ADMIN' | 'CLIENTE'
   saldoInicialCentavos: number
 }) {
-  const senhaHash = await hash(params.senha)
+  const senhaHash = await hashSenha(params.senha)
 
   const user = await prisma.user.upsert({
     where: { email: params.email },
