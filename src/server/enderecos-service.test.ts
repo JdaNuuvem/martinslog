@@ -1,8 +1,9 @@
 import { afterAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/infra/db/client'
-import { EnderecoNaoEncontradoError } from '@/domain/errors'
+import { DocumentoInvalidoError, EnderecoNaoEncontradoError } from '@/domain/errors'
 import {
   arquivarEndereco,
+  atualizarEndereco,
   criarEndereco,
   listarEnderecos,
   listarEnderecosArquivados,
@@ -131,5 +132,207 @@ describe('reativarEndereco', () => {
 
     expect(porInexistente).toBeInstanceOf(EnderecoNaoEncontradoError)
     expect(porJaAtivo).toBeInstanceOf(EnderecoNaoEncontradoError)
+  })
+})
+
+describe('criarEndereco', () => {
+  it('normaliza o CEP e a UF antes de gravar', async () => {
+    const userId = await criarUsuario()
+
+    const endereco = await criarEndereco(
+      userId,
+      dadosEndereco({ cep: '01001-000', uf: 'sp' }),
+    )
+
+    // O CEP entra com hífen e sai só com dígitos: a comparação de faixa na
+    // tarifa é numérica, e guardar formatado obrigaria a limpar em toda
+    // leitura.
+    expect(endereco.cep).toBe('01001000')
+    expect(endereco.uf).toBe('SP')
+  })
+
+  it('aceita destinatário com CPF válido e guarda só os dígitos', async () => {
+    const userId = await criarUsuario()
+
+    const endereco = await criarEndereco(
+      userId,
+      dadosEndereco({ tipo: 'DESTINATARIO', documento: '529.982.247-25' }),
+    )
+
+    expect(endereco.documento).toBe('52998224725')
+  })
+
+  it('recusa destinatário com documento inválido', async () => {
+    const userId = await criarUsuario()
+
+    await expect(
+      criarEndereco(userId, dadosEndereco({ tipo: 'DESTINATARIO', documento: '11111111111' })),
+    ).rejects.toThrow(DocumentoInvalidoError)
+  })
+
+  it('ignora documento inválido em remetente — a exigência é só do destinatário', async () => {
+    const userId = await criarUsuario()
+
+    const endereco = await criarEndereco(
+      userId,
+      dadosEndereco({ tipo: 'REMETENTE', documento: '11111111111' }),
+    )
+
+    expect(endereco.documento).toBeNull()
+  })
+
+  it('ao criar um padrão, desmarca o padrão anterior do mesmo tipo', async () => {
+    const userId = await criarUsuario()
+
+    const primeiro = await criarEndereco(userId, dadosEndereco({ padrao: true }))
+    const segundo = await criarEndereco(userId, dadosEndereco({ padrao: true }))
+
+    const antigo = await prisma.address.findUniqueOrThrow({ where: { id: primeiro.id } })
+    expect(antigo.padrao).toBe(false)
+    expect(segundo.padrao).toBe(true)
+  })
+
+  it('padrão de REMETENTE e de DESTINATARIO convivem — os tipos são independentes', async () => {
+    const userId = await criarUsuario()
+
+    const remetente = await criarEndereco(userId, dadosEndereco({ tipo: 'REMETENTE', padrao: true }))
+    const destinatario = await criarEndereco(
+      userId,
+      dadosEndereco({ tipo: 'DESTINATARIO', padrao: true, documento: '529.982.247-25' }),
+    )
+
+    const remetenteDepois = await prisma.address.findUniqueOrThrow({ where: { id: remetente.id } })
+    expect(remetenteDepois.padrao).toBe(true)
+    expect(destinatario.padrao).toBe(true)
+  })
+})
+
+describe('atualizarEndereco', () => {
+  it('atualiza os campos do endereço do próprio usuário', async () => {
+    const userId = await criarUsuario()
+    const endereco = await criarEndereco(userId, dadosEndereco({ apelido: 'antes' }))
+
+    const atualizado = await atualizarEndereco(
+      userId,
+      endereco.id,
+      dadosEndereco({ apelido: 'depois', numero: '999' }),
+    )
+
+    expect(atualizado.apelido).toBe('depois')
+    expect(atualizado.numero).toBe('999')
+  })
+
+  it('não deixa atualizar endereço de outro usuário, e não altera nada', async () => {
+    const dono = await criarUsuario()
+    const intruso = await criarUsuario()
+    const endereco = await criarEndereco(dono, dadosEndereco({ apelido: 'do dono' }))
+
+    await expect(
+      atualizarEndereco(intruso, endereco.id, dadosEndereco({ apelido: 'invadido' })),
+    ).rejects.toThrow(EnderecoNaoEncontradoError)
+
+    const depois = await prisma.address.findUniqueOrThrow({ where: { id: endereco.id } })
+    expect(depois.apelido).toBe('do dono')
+  })
+
+  it('promover um endereço a padrão desmarca o anterior', async () => {
+    const userId = await criarUsuario()
+    const primeiro = await criarEndereco(userId, dadosEndereco({ padrao: true }))
+    const segundo = await criarEndereco(userId, dadosEndereco({ padrao: false }))
+
+    await atualizarEndereco(userId, segundo.id, dadosEndereco({ padrao: true }))
+
+    const antigo = await prisma.address.findUniqueOrThrow({ where: { id: primeiro.id } })
+    const novo = await prisma.address.findUniqueOrThrow({ where: { id: segundo.id } })
+    expect(antigo.padrao).toBe(false)
+    expect(novo.padrao).toBe(true)
+  })
+})
+
+describe('troca de padrão sob concorrência', () => {
+  /**
+   * Conta quantos endereços ativos estão marcados como padrão para o par
+   * (usuário, tipo) — a invariante que o índice único parcial
+   * `address_padrao_unico_por_tipo` protege no banco.
+   */
+  async function padroesAtivos(userId: string, tipo: 'REMETENTE' | 'DESTINATARIO') {
+    return prisma.address.count({
+      where: { userId, tipo, padrao: true, arquivadoEm: null },
+    })
+  }
+
+  it('criações simultâneas com padrao: true terminam com exatamente um padrão', async () => {
+    const userId = await criarUsuario()
+
+    // Quatro, não duas. Com apenas duas escritas concorrentes este teste
+    // passa mesmo sem o lock consultivo — a primeira costuma commitar antes
+    // de a segunda rodar seu updateMany, e a corrida não se manifesta. Foi
+    // verificado removendo o lock: com duas, verde; com quatro, vermelho.
+    const resultados = await Promise.allSettled(
+      ['A', 'B', 'C', 'D'].map((apelido) =>
+        criarEndereco(userId, dadosEndereco({ padrao: true, apelido })),
+      ),
+    )
+
+    // Nenhuma das duas pode falhar: o lock consultivo faz a segunda esperar
+    // a primeira commitar e então enxergar o padrão já gravado, em vez de
+    // as duas correrem para marcar e uma esbarrar no índice único.
+    const rejeitadas = resultados.filter((r) => r.status === 'rejected')
+    expect(rejeitadas).toHaveLength(0)
+
+    expect(await padroesAtivos(userId, 'REMETENTE')).toBe(1)
+  })
+
+  it('não vaza P2002 cru do Prisma para quem chamou', async () => {
+    const userId = await criarUsuario()
+
+    const resultados = await Promise.allSettled(
+      Array.from({ length: 5 }, (_, i) =>
+        criarEndereco(userId, dadosEndereco({ padrao: true, apelido: `concorrente-${i}` })),
+      ),
+    )
+
+    for (const resultado of resultados) {
+      if (resultado.status === 'rejected') {
+        // Uma violação de unicidade escapando daqui viraria 500 na API, com
+        // mensagem de banco na cara do usuário.
+        expect(String(resultado.reason)).not.toContain('P2002')
+        expect(String(resultado.reason)).not.toContain('Unique constraint')
+      }
+    }
+
+    expect(await padroesAtivos(userId, 'REMETENTE')).toBe(1)
+  })
+
+  it('atualizações simultâneas promovendo endereços diferentes deixam um só padrão', async () => {
+    const userId = await criarUsuario()
+    const primeiro = await criarEndereco(userId, dadosEndereco({ apelido: 'um' }))
+    const segundo = await criarEndereco(userId, dadosEndereco({ apelido: 'dois' }))
+
+    const resultados = await Promise.allSettled([
+      atualizarEndereco(userId, primeiro.id, dadosEndereco({ apelido: 'um', padrao: true })),
+      atualizarEndereco(userId, segundo.id, dadosEndereco({ apelido: 'dois', padrao: true })),
+    ])
+
+    expect(resultados.filter((r) => r.status === 'rejected')).toHaveLength(0)
+    expect(await padroesAtivos(userId, 'REMETENTE')).toBe(1)
+  })
+
+  it('REMETENTE e DESTINATARIO simultâneos não se bloqueiam nem se anulam', async () => {
+    const userId = await criarUsuario()
+
+    const resultados = await Promise.allSettled([
+      criarEndereco(userId, dadosEndereco({ tipo: 'REMETENTE', padrao: true })),
+      criarEndereco(
+        userId,
+        dadosEndereco({ tipo: 'DESTINATARIO', padrao: true, documento: '529.982.247-25' }),
+      ),
+    ])
+
+    expect(resultados.filter((r) => r.status === 'rejected')).toHaveLength(0)
+
+    // Cada tipo mantém o seu: o lock é por (userId, tipo), não por usuário.
+    expect(await padroesAtivos(userId, 'REMETENTE')).toBe(1)
+    expect(await padroesAtivos(userId, 'DESTINATARIO')).toBe(1)
   })
 })

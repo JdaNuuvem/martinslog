@@ -1,6 +1,12 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const PORTA = 3100
+// Porta configurável por ambiente. Com várias sessões no mesmo repositório,
+// a 3100 pode estar ocupada por um dev server alheio — e o caso ruim não é a
+// porta ocupada (que falha alto), e sim um servidor de outra sessão
+// respondendo ali com código quebrado: o Playwright rodaria contra ele e
+// reportaria falhas de aplicação que não existem. Exporte PLAYWRIGHT_PORT
+// para ter a sua. Quem não exportar nada continua na 3100.
+const PORTA = Number(process.env.PLAYWRIGHT_PORT ?? 3100)
 const BASE_URL = `http://localhost:${PORTA}`
 
 export default defineConfig({
@@ -27,7 +33,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npx next dev -p 3100',
+    command: `npx next dev -p ${PORTA}`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
