@@ -233,7 +233,7 @@ describe('criarEnvio', () => {
 })
 
 describe('pagarEnvio', () => {
-  it('debita a carteira e move o envio para RELEASED', async () => {
+  it('debita a carteira, move o envio para GENERATED e já emite o código de rastreio', async () => {
     const user = await criarUsuarioDeTeste(2000)
     const cotacao = await criarCotacaoValida(user.id, { precoCentavos: 1416 })
     const envio = await criarEnvio(user.id, entradaEnvio(cotacao.id))
@@ -243,9 +243,17 @@ describe('pagarEnvio', () => {
     const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: user.id } })
     expect(wallet.saldoCentavos).toBe(2000 - 1416)
 
+    // O pagamento em si só garante RELEASED; a emissão do código de
+    // rastreio (gancho pós-commit) leva o envio adiante para GENERATED na
+    // mesma chamada de `pagarEnvio` — ver `emitir-etiqueta-service.test.ts`
+    // para os testes detalhados do que a emissão grava.
     const atualizado = await prisma.shipment.findUniqueOrThrow({ where: { id: envio.id } })
-    expect(atualizado.status).toBe('RELEASED')
+    expect(atualizado.status).toBe('GENERATED')
     expect(atualizado.pagoEm).not.toBeNull()
+    expect(atualizado.codigoRastreio).not.toBeNull()
+
+    const eventos = await prisma.trackingEvent.count({ where: { shipmentId: envio.id } })
+    expect(eventos).toBeGreaterThan(0)
   })
 
   it('pagar duas vezes o mesmo envio debita uma vez só', async () => {
@@ -321,7 +329,10 @@ describe('pagarEnvio', () => {
 
       const atualizado = await prisma.shipment.findUniqueOrThrow({ where: { id: envio.id } })
       if (pagamentoOk) {
-        expect(atualizado.status).toBe('RELEASED')
+        // Ver o comentário do teste acima: `pagarEnvio` já deixa o envio em
+        // GENERATED, não apenas RELEASED, porque emite a etiqueta em
+        // seguida ao commit do pagamento.
+        expect(atualizado.status).toBe('GENERATED')
       } else {
         expect(atualizado.status).toBe('CANCELLED')
         expect(pagamento.status).toBe('rejected')

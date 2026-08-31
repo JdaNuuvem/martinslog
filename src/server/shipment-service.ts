@@ -13,6 +13,7 @@ import {
   NaoAutorizadoError,
   TransicaoInvalidaError,
 } from '@/domain/errors'
+import { emitirEtiqueta } from './emitir-etiqueta-service'
 
 /**
  * Endereço copiado para dentro do envio (`Shipment.remetente` /
@@ -237,6 +238,30 @@ export async function criarEnvio(userId: string, entrada: EntradaEnvio): Promise
  * por meses continuaria pagável pela tarifa congelada de uma cotação
  * havia muito vencida.
  */
+/**
+ * Emite a etiqueta do envio recém-pago, fora da transação de pagamento.
+ *
+ * Chamada depois do `$transaction` de `pagarEnvio` já ter commitado — nunca
+ * de dentro dela. Se `emitirEtiqueta` falhar (banco fora do ar, bug no
+ * gerador de roteiro, o que for), o pagamento já está gravado e não pode
+ * voltar: o cliente que teve o saldo debitado não pode ver o débito sumir
+ * porque a emissão tropeçou. A falha aqui vai só para log estruturado — o
+ * envio fica em `RELEASED`, pago e sem código, e a rota
+ * `POST /api/envios/[id]/etiqueta` (ou uma tarefa administrativa) reemite
+ * depois chamando `emitirEtiqueta` de novo; como o envio continua
+ * `RELEASED`, a chamada não é recusada por `garantirTransicao`.
+ */
+async function emitirEtiquetaAposPagamento(shipmentId: string): Promise<void> {
+  try {
+    await emitirEtiqueta(shipmentId)
+  } catch (error) {
+    console.error('Falha ao emitir etiqueta após pagamento do envio', {
+      shipmentId,
+      cause: error,
+    })
+  }
+}
+
 export async function pagarEnvio(userId: string, shipmentId: string): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const wallet = await tx.wallet.upsert({
@@ -302,4 +327,24 @@ export async function pagarEnvio(userId: string, shipmentId: string): Promise<vo
       )
     }
   })
+
+  // Fora da transação de pagamento, de propósito: ver o comentário de
+  // `emitirEtiquetaAposPagamento`. Uma falha aqui nunca desfaz o débito
+  // acima nem derruba esta chamada — `pagarEnvio` sempre resolve depois que
+  // o pagamento em si foi gravado.
+  await emitirEtiquetaAposPagamento(shipmentId)
+}
+
+/**
+ * Reemite a etiqueta de um envio que ficou `RELEASED` (pago) sem código de
+ * rastreio — o caminho de retentativa para quando
+ * `emitirEtiquetaAposPagamento` falhou depois do pagamento.
+ *
+ * É a mesma `emitirEtiqueta`, exposta por aqui só para nomear a intenção de
+ * "retentar" no chamador. Um envio já `GENERATED` continua sendo recusado
+ * por `garantirTransicao` dentro dela — de propósito, não duplica código
+ * nem timeline.
+ */
+export async function reemitirEtiqueta(shipmentId: string): Promise<{ codigoRastreio: string }> {
+  return emitirEtiqueta(shipmentId)
 }

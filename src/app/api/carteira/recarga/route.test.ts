@@ -3,24 +3,22 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/infra/db/client'
 import { criarSessao, SESSION_COOKIE } from '@/server/auth/sessao'
 import { VALOR_MAXIMO_RECARGA_CENTAVOS, VALOR_MINIMO_RECARGA_CENTAVOS } from '@/lib/carteira-schema'
+import { criarUsuarioComSaldo } from '@/test/factories'
 import { POST } from './route'
 
-let contador = 0
 const usuariosCriados: string[] = []
 
+/**
+ * Usa a fábrica compartilhada (`criarUsuarioComSaldo`) em vez de montar o
+ * documento localmente: a versão anterior gerava `documento` a partir de um
+ * contador de módulo que reinicia em zero a cada arquivo de teste
+ * (`String(contador).padStart(11, '7')`), então dois arquivos rodando em
+ * paralelo no mesmo processo do vitest geravam o mesmo documento e
+ * colidiam no índice único de `User.documento`. Saldo zero porque este
+ * arquivo testa recarga, não parte de saldo existente.
+ */
 async function criarUsuarioDeTeste(): Promise<string> {
-  contador += 1
-  const sufixo = `${Date.now()}${contador}`
-  const user = await prisma.user.create({
-    data: {
-      tipo: 'PF',
-      papel: 'CLIENTE',
-      documento: String(contador).padStart(11, '7'),
-      nome: 'Usuário Teste Recarga',
-      email: `recarga-${sufixo}@teste.com`,
-      senhaHash: 'hash-fake-nao-usado-neste-teste',
-    },
-  })
+  const user = await criarUsuarioComSaldo(0)
   usuariosCriados.push(user.id)
   return user.id
 }
