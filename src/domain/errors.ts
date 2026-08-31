@@ -75,3 +75,12 @@ export class CotacaoNaoEncontradaError extends DomainError {
 export class CotacaoNaoCorrespondeError extends DomainError {
   readonly codigo = 'COTACAO_NAO_CORRESPONDE'
 }
+export class AlteracaoDoProprioPapelError extends DomainError {
+  readonly codigo = 'PROPRIO_PAPEL'
+}
+export class UltimoAdminError extends DomainError {
+  readonly codigo = 'ULTIMO_ADMIN'
+}
+export class UsuarioNaoEncontradoError extends DomainError {
+  readonly codigo = 'USUARIO_NAO_ENCONTRADO'
+}
