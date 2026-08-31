@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { EnderecoForm } from './endereco-form'
@@ -97,7 +97,7 @@ function SecaoEnderecos({
             <p className="text-sm text-texto-secundario">Nenhum endereço cadastrado ainda.</p>
           ) : null}
           {erroApagar ? (
-            <p role="alert" className="text-sm text-red-600">
+            <p role="alert" className="text-sm text-erro">
               {erroApagar}
             </p>
           ) : null}
@@ -130,7 +130,7 @@ function SecaoEnderecos({
                     type="button"
                     disabled={apagandoId === endereco.id}
                     onClick={() => apagar(endereco.id)}
-                    className="text-sm font-medium text-red-600 hover:underline focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60"
+                    className="text-sm font-medium text-erro hover:underline focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {apagandoId === endereco.id ? 'Apagando…' : 'Apagar'}
                   </button>
@@ -210,7 +210,7 @@ export function ListaEnderecos() {
       </header>
 
       {erro ? (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-erro">
           {erro}
         </p>
       ) : null}

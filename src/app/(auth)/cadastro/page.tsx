@@ -119,7 +119,7 @@ export default function CadastroPage() {
             className="rounded-lg border border-borda-campo px-3 py-2 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand"
           />
           {erros.nome ? (
-            <p id={`${idBase}-nome-erro`} role="alert" className="text-sm text-red-600">
+            <p id={`${idBase}-nome-erro`} role="alert" className="text-sm text-erro">
               {erros.nome}
             </p>
           ) : null}
@@ -142,7 +142,7 @@ export default function CadastroPage() {
             className="rounded-lg border border-borda-campo px-3 py-2 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand"
           />
           {erros.documento ? (
-            <p id={`${idBase}-documento-erro`} role="alert" className="text-sm text-red-600">
+            <p id={`${idBase}-documento-erro`} role="alert" className="text-sm text-erro">
               {erros.documento}
             </p>
           ) : null}
@@ -164,7 +164,7 @@ export default function CadastroPage() {
             className="rounded-lg border border-borda-campo px-3 py-2 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand"
           />
           {erros.email ? (
-            <p id={`${idBase}-email-erro`} role="alert" className="text-sm text-red-600">
+            <p id={`${idBase}-email-erro`} role="alert" className="text-sm text-erro">
               {erros.email}
             </p>
           ) : null}
@@ -186,7 +186,7 @@ export default function CadastroPage() {
             className="rounded-lg border border-borda-campo px-3 py-2 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand"
           />
           {erros.telefone ? (
-            <p id={`${idBase}-telefone-erro`} role="alert" className="text-sm text-red-600">
+            <p id={`${idBase}-telefone-erro`} role="alert" className="text-sm text-erro">
               {erros.telefone}
             </p>
           ) : null}
@@ -208,14 +208,14 @@ export default function CadastroPage() {
             className="rounded-lg border border-borda-campo px-3 py-2 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand"
           />
           {erros.senha ? (
-            <p id={`${idBase}-senha-erro`} role="alert" className="text-sm text-red-600">
+            <p id={`${idBase}-senha-erro`} role="alert" className="text-sm text-erro">
               {erros.senha}
             </p>
           ) : null}
         </div>
 
         {erroGeral ? (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="text-sm text-erro">
             {erroGeral}
           </p>
         ) : null}

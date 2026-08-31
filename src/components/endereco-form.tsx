@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { FormEvent, useId, useState } from 'react'
 import { enderecoRequestSchema, type EnderecoRequest, type EnderecoResposta } from '@/lib/endereco-schema'
@@ -211,7 +211,7 @@ export function EnderecoForm({ tipo, enderecoExistente, onSalvar, onCancelar }: 
               aria-describedby={erros.documento ? `${idBase}-documento-erro` : undefined}
             />
             {erros.documento ? (
-              <p id={`${idBase}-documento-erro`} role="alert" className="text-sm text-red-600">
+              <p id={`${idBase}-documento-erro`} role="alert" className="text-sm text-erro">
                 {erros.documento}
               </p>
             ) : null}
@@ -234,7 +234,7 @@ export function EnderecoForm({ tipo, enderecoExistente, onSalvar, onCancelar }: 
         />
         {buscandoCep ? <p className="text-xs text-texto-secundario">Buscando CEP…</p> : null}
         {erros.cep ? (
-          <p id={`${idBase}-cep-erro`} role="alert" className="text-sm text-red-600">
+          <p id={`${idBase}-cep-erro`} role="alert" className="text-sm text-erro">
             {erros.cep}
           </p>
         ) : null}
@@ -259,7 +259,7 @@ export function EnderecoForm({ tipo, enderecoExistente, onSalvar, onCancelar }: 
             aria-describedby={erros.logradouro ? `${idBase}-logradouro-erro` : undefined}
           />
           {erros.logradouro ? (
-            <p id={`${idBase}-logradouro-erro`} role="alert" className="text-sm text-red-600">
+            <p id={`${idBase}-logradouro-erro`} role="alert" className="text-sm text-erro">
               {erros.logradouro}
             </p>
           ) : null}
@@ -277,7 +277,7 @@ export function EnderecoForm({ tipo, enderecoExistente, onSalvar, onCancelar }: 
             aria-describedby={erros.numero ? `${idBase}-numero-erro` : undefined}
           />
           {erros.numero ? (
-            <p id={`${idBase}-numero-erro`} role="alert" className="text-sm text-red-600">
+            <p id={`${idBase}-numero-erro`} role="alert" className="text-sm text-erro">
               {erros.numero}
             </p>
           ) : null}
@@ -310,7 +310,7 @@ export function EnderecoForm({ tipo, enderecoExistente, onSalvar, onCancelar }: 
             aria-describedby={erros.bairro ? `${idBase}-bairro-erro` : undefined}
           />
           {erros.bairro ? (
-            <p id={`${idBase}-bairro-erro`} role="alert" className="text-sm text-red-600">
+            <p id={`${idBase}-bairro-erro`} role="alert" className="text-sm text-erro">
               {erros.bairro}
             </p>
           ) : null}
@@ -329,7 +329,7 @@ export function EnderecoForm({ tipo, enderecoExistente, onSalvar, onCancelar }: 
             aria-describedby={erros.uf ? `${idBase}-uf-erro` : undefined}
           />
           {erros.uf ? (
-            <p id={`${idBase}-uf-erro`} role="alert" className="text-sm text-red-600">
+            <p id={`${idBase}-uf-erro`} role="alert" className="text-sm text-erro">
               {erros.uf}
             </p>
           ) : null}
@@ -349,7 +349,7 @@ export function EnderecoForm({ tipo, enderecoExistente, onSalvar, onCancelar }: 
           aria-describedby={erros.cidade ? `${idBase}-cidade-erro` : undefined}
         />
         {erros.cidade ? (
-          <p id={`${idBase}-cidade-erro`} role="alert" className="text-sm text-red-600">
+          <p id={`${idBase}-cidade-erro`} role="alert" className="text-sm text-erro">
             {erros.cidade}
           </p>
         ) : null}
@@ -371,7 +371,7 @@ export function EnderecoForm({ tipo, enderecoExistente, onSalvar, onCancelar }: 
               aria-describedby={erros.email ? `${idBase}-email-erro` : undefined}
             />
             {erros.email ? (
-              <p id={`${idBase}-email-erro`} role="alert" className="text-sm text-red-600">
+              <p id={`${idBase}-email-erro`} role="alert" className="text-sm text-erro">
                 {erros.email}
               </p>
             ) : null}
@@ -402,7 +402,7 @@ export function EnderecoForm({ tipo, enderecoExistente, onSalvar, onCancelar }: 
       </label>
 
       {erroGeral ? (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-erro">
           {erroGeral}
         </p>
       ) : null}

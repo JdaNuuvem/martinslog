@@ -1,4 +1,4 @@
-import type { TipoEndereco } from '@prisma/client'
+import type { Prisma, TipoEndereco } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import {
   DocumentoInvalidoError,
@@ -58,6 +58,36 @@ function validarDocumentoSeNecessario(tipo: TipoEndereco, documento?: string): s
   return normalizado
 }
 
+/**
+ * Serializa, por `(userId, tipo)`, as transações que mexem no endereço
+ * padrão. Sem isso, duas requisições concorrentes de criação/edição com
+ * `padrao: true` podem rodar seus `updateMany` de "desmarcar o padrão
+ * anterior" antes de qualquer uma das duas ter commitado — nenhuma enxerga
+ * o padrão da outra, e as duas terminam marcadas como padrão. Isolamento de
+ * transação garante leitura consistente dentro de cada transação, mas não
+ * impede duas transações concorrentes de produzirem, juntas, um estado
+ * inválido — é exatamente o cenário do teste de corrida abaixo.
+ *
+ * `pg_advisory_xact_lock` foi escolhido em vez de "tentar e recapturar
+ * P2002": ele faz a segunda requisição *esperar* a primeira terminar (sem
+ * erro nenhum pro usuário) e então enxergar o padrão já commitado — em vez
+ * de falhar e precisar de lógica de retry. O lock é liberado sozinho ao fim
+ * da transação (é `_xact_`), então não há risco de vazar lock em caso de
+ * exceção. `hashtext` reduz a chave textual a um inteiro de 32 bits — a
+ * pequena chance de colisão de hash entre dois pares (userId, tipo)
+ * diferentes só causaria uma serialização a mais do necessário, nunca uma
+ * violação da invariante (o índice único parcial no banco continua sendo a
+ * garantia final).
+ */
+async function travarPadraoDoTipo(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  tipo: TipoEndereco,
+): Promise<void> {
+  const chave = `${userId}:${tipo}`
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${chave}))`
+}
+
 function paraCampos(dados: EnderecoRequest, cep: string, documento: string | undefined) {
   return {
     tipo: dados.tipo,
@@ -89,6 +119,7 @@ export async function criarEndereco(userId: string, dados: EnderecoRequest) {
 
   return prisma.$transaction(async (tx) => {
     if (dados.padrao) {
+      await travarPadraoDoTipo(tx, userId, dados.tipo)
       await tx.address.updateMany({
         where: { userId, tipo: dados.tipo, padrao: true },
         data: { padrao: false },
@@ -114,6 +145,7 @@ export async function atualizarEndereco(userId: string, id: string, dados: Ender
 
   return prisma.$transaction(async (tx) => {
     if (dados.padrao) {
+      await travarPadraoDoTipo(tx, userId, dados.tipo)
       await tx.address.updateMany({
         where: { userId, tipo: dados.tipo, padrao: true, NOT: { id } },
         data: { padrao: false },

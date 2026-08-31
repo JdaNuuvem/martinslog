@@ -3,6 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/infra/db/client'
 import { criarSessao, SESSION_COOKIE } from '@/server/auth/sessao'
 import { GET, POST } from './route'
+import { PUT } from './[id]/route'
 
 async function criarUsuarioDeTeste(sufixo: string) {
   return prisma.user.create({
@@ -160,6 +161,62 @@ describe('POST /api/enderecos', () => {
     })
     expect(remetenteAtualizado?.padrao).toBe(true)
     expect(destinatarioJson.endereco.padrao).toBe(true)
+  })
+})
+
+describe('corrida por endereço padrão (rodada de correção 1)', () => {
+  it('duas criações concorrentes com padrao:true terminam com exatamente um endereço padrão', async () => {
+    const usuario = await criarUsuarioDeTeste('corridaCria')
+    usuariosCriados.push(usuario.id)
+    const sessionId = await criarSessionId(usuario.id)
+
+    const [respostaA, respostaB] = await Promise.all([
+      POST(criarRequest('POST', sessionId, { ...corpoRemetenteValido, apelido: 'A' })),
+      POST(criarRequest('POST', sessionId, { ...corpoRemetenteValido, apelido: 'B' })),
+    ])
+
+    expect(respostaA.status).toBe(201)
+    expect(respostaB.status).toBe(201)
+
+    const padroes = await prisma.address.findMany({
+      where: { userId: usuario.id, tipo: 'REMETENTE', padrao: true, arquivadoEm: null },
+    })
+    expect(padroes.length).toBe(1)
+  })
+
+  it('duas atualizações concorrentes marcando padrao:true terminam com exatamente um endereço padrão', async () => {
+    const usuario = await criarUsuarioDeTeste('corridaEdita')
+    usuariosCriados.push(usuario.id)
+    const sessionId = await criarSessionId(usuario.id)
+
+    const respostaExistenteA = await POST(
+      criarRequest('POST', sessionId, { ...corpoRemetenteValido, apelido: 'Existente A', padrao: false }),
+    )
+    const existenteA = (await respostaExistenteA.json()).endereco.id as string
+
+    const respostaExistenteB = await POST(
+      criarRequest('POST', sessionId, { ...corpoRemetenteValido, apelido: 'Existente B', padrao: false }),
+    )
+    const existenteB = (await respostaExistenteB.json()).endereco.id as string
+
+    function chamarPut(id: string, apelido: string) {
+      return PUT(criarRequest('PUT', sessionId, { ...corpoRemetenteValido, apelido, padrao: true }), {
+        params: Promise.resolve({ id }),
+      })
+    }
+
+    const [respostaA, respostaB] = await Promise.all([
+      chamarPut(existenteA, 'Atualizado A'),
+      chamarPut(existenteB, 'Atualizado B'),
+    ])
+
+    expect(respostaA.status).toBe(200)
+    expect(respostaB.status).toBe(200)
+
+    const padroes = await prisma.address.findMany({
+      where: { userId: usuario.id, tipo: 'REMETENTE', padrao: true, arquivadoEm: null },
+    })
+    expect(padroes.length).toBe(1)
   })
 })
 

@@ -20,6 +20,13 @@ const config: Config = {
         alerta: {
           DEFAULT: '#F59E0B',
         },
+        // Texto de erro/validação — 6,47:1 sobre branco, 5,98:1 sobre
+        // `superficie.pagina`. O red-600 padrão do Tailwind (#DC2626), usado
+        // antes de existir este token, ficava em 4,83:1 sobre branco mas só
+        // 4,46:1 sobre `superficie.pagina` — reprovado no fundo de página.
+        erro: {
+          DEFAULT: '#B91C1C',
+        },
         info: {
           bg: '#E8F4FD',
           text: '#1E3A8A',

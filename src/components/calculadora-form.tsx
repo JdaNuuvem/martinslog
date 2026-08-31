@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { FormEvent, useEffect, useId, useState } from 'react'
 import { cotacaoRequestSchema, type CotacaoErro, type CotacaoResposta } from '@/lib/cotacao-schema'
@@ -237,7 +237,7 @@ export function CalculadoraForm() {
                   className={classeCampo}
                 />
                 {erros.cepOrigem ? (
-                  <p id={`${idBase}-cepOrigem-erro`} role="alert" className="text-sm text-red-600">
+                  <p id={`${idBase}-cepOrigem-erro`} role="alert" className="text-sm text-erro">
                     {erros.cepOrigem}
                   </p>
                 ) : null}
@@ -326,7 +326,7 @@ export function CalculadoraForm() {
                     className={classeCampo}
                   />
                   {erros.pesoDigitadoG ? (
-                    <p id={`${idBase}-pesoDigitado-erro`} role="alert" className="text-sm text-red-600">
+                    <p id={`${idBase}-pesoDigitado-erro`} role="alert" className="text-sm text-erro">
                       {erros.pesoDigitadoG}
                     </p>
                   ) : null}
@@ -356,7 +356,7 @@ export function CalculadoraForm() {
                   <span className="pr-1 text-xs text-texto-secundario">cm</span>
                 </div>
                 {erros.alturaCm ? (
-                  <p id={`${idBase}-altura-erro`} role="alert" className="text-sm text-red-600">
+                  <p id={`${idBase}-altura-erro`} role="alert" className="text-sm text-erro">
                     {erros.alturaCm}
                   </p>
                 ) : null}
@@ -383,7 +383,7 @@ export function CalculadoraForm() {
                   <span className="pr-1 text-xs text-texto-secundario">cm</span>
                 </div>
                 {erros.larguraCm ? (
-                  <p id={`${idBase}-largura-erro`} role="alert" className="text-sm text-red-600">
+                  <p id={`${idBase}-largura-erro`} role="alert" className="text-sm text-erro">
                     {erros.larguraCm}
                   </p>
                 ) : null}
@@ -410,7 +410,7 @@ export function CalculadoraForm() {
                   <span className="pr-1 text-xs text-texto-secundario">cm</span>
                 </div>
                 {erros.comprimentoCm ? (
-                  <p id={`${idBase}-comprimento-erro`} role="alert" className="text-sm text-red-600">
+                  <p id={`${idBase}-comprimento-erro`} role="alert" className="text-sm text-erro">
                     {erros.comprimentoCm}
                   </p>
                 ) : null}
@@ -455,7 +455,7 @@ export function CalculadoraForm() {
                   className={classeCampo}
                 />
                 {erros.cepDestino ? (
-                  <p id={`${idBase}-cepDestino-erro`} role="alert" className="text-sm text-red-600">
+                  <p id={`${idBase}-cepDestino-erro`} role="alert" className="text-sm text-erro">
                     {erros.cepDestino}
                   </p>
                 ) : null}
