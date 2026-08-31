@@ -15,6 +15,7 @@ export type ItemPaleta = {
 }
 
 export type No = {
+  id?: string
   codigo: string
   titulo: string
   descricao: string
@@ -170,7 +171,7 @@ export function CanvasFluxoRastreio({
 
             return (
               <button
-                key={`${no.codigo}-${indice}`}
+                key={no.id ?? `${no.codigo}-${indice}`}
                 type="button"
                 onPointerDown={(e) => iniciarArrasto(e, indice)}
                 onClick={() => setSelecionado(indice)}

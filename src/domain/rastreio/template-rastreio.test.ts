@@ -68,12 +68,38 @@ describe('validarTemplate', () => {
     expect(() => validarTemplate([passo('INVENTADO', 1)])).toThrow(/não existe na paleta/)
   })
 
-  it('recusa o mesmo passo repetido, apontando a posição', () => {
-    // Dois eventos idênticos seriam indistinguíveis na timeline; para
-    // repetir tentativa existem as numeradas.
+  it('aceita o mesmo código repetido em dias diferentes', () => {
+    // Um percurso real passa por várias transferências; repetir o tipo do nó
+    // é o caso de uso, não um erro.
     expect(() =>
-      validarTemplate([passo('POSTADO', 1), passo('SAIU_PARA_ENTREGA', 2), passo('POSTADO', 3)]),
-    ).toThrow(/Passo 3.*mais de uma vez/)
+      validarTemplate([
+        passo('POSTADO', 1),
+        passo('TRANSFERENCIA', 2),
+        passo('TRANSFERENCIA_FILIAL', 3),
+        passo('TRANSFERENCIA', 4),
+        passo('ENTREGUE', 6),
+      ]),
+    ).not.toThrow()
+  })
+
+  it('recusa dois nós idênticos: mesmo tipo, mesmo dia e mesmo texto', () => {
+    // Repetir é legítimo; repetir sem nada que os diferencie produziria duas
+    // linhas iguais na timeline, e quem acompanha não saberia o motivo.
+    expect(() =>
+      validarTemplate([passo('TRANSFERENCIA', 2), passo('TRANSFERENCIA', 2)]),
+    ).toThrow(/idêntico ao passo 1/)
+  })
+
+  it('aceita o mesmo tipo no mesmo dia quando o texto difere', () => {
+    const primeiro = { ...passo('TRANSFERENCIA', 2), titulo: 'Saiu de São Paulo' }
+    const segundo = { ...passo('TRANSFERENCIA', 2), titulo: 'Chegou em Campinas' }
+    expect(() => validarTemplate([primeiro, segundo])).not.toThrow()
+  })
+
+  it('recusa instâncias com o mesmo identificador', () => {
+    const a = { ...passo('TRANSFERENCIA', 2), id: 'no-1' }
+    const b = { ...passo('TRANSFERENCIA', 3), id: 'no-1' }
+    expect(() => validarTemplate([a, b])).toThrow(/identificador de nó repetido/)
   })
 
   it('exige que um passo terminal seja o último, apontando qual', () => {

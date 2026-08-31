@@ -28,6 +28,18 @@ export type TipoNo = 'ETAPA' | 'COBRANCA'
 
 /** Um passo do template, já com posição no tempo e no canvas. */
 export type PassoTemplate = {
+  /**
+   * Identidade da **instância** do nó, não do tipo dele.
+   *
+   * O código pode repetir — um percurso real passa por "em trânsito" e por
+   * "transferência entre filiais" várias vezes, em dias e unidades
+   * diferentes. O que não pode repetir é a instância, porque é ela que
+   * distingue dois nós do mesmo tipo ao reordenar, editar e remover.
+   *
+   * Opcional para templates montados antes desta mudança; quem os carrega
+   * atribui um id na leitura.
+   */
+  id?: string
   codigo: string
   titulo: string
   descricao: string
@@ -130,6 +142,15 @@ export const PALETA: readonly ItemPaleta[] = [
     }
   }),
   {
+    codigo: 'TRANSFERENCIA_FILIAL',
+    tipo: 'ETAPA',
+    rotulo: 'Transferência entre filiais',
+    descricaoPadrao: 'Objeto em transferência entre unidades',
+    statusResultante: 'POSTED',
+    diasSugeridos: 3,
+    terminal: false,
+  },
+  {
     codigo: 'AGUARDANDO_TRIBUTO',
     tipo: 'COBRANCA',
     rotulo: 'Aguardando pagamento de tributo',
@@ -220,7 +241,7 @@ export function validarTemplate(passos: readonly PassoTemplate[]): void {
     )
   }
 
-  const vistos = new Set<string>()
+  const idsVistos = new Set<string>()
 
   passos.forEach((passo, indice) => {
     const item = itemDaPaleta(passo.codigo)
@@ -230,15 +251,33 @@ export function validarTemplate(passos: readonly PassoTemplate[]): void {
       throw new ValorInvalidoError(`Passo ${posicao}: "${passo.codigo}" não existe na paleta.`)
     }
 
-    if (vistos.has(passo.codigo)) {
-      // Repetir o mesmo código produziria dois eventos idênticos na timeline,
-      // indistinguíveis para quem acompanha. Para repetir uma tentativa, a
-      // paleta oferece as numeradas.
+    // O código pode repetir de propósito: uma encomenda passa por várias
+    // transferências. O que não pode repetir é a instância, senão reordenar
+    // ou remover um nó afetaria o outro.
+    if (passo.id) {
+      if (idsVistos.has(passo.id)) {
+        throw new ValorInvalidoError(
+          `Passo ${posicao}: identificador de nó repetido (${passo.id}).`,
+        )
+      }
+      idsVistos.add(passo.id)
+    }
+
+    // Dois nós do mesmo tipo, no mesmo dia e com o mesmo texto seriam
+    // indistinguíveis na timeline — quem acompanha veria a mesma linha duas
+    // vezes sem saber por quê.
+    const gemeo = passos.findIndex(
+      (outro, i) =>
+        i < indice &&
+        outro.codigo === passo.codigo &&
+        outro.diasAposEmissao === passo.diasAposEmissao &&
+        outro.titulo.trim() === passo.titulo.trim(),
+    )
+    if (gemeo >= 0) {
       throw new ValorInvalidoError(
-        `Passo ${posicao}: "${item.rotulo}" aparece mais de uma vez no template.`,
+        `Passo ${posicao}: idêntico ao passo ${gemeo + 1} (mesmo texto e mesmo dia). Mude o texto ou o dia para diferenciar.`,
       )
     }
-    vistos.add(passo.codigo)
 
     if (!passo.titulo.trim() || !passo.descricao.trim()) {
       throw new ValorInvalidoError(`Passo ${posicao}: título e descrição são obrigatórios.`)

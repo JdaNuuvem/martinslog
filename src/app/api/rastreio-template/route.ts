@@ -10,10 +10,15 @@ import {
 } from '@/server/template-rastreio-service'
 
 const passoSchema = z.object({
+  id: z.string().min(1).optional(),
   codigo: z.string().min(1),
   titulo: z.string().trim().min(1, 'Título é obrigatório'),
   descricao: z.string().trim().min(1, 'Descrição é obrigatória'),
   diasAposEmissao: z.number().min(0).max(365),
+  tipo: z.enum(['ETAPA', 'COBRANCA']).optional(),
+  x: z.number().optional(),
+  y: z.number().optional(),
+  valorCentavos: z.number().int().min(0).optional(),
 })
 
 const templateSchema = z.object({

@@ -14,6 +14,7 @@ type ItemPaleta = {
 }
 
 type Passo = {
+  id?: string
   codigo: string
   titulo: string
   descricao: string
@@ -76,7 +77,13 @@ export function ConstrutorTemplateRastreio() {
       setPaleta(corpo.paleta)
       setPadraoDoFluxo(corpo.padrao)
       setUsaTemplate(Boolean(corpo.template))
-      setPassos(corpo.template?.passos ?? corpo.padrao)
+      // Templates montados antes da repetição não têm id; atribui na leitura
+      // para que dois nós do mesmo tipo não se confundam ao editar.
+      const comId = (corpo.template?.passos ?? corpo.padrao).map((passo, indice) => ({
+        ...passo,
+        id: passo.id ?? `no-legado-${indice}`,
+      }))
+      setPassos(comId)
 
       if (respCatalogo.ok) {
         const cat = (await respCatalogo.json()) as {
@@ -108,11 +115,17 @@ export function ConstrutorTemplateRastreio() {
     void carregar()
   }, [carregar])
 
+  /** Identidade da instância. O código pode repetir; o id, não. */
+  function novoId(): string {
+    return `no-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  }
+
   function acrescentar(item: ItemPaleta) {
     setErro(null)
     setPassos((atuais) => [
       ...atuais,
       {
+        id: novoId(),
         codigo: item.codigo,
         titulo: item.rotulo,
         descricao: item.descricaoPadrao,
@@ -220,7 +233,6 @@ export function ConstrutorTemplateRastreio() {
     setAviso('Voltou ao caminho padrão. Envios novos seguem a simulação por cenário.')
   }
 
-  const jaUsados = new Set(passos.map((passo) => passo.codigo))
   const nosVisiveis = usaTemplate ? passos : padraoDoFluxo
 
   return (
@@ -317,7 +329,6 @@ export function ConstrutorTemplateRastreio() {
                   key={item.codigo}
                   type="button"
                   onClick={() => acrescentar(item)}
-                  disabled={jaUsados.has(item.codigo)}
                   title={item.terminal ? 'Encerra o envio: precisa ser o último nó' : undefined}
                   className="rounded-pilula border border-borda-campo px-3 py-1.5 text-sm text-texto-principal hover:bg-superficie-bloco disabled:opacity-40"
                 >
