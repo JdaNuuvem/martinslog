@@ -14,6 +14,7 @@ import {
   TransicaoInvalidaError,
 } from '@/domain/errors'
 import { emitirEtiqueta } from './emitir-etiqueta-service'
+import { enfileirarEvento } from './webhook-service'
 
 /**
  * Endereço copiado para dentro do envio (`Shipment.remetente` /
@@ -182,21 +183,30 @@ export async function criarEnvio(userId: string, entrada: EntradaEnvio): Promise
   validarEnderecosContraCotacao(quote, entrada.remetente, entrada.destinatario)
   const valorDeclaradoCentavos = somarValorDeclarado(entrada.produtos)
 
-  const envio = await prisma.shipment.create({
-    data: {
-      userId,
-      quoteId: entrada.quoteId,
-      serviceId: entrada.servicoId,
-      status: 'PENDING',
-      remetente: entrada.remetente as unknown as Prisma.InputJsonValue,
-      destinatario: entrada.destinatario as unknown as Prisma.InputJsonValue,
-      precoBalcaoCentavos: opcao.precoBalcaoCentavos,
-      precoCobradoCentavos: opcao.precoFinalCentavos,
-      descontoCentavos: opcao.descontoCentavos,
-      opcionais: {},
-      valorDeclaradoCentavos,
-      produtos: entrada.produtos as unknown as Prisma.InputJsonValue,
-    },
+  const envio = await prisma.$transaction(async (tx) => {
+    const criado = await tx.shipment.create({
+      data: {
+        userId,
+        quoteId: entrada.quoteId,
+        serviceId: entrada.servicoId,
+        status: 'PENDING',
+        remetente: entrada.remetente as unknown as Prisma.InputJsonValue,
+        destinatario: entrada.destinatario as unknown as Prisma.InputJsonValue,
+        precoBalcaoCentavos: opcao.precoBalcaoCentavos,
+        precoCobradoCentavos: opcao.precoFinalCentavos,
+        descontoCentavos: opcao.descontoCentavos,
+        opcionais: {},
+        valorDeclaradoCentavos,
+        produtos: entrada.produtos as unknown as Prisma.InputJsonValue,
+      },
+    })
+
+    // Na mesma transação do envio: se a criação der rollback, não sobra
+    // notificação de um envio que não existe. Só grava linhas — nenhuma
+    // requisição de rede acontece aqui.
+    await enfileirarEvento(criado.id, 'order.created', tx)
+
+    return criado
   })
 
   return {
@@ -326,6 +336,11 @@ export async function pagarEnvio(userId: string, shipmentId: string): Promise<vo
         `Envio ${envio.id} não está mais PENDING (alterado por outra operação concorrente, como um cancelamento).`,
       )
     }
+
+    // Depois da transição confirmada, dentro da mesma transação: um rollback
+    // do débito leva a notificação junto, e o cliente nunca é avisado de um
+    // pagamento que não aconteceu.
+    await enfileirarEvento(envio.id, 'order.released', tx)
   })
 
   // Fora da transação de pagamento, de propósito: ver o comentário de

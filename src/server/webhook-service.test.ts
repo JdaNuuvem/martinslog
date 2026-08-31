@@ -38,6 +38,17 @@ async function criarUsuario(rotulo: string, indice: number) {
   return user.id
 }
 
+/**
+ * Todas as consultas de verificação são escopadas aos usuários deste
+ * arquivo: os arquivos de teste rodam em paralelo contra o mesmo banco, e
+ * uma consulta sem filtro pegaria entrega criada por outro arquivo.
+ */
+const DESTE_ARQUIVO = () => ({ webhookApp: { userId: { in: [userId, outroUserId] } } })
+
+function primeiraEntrega() {
+  return prisma.webhookDelivery.findFirst({ where: DESTE_ARQUIVO() })
+}
+
 async function criarApp(url = 'https://exemplo.com.br/hook', eventos = ['order.created']) {
   return prisma.webhookApp.create({
     data: { userId, url, eventos, segredo: gerarSegredo() },
@@ -150,7 +161,11 @@ describe('enfileirarEvento', () => {
     const enfileiradas = await enfileirarEvento(shipmentId, 'order.created')
 
     expect(enfileiradas).toBe(2)
-    expect(await prisma.webhookDelivery.count({ where: { evento: 'order.created' } })).toBe(2)
+    expect(
+      await prisma.webhookDelivery.count({
+        where: { evento: 'order.created', ...DESTE_ARQUIVO() },
+      }),
+    ).toBe(2)
   })
 
   it('ignora webhook desativado', async () => {
@@ -177,7 +192,7 @@ describe('enfileirarEvento', () => {
     await criarApp()
     await enfileirarEvento(shipmentId, 'order.created')
 
-    const entrega = await prisma.webhookDelivery.findFirst()
+    const entrega = await primeiraEntrega()
     const payload = entrega?.payload as {
       data: { status: string; tracking: string | null; tracking_url: string | null }
     }
@@ -213,22 +228,27 @@ describe('dispararPendentes', () => {
     let assinaturaRecebida = ''
     let timestampRecebido = ''
 
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
-      const cabecalhos = new Headers(init?.headers)
-      corpoRecebido = String(init?.body)
-      assinaturaRecebida = cabecalhos.get('x-frete-signature') ?? ''
-      timestampRecebido = cabecalhos.get('x-frete-timestamp') ?? ''
+    // A fila é global e outros arquivos de teste rodam em paralelo contra o
+    // mesmo banco: guarda-se a chamada desta entrega pela URL, e afirma-se o
+    // efeito sobre ela, nunca a contagem total do disparo.
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      if (String(url).includes('exemplo.com.br/hook')) {
+        const cabecalhos = new Headers(init?.headers)
+        corpoRecebido = String(init?.body)
+        assinaturaRecebida = cabecalhos.get('x-frete-signature') ?? ''
+        timestampRecebido = cabecalhos.get('x-frete-timestamp') ?? ''
+      }
       return new Response('ok', { status: 200 })
     })
 
-    const resultado = await dispararPendentes()
+    await dispararPendentes()
 
-    expect(resultado.entregues).toBe(1)
+    expect(corpoRecebido).not.toBe('')
     expect(
       verificarAssinatura(app.segredo, corpoRecebido, assinaturaRecebida, timestampRecebido),
     ).toBe(true)
 
-    const entrega = await prisma.webhookDelivery.findFirst()
+    const entrega = await primeiraEntrega()
     expect(entrega?.entregueEm).not.toBeNull()
     expect(entrega?.proximaTentativaEm).toBeNull()
   })
@@ -241,7 +261,7 @@ describe('dispararPendentes', () => {
     const resultado = await dispararPendentes()
 
     expect(resultado.falhas).toBe(1)
-    const entrega = await prisma.webhookDelivery.findFirst()
+    const entrega = await primeiraEntrega()
     expect(entrega?.tentativas).toBe(1)
     expect(entrega?.statusHttp).toBe(500)
     expect(entrega?.proximaTentativaEm).not.toBeNull()
@@ -256,7 +276,7 @@ describe('dispararPendentes', () => {
     const resultado = await dispararPendentes()
 
     expect(resultado.desistidas).toBe(1)
-    expect((await prisma.webhookDelivery.findFirst())?.proximaTentativaEm).toBeNull()
+    expect((await primeiraEntrega())?.proximaTentativaEm).toBeNull()
   })
 
   it('uma entrega falha não impede as outras de sair', async () => {
@@ -282,7 +302,7 @@ describe('dispararPendentes', () => {
 
     await dispararPendentes()
 
-    const entrega = await prisma.webhookDelivery.findFirst()
+    const entrega = await primeiraEntrega()
     expect(entrega?.statusHttp).toBeNull()
     expect(entrega?.erro).toContain('tempo esgotado')
     expect(entrega?.proximaTentativaEm).not.toBeNull()
@@ -292,6 +312,7 @@ describe('dispararPendentes', () => {
     await criarApp()
     await enfileirarEvento(shipmentId, 'order.created')
     await prisma.webhookDelivery.updateMany({
+      where: DESTE_ARQUIVO(),
       data: { proximaTentativaEm: new Date(Date.now() + 60 * 60 * 1000) },
     })
     const espiao = vi.spyOn(globalThis, 'fetch')
@@ -306,6 +327,7 @@ describe('dispararPendentes', () => {
     await criarApp()
     await enfileirarEvento(shipmentId, 'order.created')
     await prisma.webhookDelivery.updateMany({
+      where: DESTE_ARQUIVO(),
       data: { tentativas: MAXIMO_TENTATIVAS, proximaTentativaEm: new Date() },
     })
     const espiao = vi.spyOn(globalThis, 'fetch')
@@ -347,6 +369,6 @@ describe('dispararPendentes', () => {
 
     expect(espiao).not.toHaveBeenCalled()
     expect(resultado.desistidas).toBe(1)
-    expect((await prisma.webhookDelivery.findFirst())?.erro).toMatch(/interna/i)
+    expect((await primeiraEntrega())?.erro).toMatch(/interna/i)
   })
 })
