@@ -1,8 +1,9 @@
 'use client'
 
-import { FormEvent, useId, useState } from 'react'
+import { FormEvent, useEffect, useId, useState } from 'react'
 import { cotacaoRequestSchema, type CotacaoErro, type CotacaoResposta } from '@/lib/cotacao-schema'
 import { OpcaoFreteCard } from './opcao-frete-card'
+import { IconeChevron, IconeLimpar, IconeSalvar } from './layout/icones'
 
 const FAIXAS_PESO = [
   { valor: '300', rotulo: 'Até 300g' },
@@ -22,6 +23,8 @@ const FORMATOS = [
   { valor: 'ROLO', rotulo: 'Rolo' },
   { valor: 'ENVELOPE', rotulo: 'Envelope' },
 ] as const
+
+const CHAVE_LOCAL_STORAGE = 'frete:cep-origem-padrao'
 
 type CampoTexto = 'cepOrigem' | 'cepDestino' | 'alturaCm' | 'larguraCm' | 'comprimentoCm' | 'pesoDigitadoG'
 
@@ -55,18 +58,93 @@ function paraNumero(valor: string): number | undefined {
   return Number.isFinite(numero) ? numero : undefined
 }
 
+const classeCampo =
+  'w-full border-0 border-b border-slate-300 bg-transparent px-1 py-2 text-sm text-texto-principal focus:border-brand focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand'
+
 export function CalculadoraForm() {
   const [form, setForm] = useState<EstadoFormulario>(ESTADO_INICIAL)
   const [erros, setErros] = useState<ErrosCampo>({})
   const [carregando, setCarregando] = useState(false)
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   const [resultado, setResultado] = useState<CotacaoResposta | null>(null)
+  const [mensagemSalvar, setMensagemSalvar] = useState<string | null>(null)
   const idBase = useId()
 
   const pesoEhDigitado = form.faixaPeso === 'DIGITAR'
 
+  useEffect(() => {
+    let cancelado = false
+
+    async function carregarCepPadrao() {
+      try {
+        const resposta = await fetch('/api/preferencias/cep-origem')
+        if (resposta.ok) {
+          const corpo = (await resposta.json()) as { cepOrigem: string | null }
+          if (corpo.cepOrigem && !cancelado) {
+            setForm((atual) => ({ ...atual, cepOrigem: corpo.cepOrigem as string }))
+            return
+          }
+        }
+      } catch {
+        // segue para o fallback de localStorage
+      }
+
+      if (typeof window === 'undefined' || cancelado) return
+      const salvo = window.localStorage.getItem(CHAVE_LOCAL_STORAGE)
+      if (salvo) {
+        setForm((atual) => ({ ...atual, cepOrigem: salvo }))
+      }
+    }
+
+    void carregarCepPadrao()
+    return () => {
+      cancelado = true
+    }
+  }, [])
+
   function atualizarCampo<K extends keyof EstadoFormulario>(campo: K, valor: EstadoFormulario[K]) {
     setForm((atual) => ({ ...atual, [campo]: valor }))
+  }
+
+  async function aoSalvarOrigem() {
+    setMensagemSalvar(null)
+    if (!/^\d{5}-?\d{3}$/.test(form.cepOrigem)) {
+      setErros((atual) => ({ ...atual, cepOrigem: 'Informe um CEP válido para salvar.' }))
+      return
+    }
+
+    try {
+      const resposta = await fetch('/api/preferencias/cep-origem', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ cepOrigem: form.cepOrigem }),
+      })
+
+      if (resposta.status === 401) {
+        window.localStorage.setItem(CHAVE_LOCAL_STORAGE, form.cepOrigem)
+      } else if (!resposta.ok) {
+        setMensagemSalvar('Não foi possível salvar o CEP de origem.')
+        return
+      }
+    } catch {
+      window.localStorage.setItem(CHAVE_LOCAL_STORAGE, form.cepOrigem)
+    }
+
+    setMensagemSalvar('CEP de origem salvo como padrão.')
+  }
+
+  function aoLimparOrigem() {
+    setForm((atual) => ({
+      ...atual,
+      cepOrigem: ESTADO_INICIAL.cepOrigem,
+      formato: ESTADO_INICIAL.formato,
+      faixaPeso: ESTADO_INICIAL.faixaPeso,
+      pesoDigitadoG: ESTADO_INICIAL.pesoDigitadoG,
+      alturaCm: ESTADO_INICIAL.alturaCm,
+      larguraCm: ESTADO_INICIAL.larguraCm,
+      comprimentoCm: ESTADO_INICIAL.comprimentoCm,
+    }))
+    setMensagemSalvar(null)
   }
 
   async function aoSubmeter(evento: FormEvent<HTMLFormElement>) {
@@ -127,211 +205,276 @@ export function CalculadoraForm() {
   }
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-8">
-      <header>
-        <h1 className="text-2xl font-bold text-slate-900">Calculadora de frete</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Compare preços de balcão e preços com desconto entre as transportadoras.
-        </p>
-      </header>
+    <div className="mx-auto flex max-w-conteudo flex-col gap-6 py-2">
+      <div className="rounded-xl bg-superficie-bloco p-6 text-center text-sm font-medium text-texto-secundario">
+        Espaço reservado para campanha
+      </div>
 
       <form onSubmit={aoSubmeter} noValidate className="flex flex-col gap-6">
-        <fieldset className="rounded-xl border border-slate-200 p-4">
-          <legend className="px-1 text-sm font-bold uppercase tracking-wide text-slate-700">
+        <div className="flex flex-col gap-3">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-texto-secundario">
             Informe a origem
-          </legend>
+          </h2>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-1">
-              <label htmlFor={`${idBase}-cepOrigem`} className="text-sm font-medium text-slate-700">
-                CEP de origem
-              </label>
-              <input
-                id={`${idBase}-cepOrigem`}
-                name="cepOrigem"
-                type="text"
-                inputMode="numeric"
-                placeholder="00000-000"
-                value={form.cepOrigem}
-                onChange={(e) => atualizarCampo('cepOrigem', e.target.value)}
-                aria-invalid={erros.cepOrigem ? true : undefined}
-                aria-describedby={erros.cepOrigem ? `${idBase}-cepOrigem-erro` : undefined}
-                className="rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-              {erros.cepOrigem ? (
-                <p id={`${idBase}-cepOrigem-erro`} role="alert" className="text-sm text-red-600">
-                  {erros.cepOrigem}
-                </p>
-              ) : null}
-            </div>
+          <fieldset className="rounded-xl bg-superficie-bloco p-4">
+            <legend className="sr-only">Informe a origem</legend>
 
-            <div className="flex flex-col gap-1">
-              <label htmlFor={`${idBase}-formato`} className="text-sm font-medium text-slate-700">
-                Formato
-              </label>
-              <select
-                id={`${idBase}-formato`}
-                name="formato"
-                value={form.formato}
-                onChange={(e) => atualizarCampo('formato', e.target.value as EstadoFormulario['formato'])}
-                className="rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                {FORMATOS.map((f) => (
-                  <option key={f.valor} value={f.valor}>
-                    {f.rotulo}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label htmlFor={`${idBase}-pesoFaixa`} className="text-sm font-medium text-slate-700">
-                Peso
-              </label>
-              <select
-                id={`${idBase}-pesoFaixa`}
-                name="pesoFaixa"
-                value={form.faixaPeso}
-                onChange={(e) => atualizarCampo('faixaPeso', e.target.value)}
-                className="rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                {FAIXAS_PESO.map((f) => (
-                  <option key={f.valor} value={f.valor}>
-                    {f.rotulo}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {pesoEhDigitado ? (
-              <div className="flex flex-col gap-1">
-                <label htmlFor={`${idBase}-pesoDigitado`} className="text-sm font-medium text-slate-700">
-                  Peso (gramas)
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex flex-1 flex-col gap-1">
+                <label htmlFor={`${idBase}-cepOrigem`} className="text-xs font-medium text-texto-secundario">
+                  CEP de origem
                 </label>
                 <input
-                  id={`${idBase}-pesoDigitado`}
-                  name="pesoDigitadoG"
-                  type="number"
-                  min={1}
-                  max={30000}
-                  value={form.pesoDigitadoG}
-                  onChange={(e) => atualizarCampo('pesoDigitadoG', e.target.value)}
-                  aria-invalid={erros.pesoDigitadoG ? true : undefined}
-                  aria-describedby={erros.pesoDigitadoG ? `${idBase}-pesoDigitado-erro` : undefined}
-                  className="rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  id={`${idBase}-cepOrigem`}
+                  name="cepOrigem"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="XXXXX-XXX"
+                  value={form.cepOrigem}
+                  onChange={(e) => atualizarCampo('cepOrigem', e.target.value)}
+                  aria-invalid={erros.cepOrigem ? true : undefined}
+                  aria-describedby={erros.cepOrigem ? `${idBase}-cepOrigem-erro` : undefined}
+                  className={classeCampo}
                 />
-                {erros.pesoDigitadoG ? (
-                  <p id={`${idBase}-pesoDigitado-erro`} role="alert" className="text-sm text-red-600">
-                    {erros.pesoDigitadoG}
+                {erros.cepOrigem ? (
+                  <p id={`${idBase}-cepOrigem-erro`} role="alert" className="text-sm text-red-600">
+                    {erros.cepOrigem}
                   </p>
                 ) : null}
               </div>
-            ) : null}
 
-            <div className="flex flex-col gap-1">
-              <label htmlFor={`${idBase}-altura`} className="text-sm font-medium text-slate-700">
-                Altura (cm)
-              </label>
-              <input
-                id={`${idBase}-altura`}
-                name="alturaCm"
-                type="number"
-                min={0.1}
-                step="0.1"
-                value={form.alturaCm}
-                onChange={(e) => atualizarCampo('alturaCm', e.target.value)}
-                aria-invalid={erros.alturaCm ? true : undefined}
-                aria-describedby={erros.alturaCm ? `${idBase}-altura-erro` : undefined}
-                className="rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-              {erros.alturaCm ? (
-                <p id={`${idBase}-altura-erro`} role="alert" className="text-sm text-red-600">
-                  {erros.alturaCm}
-                </p>
-              ) : null}
+              <div className="flex shrink-0 gap-2">
+                <button
+                  type="button"
+                  onClick={aoSalvarOrigem}
+                  className="flex items-center gap-1 rounded-pilula bg-brand px-4 py-2 text-xs font-bold uppercase text-white hover:bg-brand-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                >
+                  <IconeSalvar width={16} height={16} />
+                  Salvar
+                </button>
+                <button
+                  type="button"
+                  onClick={aoLimparOrigem}
+                  className="flex items-center gap-1 rounded-pilula border border-brand px-4 py-2 text-xs font-bold uppercase text-brand hover:bg-brand-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                >
+                  <IconeLimpar width={16} height={16} />
+                  Limpar
+                </button>
+              </div>
             </div>
 
-            <div className="flex flex-col gap-1">
-              <label htmlFor={`${idBase}-largura`} className="text-sm font-medium text-slate-700">
-                Largura (cm)
-              </label>
-              <input
-                id={`${idBase}-largura`}
-                name="larguraCm"
-                type="number"
-                min={0.1}
-                step="0.1"
-                value={form.larguraCm}
-                onChange={(e) => atualizarCampo('larguraCm', e.target.value)}
-                aria-invalid={erros.larguraCm ? true : undefined}
-                aria-describedby={erros.larguraCm ? `${idBase}-largura-erro` : undefined}
-                className="rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-              {erros.larguraCm ? (
-                <p id={`${idBase}-largura-erro`} role="alert" className="text-sm text-red-600">
-                  {erros.larguraCm}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label htmlFor={`${idBase}-comprimento`} className="text-sm font-medium text-slate-700">
-                Comprimento (cm)
-              </label>
-              <input
-                id={`${idBase}-comprimento`}
-                name="comprimentoCm"
-                type="number"
-                min={0.1}
-                step="0.1"
-                value={form.comprimentoCm}
-                onChange={(e) => atualizarCampo('comprimentoCm', e.target.value)}
-                aria-invalid={erros.comprimentoCm ? true : undefined}
-                aria-describedby={erros.comprimentoCm ? `${idBase}-comprimento-erro` : undefined}
-                className="rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-              {erros.comprimentoCm ? (
-                <p id={`${idBase}-comprimento-erro`} role="alert" className="text-sm text-red-600">
-                  {erros.comprimentoCm}
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </fieldset>
-
-        <fieldset className="rounded-xl border border-slate-200 p-4">
-          <legend className="px-1 text-sm font-bold uppercase tracking-wide text-slate-700">
-            Informe o destino
-          </legend>
-
-          <div className="flex flex-col gap-1">
-            <label htmlFor={`${idBase}-cepDestino`} className="text-sm font-medium text-slate-700">
-              CEP de destino
-            </label>
-            <input
-              id={`${idBase}-cepDestino`}
-              name="cepDestino"
-              type="text"
-              inputMode="numeric"
-              placeholder="00000-000"
-              value={form.cepDestino}
-              onChange={(e) => atualizarCampo('cepDestino', e.target.value)}
-              aria-invalid={erros.cepDestino ? true : undefined}
-              aria-describedby={erros.cepDestino ? `${idBase}-cepDestino-erro` : undefined}
-              className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            />
-            {erros.cepDestino ? (
-              <p id={`${idBase}-cepDestino-erro`} role="alert" className="text-sm text-red-600">
-                {erros.cepDestino}
+            {mensagemSalvar ? (
+              <p role="status" className="mt-2 text-sm text-brand">
+                {mensagemSalvar}
               </p>
             ) : null}
-          </div>
-        </fieldset>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1">
+                <label htmlFor={`${idBase}-formato`} className="text-xs font-medium text-texto-secundario">
+                  Formato
+                </label>
+                <select
+                  id={`${idBase}-formato`}
+                  name="formato"
+                  value={form.formato}
+                  onChange={(e) => atualizarCampo('formato', e.target.value as EstadoFormulario['formato'])}
+                  className={classeCampo}
+                >
+                  {FORMATOS.map((f) => (
+                    <option key={f.valor} value={f.valor}>
+                      {f.rotulo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label htmlFor={`${idBase}-pesoFaixa`} className="text-xs font-medium text-texto-secundario">
+                  Peso
+                </label>
+                <select
+                  id={`${idBase}-pesoFaixa`}
+                  name="pesoFaixa"
+                  value={form.faixaPeso}
+                  onChange={(e) => atualizarCampo('faixaPeso', e.target.value)}
+                  className={classeCampo}
+                >
+                  {FAIXAS_PESO.map((f) => (
+                    <option key={f.valor} value={f.valor}>
+                      {f.rotulo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {pesoEhDigitado ? (
+                <div className="flex flex-col gap-1 sm:col-span-2">
+                  <label htmlFor={`${idBase}-pesoDigitado`} className="text-xs font-medium text-texto-secundario">
+                    Peso (gramas)
+                  </label>
+                  <input
+                    id={`${idBase}-pesoDigitado`}
+                    name="pesoDigitadoG"
+                    type="number"
+                    min={1}
+                    max={30000}
+                    value={form.pesoDigitadoG}
+                    onChange={(e) => atualizarCampo('pesoDigitadoG', e.target.value)}
+                    aria-invalid={erros.pesoDigitadoG ? true : undefined}
+                    aria-describedby={erros.pesoDigitadoG ? `${idBase}-pesoDigitado-erro` : undefined}
+                    className={classeCampo}
+                  />
+                  {erros.pesoDigitadoG ? (
+                    <p id={`${idBase}-pesoDigitado-erro`} role="alert" className="text-sm text-red-600">
+                      {erros.pesoDigitadoG}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="flex flex-col gap-1">
+                <label htmlFor={`${idBase}-altura`} className="text-xs font-medium text-texto-secundario">
+                  Altura (cm)
+                </label>
+                <div className="flex items-center border-b border-slate-300 focus-within:border-brand">
+                  <input
+                    id={`${idBase}-altura`}
+                    name="alturaCm"
+                    type="number"
+                    min={0.1}
+                    step="0.1"
+                    placeholder="00"
+                    value={form.alturaCm}
+                    onChange={(e) => atualizarCampo('alturaCm', e.target.value)}
+                    aria-invalid={erros.alturaCm ? true : undefined}
+                    aria-describedby={erros.alturaCm ? `${idBase}-altura-erro` : undefined}
+                    className="w-full border-0 bg-transparent px-1 py-2 text-sm text-texto-principal focus:outline-none"
+                  />
+                  <span className="pr-1 text-xs text-texto-secundario">cm</span>
+                </div>
+                {erros.alturaCm ? (
+                  <p id={`${idBase}-altura-erro`} role="alert" className="text-sm text-red-600">
+                    {erros.alturaCm}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label htmlFor={`${idBase}-largura`} className="text-xs font-medium text-texto-secundario">
+                  Largura (cm)
+                </label>
+                <div className="flex items-center border-b border-slate-300 focus-within:border-brand">
+                  <input
+                    id={`${idBase}-largura`}
+                    name="larguraCm"
+                    type="number"
+                    min={0.1}
+                    step="0.1"
+                    placeholder="00"
+                    value={form.larguraCm}
+                    onChange={(e) => atualizarCampo('larguraCm', e.target.value)}
+                    aria-invalid={erros.larguraCm ? true : undefined}
+                    aria-describedby={erros.larguraCm ? `${idBase}-largura-erro` : undefined}
+                    className="w-full border-0 bg-transparent px-1 py-2 text-sm text-texto-principal focus:outline-none"
+                  />
+                  <span className="pr-1 text-xs text-texto-secundario">cm</span>
+                </div>
+                {erros.larguraCm ? (
+                  <p id={`${idBase}-largura-erro`} role="alert" className="text-sm text-red-600">
+                    {erros.larguraCm}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label htmlFor={`${idBase}-comprimento`} className="text-xs font-medium text-texto-secundario">
+                  Comprimento (cm)
+                </label>
+                <div className="flex items-center border-b border-slate-300 focus-within:border-brand">
+                  <input
+                    id={`${idBase}-comprimento`}
+                    name="comprimentoCm"
+                    type="number"
+                    min={0.1}
+                    step="0.1"
+                    placeholder="00"
+                    value={form.comprimentoCm}
+                    onChange={(e) => atualizarCampo('comprimentoCm', e.target.value)}
+                    aria-invalid={erros.comprimentoCm ? true : undefined}
+                    aria-describedby={erros.comprimentoCm ? `${idBase}-comprimento-erro` : undefined}
+                    className="w-full border-0 bg-transparent px-1 py-2 text-sm text-texto-principal focus:outline-none"
+                  />
+                  <span className="pr-1 text-xs text-texto-secundario">cm</span>
+                </div>
+                {erros.comprimentoCm ? (
+                  <p id={`${idBase}-comprimento-erro`} role="alert" className="text-sm text-red-600">
+                    {erros.comprimentoCm}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <details className="mt-4 rounded-lg bg-white px-4 py-2">
+              <summary className="flex cursor-pointer list-none items-center justify-center gap-2 text-center text-sm font-medium text-texto-principal">
+                Seguro, aviso e mão própria
+                <IconeChevron width={16} height={16} />
+              </summary>
+              <p className="mt-2 text-xs text-texto-secundario">
+                Esses opcionais chegam em uma fase futura.
+              </p>
+            </details>
+          </fieldset>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-texto-secundario">
+            Informe o destino
+          </h2>
+
+          <fieldset className="rounded-xl bg-superficie-bloco p-4">
+            <legend className="sr-only">Informe o destino</legend>
+
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex flex-1 flex-col gap-1">
+                <label htmlFor={`${idBase}-cepDestino`} className="text-xs font-medium text-texto-secundario">
+                  CEP de destino
+                </label>
+                <input
+                  id={`${idBase}-cepDestino`}
+                  name="cepDestino"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="XXXXX-XXX"
+                  value={form.cepDestino}
+                  onChange={(e) => atualizarCampo('cepDestino', e.target.value)}
+                  aria-invalid={erros.cepDestino ? true : undefined}
+                  aria-describedby={erros.cepDestino ? `${idBase}-cepDestino-erro` : undefined}
+                  className={classeCampo}
+                />
+                {erros.cepDestino ? (
+                  <p id={`${idBase}-cepDestino-erro`} role="alert" className="text-sm text-red-600">
+                    {erros.cepDestino}
+                  </p>
+                ) : null}
+              </div>
+
+              <a
+                href="https://buscacepinter.correios.com.br/app/endereco/index.php"
+                target="_blank"
+                rel="noreferrer"
+                className="shrink-0 text-sm font-medium text-brand underline underline-offset-2 hover:text-brand-light"
+              >
+                Pesquisar CEP
+              </a>
+            </div>
+          </fieldset>
+        </div>
 
         <button
           type="submit"
           disabled={carregando}
-          className="rounded-lg bg-emerald-600 px-6 py-3 text-base font-bold uppercase tracking-wide text-white transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-pilula bg-brand px-6 py-3 text-base font-bold uppercase tracking-wide text-white transition hover:bg-brand-light focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60"
         >
           {carregando ? 'Calculando…' : 'Calcular frete com desconto'}
         </button>
@@ -352,11 +495,10 @@ export function CalculadoraForm() {
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-slate-600">Nenhuma opção de frete encontrada para essa rota.</p>
+            <p className="text-sm text-texto-secundario">Nenhuma opção de frete encontrada para essa rota.</p>
           )
         ) : null}
       </div>
     </div>
   )
 }
-

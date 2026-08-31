@@ -1,3 +1,21 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --cor-marca: #0e8a5f;
+  --cor-marca-clara: #12a66f;
+  --cor-marca-fundo: #d6f5e6;
+  --cor-texto-principal: #1a1a1a;
+  --cor-texto-secundario: #6b7280;
+  --cor-fundo-pagina: #f5f6f7;
+  --cor-superficie: #ffffff;
+  --cor-bloco: #f0f1f2;
+  --cor-alerta: #f59e0b;
+  --cor-info-fundo: #e8f4fd;
+  --cor-info-texto: #1e3a8a;
+}
+
+* {
+  outline-color: var(--cor-marca);
+}

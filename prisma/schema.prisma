@@ -59,6 +59,7 @@ model User {
   senhaHash         String
   telefone          String?
   emailVerificadoEm DateTime?
+  cepOrigemPadrao   String?
   criadoEm          DateTime  @default(now())
 
   sessions  Session[]

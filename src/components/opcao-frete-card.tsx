@@ -21,14 +21,14 @@ export function OpcaoFreteCard({ opcao }: OpcaoFreteCardProps) {
       <li
         data-testid="opcao-frete"
         data-disponivel="false"
-        className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 opacity-60 sm:flex-row sm:items-center sm:justify-between"
+        className="flex flex-col gap-2 rounded-xl bg-superficie-bloco p-4 opacity-60 sm:flex-row sm:items-center sm:justify-between"
       >
         <div>
-          <p className="font-semibold text-slate-500">{opcao.servicoNome}</p>
-          <p className="text-sm text-slate-400">{opcao.carrierNome}</p>
-          {opcao.observacao ? <p className="mt-1 text-sm text-slate-500">{opcao.observacao}</p> : null}
+          <p className="font-semibold text-texto-secundario">{opcao.servicoNome}</p>
+          <p className="text-sm text-texto-secundario">{opcao.carrierNome}</p>
+          {opcao.observacao ? <p className="mt-1 text-sm text-texto-secundario">{opcao.observacao}</p> : null}
         </div>
-        <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Indisponível</span>
+        <span className="text-xs font-medium uppercase tracking-wide text-texto-secundario">Indisponível</span>
       </li>
     )
   }
@@ -37,17 +37,17 @@ export function OpcaoFreteCard({ opcao }: OpcaoFreteCardProps) {
     <li
       data-testid="opcao-frete"
       data-disponivel="true"
-      className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-emerald-300 hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
+      className="flex flex-col gap-3 rounded-xl border border-superficie-bloco bg-superficie-card p-4 shadow-sm transition hover:border-brand-light hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="min-w-0">
-        <p className="font-semibold text-slate-900">{opcao.servicoNome}</p>
-        <p className="text-sm text-slate-500">{opcao.carrierNome}</p>
-        <p className="mt-1 text-sm text-slate-600">Entrega em {formatarPrazo(opcao.prazoDias)}</p>
+        <p className="font-semibold text-texto-principal">{opcao.servicoNome}</p>
+        <p className="text-sm text-texto-secundario">{opcao.carrierNome}</p>
+        <p className="mt-1 text-sm text-texto-secundario">Entrega em {formatarPrazo(opcao.prazoDias)}</p>
       </div>
 
       <div className="flex flex-col items-start gap-1 sm:items-end">
         {opcao.descontoPercentual > 0 ? (
-          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">
+          <span className="rounded-pilula bg-brand-bg px-2 py-0.5 text-xs font-bold text-brand">
             {opcao.descontoPercentual}% OFF
           </span>
         ) : null}
