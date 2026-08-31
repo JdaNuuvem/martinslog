@@ -181,3 +181,35 @@ describe('obterStatusPorCodigo', () => {
     expect(await obterStatusPorCodigo(userId)).toEqual({})
   })
 })
+
+describe('obterStatusPorCodigo com etapa desativada', () => {
+  it('continua traduzindo etapa desligada, porque envios antigos ainda a têm na timeline', async () => {
+    const userId = await criarUsuario()
+
+    await salvarStatus(userId, {
+      nome: 'Em conferência',
+      titulo: 'Em conferência',
+      descricao: 'x',
+      cenario: 'ENTREGA_NORMAL',
+      fracaoPrazo: 0.4,
+      statusResultante: 'POSTED',
+    })
+    await salvarStatus(userId, {
+      nome: 'Em conferência',
+      titulo: 'Em conferência',
+      descricao: 'x',
+      cenario: 'ENTREGA_NORMAL',
+      fracaoPrazo: 0.4,
+      statusResultante: 'POSTED',
+      ativo: false,
+    })
+
+    // Fora dos roteiros novos...
+    const catalogo = await catalogoDoUsuario(userId)
+    expect(catalogo.etapasExtras).toHaveLength(0)
+
+    // ...mas ainda traduzível, senão os envios já emitidos com esse evento
+    // parariam de avançar de status.
+    expect(await obterStatusPorCodigo(userId)).toEqual({ EM_CONFERENCIA: 'POSTED' })
+  })
+})

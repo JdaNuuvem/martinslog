@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { ValorInvalidoError } from '@/domain/errors'
 import {
@@ -68,11 +69,19 @@ export async function listarStatusPadrao() {
 /**
  * Resolve o catálogo aplicável a uma conta: o padrão da plataforma coberto
  * pelas linhas dela. É o que a emissão passa para `gerarRoteiro`.
+ *
+ * Aceita um cliente de transação para que a emissão leia o catálogo dentro
+ * da própria transação: se a leitura falhar, a emissão aborta inteira e o
+ * envio fica em `RELEASED` retentável. Melhor não emitir do que emitir com a
+ * timeline errada — ela é imutável depois de gravada.
  */
-export async function catalogoDoUsuario(userId: string): Promise<CatalogoResolvido> {
+export async function catalogoDoUsuario(
+  userId: string,
+  cliente: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<CatalogoResolvido> {
   const [padrao, daConta] = await Promise.all([
-    prisma.statusRastreio.findMany({ where: { userId: null } }),
-    prisma.statusRastreio.findMany({ where: { userId } }),
+    cliente.statusRastreio.findMany({ where: { userId: null } }),
+    cliente.statusRastreio.findMany({ where: { userId } }),
   ])
 
   return resolverCatalogo(padrao.map(paraLinha), daConta.map(paraLinha))
@@ -208,12 +217,24 @@ export async function removerStatus(userId: string, id: string): Promise<void> {
  */
 export async function obterStatusPorCodigo(
   userId: string,
+  cliente: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<Record<string, StatusShipment>> {
-  const { etapasExtras } = await catalogoDoUsuario(userId)
+  // Inclui linhas **desativadas** de propósito, ao contrário de
+  // `catalogoDoUsuario`. Os dois usos são opostos: aquele monta roteiros
+  // novos, onde uma etapa desligada não deve mais entrar; este traduz
+  // eventos que já existem, e envios emitidos antes de a etapa ser desligada
+  // continuam com ela na timeline. Filtrar aqui deixaria esses envios sem
+  // tradução e travaria o avanço do status deles.
+  const linhas = await cliente.statusRastreio.findMany({
+    where: { userId, statusResultante: { not: null } },
+    select: { codigo: true, statusResultante: true },
+  })
 
   const mapa: Record<string, StatusShipment> = {}
-  for (const etapa of etapasExtras) {
-    mapa[etapa.codigo] = etapa.statusResultante
+  for (const linha of linhas) {
+    if (linha.statusResultante) {
+      mapa[linha.codigo] = linha.statusResultante as StatusShipment
+    }
   }
 
   return mapa

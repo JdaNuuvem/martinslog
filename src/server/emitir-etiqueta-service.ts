@@ -5,6 +5,7 @@ import { calcularOcorridoEm, gerarRoteiro } from '@/domain/simulacao/roteiro'
 import type { LocalidadeSimulacao } from '@/domain/simulacao/tipos'
 import { atribuirCodigoRastreio } from './codigo-rastreio-service'
 import { enfileirarEvento } from './webhook-service'
+import { catalogoDoUsuario } from './status-rastreio-service'
 import { obterConfigSimulacao } from './simulacao-config'
 
 /**
@@ -60,6 +61,9 @@ export async function emitirEtiqueta(shipmentId: string): Promise<{ codigoRastre
       where: { id: shipmentId },
       select: {
         id: true,
+        // Necessário para resolver o catálogo de status da conta dona do
+        // envio; o resto do envio continua fora deste select de propósito.
+        userId: true,
         status: true,
         cenario: true,
         remetente: true,
@@ -80,12 +84,20 @@ export async function emitirEtiqueta(shipmentId: string): Promise<{ codigoRastre
 
     const codigoRastreio = await atribuirCodigoRastreio(tx, envio.id)
 
+    // Dentro da transação: se a leitura do catálogo falhar, a emissão
+    // aborta e o envio segue em RELEASED, retentável. A timeline é imutável
+    // depois de gravada, então emitir com o texto errado seria pior que não
+    // emitir.
+    const catalogo = await catalogoDoUsuario(envio.userId, tx)
+
     const roteiro = gerarRoteiro({
       cenario: envio.cenario,
       prazoDias: envio.service.prazoBase,
       origem: localidadeDoEndereco(envio.remetente, 'remetente'),
       destino: localidadeDoEndereco(envio.destinatario, 'destinatário'),
       operador,
+      textos: catalogo.textos,
+      etapasExtras: catalogo.etapasExtras,
     })
 
     await tx.trackingEvent.createMany({
