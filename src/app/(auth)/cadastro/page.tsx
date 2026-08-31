@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { FormEvent, useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -96,15 +96,15 @@ export default function CadastroPage() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-6 px-4 py-8">
       <header>
-        <h1 className="text-2xl font-bold text-slate-900">Criar conta</h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <h1 className="text-2xl font-bold text-texto-principal">Criar conta</h1>
+        <p className="mt-1 text-sm text-texto-secundario">
           Cadastre-se para acompanhar suas cotações e envios.
         </p>
       </header>
 
       <form onSubmit={aoSubmeter} noValidate className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <label htmlFor={`${idBase}-nome`} className="text-sm font-medium text-slate-700">
+          <label htmlFor={`${idBase}-nome`} className="text-sm font-medium text-texto-secundario">
             Nome completo
           </label>
           <input
@@ -116,7 +116,7 @@ export default function CadastroPage() {
             onChange={(e) => atualizarCampo('nome', e.target.value)}
             aria-invalid={erros.nome ? true : undefined}
             aria-describedby={erros.nome ? `${idBase}-nome-erro` : undefined}
-            className="rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="rounded-lg border border-borda-campo px-3 py-2 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand"
           />
           {erros.nome ? (
             <p id={`${idBase}-nome-erro`} role="alert" className="text-sm text-red-600">
@@ -126,7 +126,7 @@ export default function CadastroPage() {
         </div>
 
         <div className="flex flex-col gap-1">
-          <label htmlFor={`${idBase}-documento`} className="text-sm font-medium text-slate-700">
+          <label htmlFor={`${idBase}-documento`} className="text-sm font-medium text-texto-secundario">
             CPF ou CNPJ
           </label>
           <input
@@ -139,7 +139,7 @@ export default function CadastroPage() {
             onChange={(e) => atualizarCampo('documento', e.target.value)}
             aria-invalid={erros.documento ? true : undefined}
             aria-describedby={erros.documento ? `${idBase}-documento-erro` : undefined}
-            className="rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="rounded-lg border border-borda-campo px-3 py-2 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand"
           />
           {erros.documento ? (
             <p id={`${idBase}-documento-erro`} role="alert" className="text-sm text-red-600">
@@ -149,7 +149,7 @@ export default function CadastroPage() {
         </div>
 
         <div className="flex flex-col gap-1">
-          <label htmlFor={`${idBase}-email`} className="text-sm font-medium text-slate-700">
+          <label htmlFor={`${idBase}-email`} className="text-sm font-medium text-texto-secundario">
             E-mail
           </label>
           <input
@@ -161,7 +161,7 @@ export default function CadastroPage() {
             onChange={(e) => atualizarCampo('email', e.target.value)}
             aria-invalid={erros.email ? true : undefined}
             aria-describedby={erros.email ? `${idBase}-email-erro` : undefined}
-            className="rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="rounded-lg border border-borda-campo px-3 py-2 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand"
           />
           {erros.email ? (
             <p id={`${idBase}-email-erro`} role="alert" className="text-sm text-red-600">
@@ -171,7 +171,7 @@ export default function CadastroPage() {
         </div>
 
         <div className="flex flex-col gap-1">
-          <label htmlFor={`${idBase}-telefone`} className="text-sm font-medium text-slate-700">
+          <label htmlFor={`${idBase}-telefone`} className="text-sm font-medium text-texto-secundario">
             Telefone (opcional)
           </label>
           <input
@@ -183,7 +183,7 @@ export default function CadastroPage() {
             onChange={(e) => atualizarCampo('telefone', e.target.value)}
             aria-invalid={erros.telefone ? true : undefined}
             aria-describedby={erros.telefone ? `${idBase}-telefone-erro` : undefined}
-            className="rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="rounded-lg border border-borda-campo px-3 py-2 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand"
           />
           {erros.telefone ? (
             <p id={`${idBase}-telefone-erro`} role="alert" className="text-sm text-red-600">
@@ -193,7 +193,7 @@ export default function CadastroPage() {
         </div>
 
         <div className="flex flex-col gap-1">
-          <label htmlFor={`${idBase}-senha`} className="text-sm font-medium text-slate-700">
+          <label htmlFor={`${idBase}-senha`} className="text-sm font-medium text-texto-secundario">
             Senha
           </label>
           <input
@@ -205,7 +205,7 @@ export default function CadastroPage() {
             onChange={(e) => atualizarCampo('senha', e.target.value)}
             aria-invalid={erros.senha ? true : undefined}
             aria-describedby={erros.senha ? `${idBase}-senha-erro` : undefined}
-            className="rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="rounded-lg border border-borda-campo px-3 py-2 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand"
           />
           {erros.senha ? (
             <p id={`${idBase}-senha-erro`} role="alert" className="text-sm text-red-600">
@@ -223,7 +223,7 @@ export default function CadastroPage() {
         <button
           type="submit"
           disabled={carregando}
-          className="rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-lg bg-brand px-4 py-2 font-medium text-white focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {carregando ? 'Criando conta…' : 'Criar conta'}
         </button>

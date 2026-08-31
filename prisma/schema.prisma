@@ -116,6 +116,7 @@ model Address {
   email       String?
   telefone    String?
   criadoEm    DateTime     @default(now())
+  arquivadoEm DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

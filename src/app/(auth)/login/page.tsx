@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { FormEvent, useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -74,13 +74,13 @@ export default function LoginPage() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-6 px-4 py-8">
       <header>
-        <h1 className="text-2xl font-bold text-slate-900">Entrar</h1>
-        <p className="mt-1 text-sm text-slate-600">Acesse sua conta para continuar.</p>
+        <h1 className="text-2xl font-bold text-texto-principal">Entrar</h1>
+        <p className="mt-1 text-sm text-texto-secundario">Acesse sua conta para continuar.</p>
       </header>
 
       <form onSubmit={aoSubmeter} noValidate className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <label htmlFor={`${idBase}-email`} className="text-sm font-medium text-slate-700">
+          <label htmlFor={`${idBase}-email`} className="text-sm font-medium text-texto-secundario">
             E-mail
           </label>
           <input
@@ -92,7 +92,7 @@ export default function LoginPage() {
             onChange={(e) => atualizarCampo('email', e.target.value)}
             aria-invalid={erros.email ? true : undefined}
             aria-describedby={erros.email ? `${idBase}-email-erro` : undefined}
-            className="rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="rounded-lg border border-borda-campo px-3 py-2 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand"
           />
           {erros.email ? (
             <p id={`${idBase}-email-erro`} role="alert" className="text-sm text-red-600">
@@ -102,7 +102,7 @@ export default function LoginPage() {
         </div>
 
         <div className="flex flex-col gap-1">
-          <label htmlFor={`${idBase}-senha`} className="text-sm font-medium text-slate-700">
+          <label htmlFor={`${idBase}-senha`} className="text-sm font-medium text-texto-secundario">
             Senha
           </label>
           <input
@@ -114,7 +114,7 @@ export default function LoginPage() {
             onChange={(e) => atualizarCampo('senha', e.target.value)}
             aria-invalid={erros.senha ? true : undefined}
             aria-describedby={erros.senha ? `${idBase}-senha-erro` : undefined}
-            className="rounded-lg border border-slate-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="rounded-lg border border-borda-campo px-3 py-2 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand"
           />
           {erros.senha ? (
             <p id={`${idBase}-senha-erro`} role="alert" className="text-sm text-red-600">
@@ -132,7 +132,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={carregando}
-          className="rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-lg bg-brand px-4 py-2 font-medium text-white focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {carregando ? 'Entrando…' : 'Entrar'}
         </button>

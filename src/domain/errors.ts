@@ -51,3 +51,6 @@ export class LimiteTentativasExcedidoError extends DomainError {
 export class ServicoIndisponivelError extends DomainError {
   readonly codigo = 'SERVICO_INDISPONIVEL'
 }
+export class EnderecoNaoEncontradoError extends DomainError {
+  readonly codigo = 'ENDERECO_NAO_ENCONTRADO'
+}
