@@ -125,6 +125,16 @@ export function EnderecoForm({ tipo, enderecoExistente, onSalvar, onCancelar }: 
       telefone: form.telefone || undefined,
     }
 
+    // O nome é exigido aqui, e não no schema compartilhado, porque este é o
+    // caminho que alimenta a etiqueta: `POST /api/envios` recusa remetente
+    // ou destinatário sem nome. Apertar o schema quebraria chamadas de API
+    // que hoje criam endereços sem ele — ver o aviso deixado para a sessão
+    // dona de `/api/enderecos`.
+    if (!form.nome.trim()) {
+      setErros({ nome: 'Nome é obrigatório para gerar a etiqueta.' })
+      return
+    }
+
     const analisado = enderecoRequestSchema.safeParse(dados)
     if (!analisado.success) {
       const camposInvalidos = analisado.error.flatten().fieldErrors
@@ -185,19 +195,31 @@ export function EnderecoForm({ tipo, enderecoExistente, onSalvar, onCancelar }: 
         />
       </div>
 
+      {/* Fora do bloco de destinatário: a etiqueta precisa do nome dos dois
+          lados, e `POST /api/envios` recusa o envio sem ele. Enquanto este
+          campo só aparecia para o destinatário, todo remetente cadastrado
+          pela interface nascia sem nome e travava a criação do envio. */}
+      <div className="flex flex-col gap-1">
+        <label htmlFor={`${idBase}-nome`} className="text-xs font-medium text-texto-secundario">
+          {ehDestinatario ? 'Nome do destinatário' : 'Nome do remetente'}
+        </label>
+        <input
+          id={`${idBase}-nome`}
+          className={classeCampo}
+          value={form.nome}
+          onChange={(e) => atualizarCampo('nome', e.target.value)}
+          aria-invalid={erros.nome ? true : undefined}
+          aria-describedby={erros.nome ? `${idBase}-nome-erro` : undefined}
+        />
+        {erros.nome ? (
+          <p id={`${idBase}-nome-erro`} role="alert" className="text-sm text-erro">
+            {erros.nome}
+          </p>
+        ) : null}
+      </div>
+
       {ehDestinatario ? (
         <>
-          <div className="flex flex-col gap-1">
-            <label htmlFor={`${idBase}-nome`} className="text-xs font-medium text-texto-secundario">
-              Nome do destinatário
-            </label>
-            <input
-              id={`${idBase}-nome`}
-              className={classeCampo}
-              value={form.nome}
-              onChange={(e) => atualizarCampo('nome', e.target.value)}
-            />
-          </div>
           <div className="flex flex-col gap-1">
             <label htmlFor={`${idBase}-documento`} className="text-xs font-medium text-texto-secundario">
               CPF ou CNPJ
