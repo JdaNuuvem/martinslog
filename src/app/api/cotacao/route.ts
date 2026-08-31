@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { DomainError } from '@/domain/errors'
 import { gerarCotacao } from '@/server/cotacao-service'
 import { cotacaoRequestSchema } from '@/lib/cotacao-schema'
+import { lerSessao } from '@/server/auth/sessao'
 
 const ANON_SESSION_COOKIE = 'anon_session_id'
 
@@ -34,6 +35,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const anonSessionIdAtual = request.cookies.get(ANON_SESSION_COOKIE)?.value ?? null
+    const sessao = await lerSessao(request)
 
     const resultado = await gerarCotacao(
       {
@@ -45,7 +47,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         comprimentoCm: entrada.comprimentoCm,
         formato: entrada.formato,
       },
-      { userId: null, anonSessionId: anonSessionIdAtual },
+      { userId: sessao?.userId ?? null, anonSessionId: anonSessionIdAtual },
     )
 
     const resposta = NextResponse.json(

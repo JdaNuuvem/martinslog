@@ -45,9 +45,3 @@ export function garantirTransicao(de: StatusShipment, para: StatusShipment): voi
 export function podeCancelar(status: StatusShipment): boolean {
   return status === 'PENDING' || status === 'RELEASED' || status === 'GENERATED'
 }
-
-export function deveEstornar(de: StatusShipment, para: StatusShipment): boolean {
-  const foiPago = de === 'RELEASED' || de === 'GENERATED' || de === 'POSTED'
-  const encerramentoComEstorno = para === 'CANCELLED' || para === 'LOST'
-  return foiPago && encerramentoComEstorno
-}

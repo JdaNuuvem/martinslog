@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deveEstornar, garantirTransicao, podeCancelar } from './estados'
+import { garantirTransicao, podeCancelar } from './estados'
 import { TransicaoInvalidaError } from '../errors'
 
 describe('garantirTransicao', () => {
@@ -40,20 +40,5 @@ describe('podeCancelar', () => {
   it('proíbe cancelar estados terminais', () => {
     expect(podeCancelar('CANCELLED')).toBe(false)
     expect(podeCancelar('LOST')).toBe(false)
-  })
-})
-
-describe('deveEstornar', () => {
-  it('estorna quando o envio pago é cancelado ou extraviado', () => {
-    expect(deveEstornar('RELEASED', 'CANCELLED')).toBe(true)
-    expect(deveEstornar('POSTED', 'LOST')).toBe(true)
-  })
-
-  it('não estorna quando o envio nunca foi pago', () => {
-    expect(deveEstornar('PENDING', 'CANCELLED')).toBe(false)
-  })
-
-  it('não estorna entregas', () => {
-    expect(deveEstornar('POSTED', 'DELIVERED')).toBe(false)
   })
 })
