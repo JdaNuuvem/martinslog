@@ -50,21 +50,45 @@ export async function criarSessao(userId: string, response: NextResponse): Promi
 export async function lerSessao(
   request: NextRequest,
 ): Promise<{ userId: string; papel: PapelUser } | null> {
-  const sessionId = request.cookies.get(SESSION_COOKIE)?.value
+  const sessao = await validarSessaoPorId(request.cookies.get(SESSION_COOKIE)?.value)
+  if (!sessao) {
+    return null
+  }
+
+  // Devolve exatamente o que sempre devolveu. `validarSessaoPorId` carrega
+  // também o nome, que os layouts usam para a topbar, mas as rotas de API
+  // não precisam dele — e alargar este retorno mudaria o contrato de todos
+  // os chamadores por conveniência de um só.
+  return { userId: sessao.userId, papel: sessao.papel }
+}
+
+/**
+ * Validação da sessão a partir do identificador, sem depender de como o
+ * cookie foi lido.
+ *
+ * Existe separada porque há duas formas de chegar ao cookie: as rotas de API
+ * têm um `NextRequest`, e os componentes de servidor (layouts e páginas) só
+ * têm `cookies()` de `next/headers`. A regra de validade é uma só e vive
+ * aqui — duplicá-la nos dois caminhos deixaria a expiração divergir no dia
+ * em que alguém a mudasse em um só lugar.
+ */
+export async function validarSessaoPorId(
+  sessionId: string | undefined,
+): Promise<{ userId: string; papel: PapelUser; nome: string } | null> {
   if (!sessionId) {
     return null
   }
 
   const sessao = await prisma.session.findUnique({
     where: { id: sessionId },
-    include: { user: { select: { papel: true } } },
+    include: { user: { select: { papel: true, nome: true } } },
   })
 
   if (!sessao || sessao.expiraEm.getTime() <= Date.now()) {
     return null
   }
 
-  return { userId: sessao.userId, papel: sessao.user.papel }
+  return { userId: sessao.userId, papel: sessao.user.papel, nome: sessao.user.nome }
 }
 
 /**
