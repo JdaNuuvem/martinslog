@@ -66,3 +66,6 @@ export class EnvioNaoEncontradoError extends DomainError {
 export class CodigoRastreioInvalidoError extends DomainError {
   readonly codigo = 'CODIGO_RASTREIO_INVALIDO'
 }
+export class ArquivoInvalidoError extends DomainError {
+  readonly codigo = 'ARQUIVO_INVALIDO'
+}
