@@ -7,15 +7,21 @@ import { prisma } from '@/infra/db/client'
  * ausência seja explícita em vez de parecer um link quebrado.
  */
 export default async function PaginaAdmin() {
-  const [regras, envios, usuarios, auditoria] = await Promise.all([
+  const [regras, envios, usuarios, auditoria, webhooksNaFila] = await Promise.all([
     prisma.priceRule.count(),
     prisma.shipment.count(),
     prisma.user.count(),
     prisma.auditLog.count(),
+    // Só o que ainda vai ser tentado: entrega concluída ou desistida não é
+    // trabalho pendente, e contá-la faria o número nunca baixar.
+    prisma.webhookDelivery.count({
+      where: { entregueEm: null, proximaTentativaEm: { not: null } },
+    }),
   ])
 
   const cartoes = [
     { titulo: 'Regras de preço', valor: regras, href: '/admin/tabelas', pronto: true },
+    { titulo: 'Webhooks na fila', valor: webhooksNaFila, href: '/admin/webhooks', pronto: true },
     { titulo: 'Envios', valor: envios, href: '/admin/envios', pronto: false },
     { titulo: 'Usuários', valor: usuarios, href: '/admin/usuarios', pronto: false },
     { titulo: 'Registros de auditoria', valor: auditoria, href: '/admin/auditoria', pronto: false },
