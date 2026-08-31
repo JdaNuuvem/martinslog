@@ -120,19 +120,9 @@ export function EnderecoForm({ tipo, enderecoExistente, onSalvar, onCancelar }: 
       uf: form.uf,
       padrao: form.padrao,
       documento: form.documento || undefined,
-      nome: form.nome || undefined,
+      nome: form.nome,
       email: form.email || undefined,
       telefone: form.telefone || undefined,
-    }
-
-    // O nome é exigido aqui, e não no schema compartilhado, porque este é o
-    // caminho que alimenta a etiqueta: `POST /api/envios` recusa remetente
-    // ou destinatário sem nome. Apertar o schema quebraria chamadas de API
-    // que hoje criam endereços sem ele — ver o aviso deixado para a sessão
-    // dona de `/api/enderecos`.
-    if (!form.nome.trim()) {
-      setErros({ nome: 'Nome é obrigatório para gerar a etiqueta.' })
-      return
     }
 
     const analisado = enderecoRequestSchema.safeParse(dados)

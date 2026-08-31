@@ -34,6 +34,7 @@ async function criarUsuario(): Promise<string> {
 function dadosEndereco(sobrescritas: Partial<EnderecoRequest> = {}): EnderecoRequest {
   return {
     tipo: 'REMETENTE',
+    nome: 'Fulano Remetente',
     cep: '01001-000',
     logradouro: 'Praça da Sé',
     numero: '1',

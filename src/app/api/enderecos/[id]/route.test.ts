@@ -45,6 +45,9 @@ function chamar(
 const corpoValido = {
   tipo: 'REMETENTE' as const,
   apelido: 'Depósito',
+  // Obrigatório desde que `enderecoRequestSchema` passou a exigir nome nos
+  // dois tipos: a etiqueta precisa dele e `POST /api/envios` já o exigia.
+  nome: 'Depósito Central Ltda',
   cep: '01001-000',
   logradouro: 'Praça da Sé',
   numero: '100',

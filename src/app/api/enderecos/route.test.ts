@@ -36,6 +36,9 @@ function criarRequest(method: string, sessionId: string | null, body?: unknown):
 const corpoRemetenteValido = {
   tipo: 'REMETENTE' as const,
   apelido: 'Depósito',
+  // Obrigatório desde que `enderecoRequestSchema` passou a exigir nome nos
+  // dois tipos: a etiqueta precisa dele e `POST /api/envios` já o exigia.
+  nome: 'Depósito Central Ltda',
   cep: '01001-000',
   logradouro: 'Praça da Sé',
   numero: '100',
@@ -54,6 +57,31 @@ afterAll(async () => {
 })
 
 describe('POST /api/enderecos', () => {
+  it('recusa endereço sem nome com 400, em vez de aceitar e falhar só na emissão', async () => {
+    // Guarda de consistência entre as duas portas do mesmo dado.
+    // `POST /api/envios` exige nome no remetente e no destinatário. Enquanto
+    // este schema aceitava endereço sem nome, a API respondia 201 e o
+    // problema só aparecia na emissão da etiqueta, com a mensagem apontando
+    // para o lugar errado. Erro que aparece longe da causa é o mais caro de
+    // diagnosticar — foi assim que o formulário passou a criar remetentes
+    // que nunca viravam envio.
+    const usuario = await criarUsuarioDeTeste('semNome')
+    usuariosCriados.push(usuario.id)
+    const sessionId = await criarSessionId(usuario.id)
+
+    const { nome: _nome, ...semNome } = { ...corpoRemetenteValido }
+    const resposta = await POST(criarRequest('POST', sessionId, semNome))
+
+    expect(resposta.status).toBe(400)
+
+    const corpo = (await resposta.json()) as { campos?: Record<string, string[]> }
+    expect(corpo.campos?.nome?.[0]).toBeDefined()
+
+    // E nada foi gravado: recusar tem que ser recusar, não criar pela metade.
+    const gravados = await prisma.address.count({ where: { userId: usuario.id } })
+    expect(gravados).toBe(0)
+  })
+
   it('devolve 401 sem sessão', async () => {
     const resposta = await POST(criarRequest('POST', null, corpoRemetenteValido))
     expect(resposta.status).toBe(401)
