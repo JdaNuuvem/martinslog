@@ -22,9 +22,9 @@ export default async function PaginaAdmin() {
   const cartoes = [
     { titulo: 'Regras de preço', valor: regras, href: '/admin/tabelas', pronto: true },
     { titulo: 'Webhooks na fila', valor: webhooksNaFila, href: '/admin/webhooks', pronto: true },
-    { titulo: 'Envios', valor: envios, href: '/admin/envios', pronto: false },
-    { titulo: 'Usuários', valor: usuarios, href: '/admin/usuarios', pronto: false },
-    { titulo: 'Registros de auditoria', valor: auditoria, href: '/admin/auditoria', pronto: false },
+    { titulo: 'Envios', valor: envios, href: '/admin/envios', pronto: true },
+    { titulo: 'Usuários', valor: usuarios, href: '/admin/usuarios', pronto: true },
+    { titulo: 'Registros de auditoria', valor: auditoria, href: '/admin/auditoria', pronto: true },
   ]
 
   return (
