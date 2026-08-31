@@ -1,0 +1,9 @@
+node_modules/
+.next/
+.env*
+!.env.example
+.claude-flow/
+.playwright-mcp/
+dist/
+coverage/
+*.log
