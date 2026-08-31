@@ -4,6 +4,7 @@ import { garantirTransicao } from '@/domain/shipment/estados'
 import { calcularOcorridoEm, gerarRoteiro } from '@/domain/simulacao/roteiro'
 import type { LocalidadeSimulacao } from '@/domain/simulacao/tipos'
 import { atribuirCodigoRastreio } from './codigo-rastreio-service'
+import { enfileirarEvento } from './webhook-service'
 import { obterConfigSimulacao } from './simulacao-config'
 
 /**
@@ -107,6 +108,13 @@ export async function emitirEtiqueta(shipmentId: string): Promise<{ codigoRastre
         ),
       })),
     })
+
+    // Depois do código e dos eventos, para que o payload saia com `tracking`
+    // preenchido — é o campo que o cliente espera justamente neste evento.
+    // Só grava linhas em WebhookDelivery: nenhuma requisição de rede acontece
+    // aqui, para que o tempo de resposta de um servidor de terceiro não possa
+    // derrubar esta transação.
+    await enfileirarEvento(envio.id, 'order.generated', tx)
 
     await tx.shipment.update({
       where: { id: envio.id },
