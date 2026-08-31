@@ -3,6 +3,7 @@ import { DomainError, EnvioNaoEncontradoError } from '@/domain/errors'
 import { acaoSimulacaoSchema } from '@/lib/simulacao-schema'
 import { exigirAdmin, respostaNaoEncontrado } from '@/server/admin/guarda'
 import {
+  aplicarStatusAgora,
   forcarProximoEvento,
   reiniciarLinhaDoTempo,
   trocarCenario,
@@ -66,6 +67,10 @@ export async function POST(
         break
       case 'REINICIAR':
         await reiniciarLinhaDoTempo(ator, id)
+        break
+      case 'APLICAR_STATUS':
+        // O schema garante que `codigo` existe quando a ação é esta.
+        await aplicarStatusAgora(ator, id, acao.codigo!)
         break
     }
 

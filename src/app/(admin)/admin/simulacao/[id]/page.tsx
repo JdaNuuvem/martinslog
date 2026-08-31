@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { prisma } from '@/infra/db/client'
 import { PainelSimulacaoEnvio } from '@/components/admin/painel-simulacao-envio'
+import { codigosPadraoDoMotor } from '@/domain/simulacao/roteiro'
+import { catalogoDoUsuario } from '@/server/status-rastreio-service'
 
 function dataHora(valor: Date): string {
   return valor.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' })
@@ -28,6 +30,7 @@ export default async function PaginaSimulacaoEnvio({
     where: { id },
     select: {
       id: true,
+      userId: true,
       codigoRastreio: true,
       status: true,
       cenario: true,
@@ -41,6 +44,14 @@ export default async function PaginaSimulacaoEnvio({
   if (!envio) {
     notFound()
   }
+
+  // Os códigos que "aplicar status agora" pode oferecer: os do motor mais os
+  // que a conta dona do envio criou. Oferecer um código fora dessa lista daria
+  // um erro só na hora de aplicar.
+  const catalogo = await catalogoDoUsuario(envio.userId)
+  const codigosDisponiveis = [
+    ...new Set([...codigosPadraoDoMotor(), ...catalogo.etapasExtras.map((e) => e.codigo)]),
+  ]
 
   const passados = envio.trackingEvents.filter((e) => e.ocorridoEm <= agora)
   const futuros = envio.trackingEvents.filter((e) => e.ocorridoEm > agora)
@@ -84,6 +95,7 @@ export default async function PaginaSimulacaoEnvio({
         shipmentId={envio.id}
         cenarioAtual={envio.cenario}
         temEventoPendente={futuros.length > 0}
+        codigosDisponiveis={codigosDisponiveis}
       />
 
       <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">

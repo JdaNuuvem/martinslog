@@ -15,6 +15,8 @@ type Props = {
   shipmentId: string
   cenarioAtual: string
   temEventoPendente: boolean
+  /** Códigos aplicáveis: os do motor mais os do catálogo desta conta. */
+  codigosDisponiveis: string[]
 }
 
 /**
@@ -25,9 +27,15 @@ type Props = {
  * O reinício pede confirmação porque é a única ação que descarta eventos que
  * o cliente já pode ter lido (spec seção 6).
  */
-export function PainelSimulacaoEnvio({ shipmentId, cenarioAtual, temEventoPendente }: Props) {
+export function PainelSimulacaoEnvio({
+  shipmentId,
+  cenarioAtual,
+  temEventoPendente,
+  codigosDisponiveis,
+}: Props) {
   const router = useRouter()
   const [cenario, setCenario] = useState(cenarioAtual)
+  const [codigoAplicar, setCodigoAplicar] = useState(codigosDisponiveis[0] ?? '')
   const [ocupado, setOcupado] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
@@ -115,6 +123,43 @@ export function PainelSimulacaoEnvio({ shipmentId, cenarioAtual, temEventoPenden
         >
           {ocupado === 'TROCAR_CENARIO' ? 'Trocando…' : 'Trocar cenário'}
         </button>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3 border-t border-borda-campo pt-4">
+        <label className="flex w-64 flex-col gap-1 text-sm">
+          <span className="text-texto-secundario">Aplicar status agora</span>
+          <select
+            value={codigoAplicar}
+            onChange={(evento) => setCodigoAplicar(evento.target.value)}
+            className="rounded-lg border border-borda-campo bg-transparent px-3 py-2 text-texto-principal focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+          >
+            {codigosDisponiveis.map((codigo) => (
+              <option key={codigo} value={codigo}>
+                {codigo}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <button
+          type="button"
+          disabled={ocupado !== null || !codigoAplicar}
+          onClick={() =>
+            executar(
+              { acao: 'APLICAR_STATUS', codigo: codigoAplicar },
+              `Status ${codigoAplicar} aplicado agora.`,
+            )
+          }
+          className={`${botao} border border-borda-campo text-texto-principal`}
+        >
+          {ocupado === 'APLICAR_STATUS' ? 'Aplicando…' : 'Aplicar'}
+        </button>
+
+        <p className="w-full text-sm text-texto-secundario">
+          Grava um evento forçado agora e move o envio para o status correspondente, se a máquina
+          de estados permitir o salto. O passado é preservado; do futuro, some apenas o que o
+          salto tornou inalcançável.
+        </p>
       </div>
 
       <div className="flex flex-wrap gap-3 border-t border-borda-campo pt-4">

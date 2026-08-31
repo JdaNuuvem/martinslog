@@ -35,12 +35,18 @@ export const cenarioSimulacaoSchema = z.enum([
  */
 export const acaoSimulacaoSchema = z
   .object({
-    acao: z.enum(['TROCAR_CENARIO', 'FORCAR_EVENTO', 'REINICIAR']),
+    acao: z.enum(['TROCAR_CENARIO', 'FORCAR_EVENTO', 'REINICIAR', 'APLICAR_STATUS']),
     cenario: cenarioSimulacaoSchema.optional(),
+    /** Código do status a aplicar. Só `APLICAR_STATUS` o usa. */
+    codigo: z.string().trim().min(1).max(60).optional(),
   })
   .refine((valor) => valor.acao !== 'TROCAR_CENARIO' || valor.cenario !== undefined, {
     message: 'Informe o cenário para trocar o cenário do envio.',
     path: ['cenario'],
+  })
+  .refine((valor) => valor.acao !== 'APLICAR_STATUS' || valor.codigo !== undefined, {
+    message: 'Informe o status a aplicar.',
+    path: ['codigo'],
   })
 
 export type FatorVelocidadeRequest = z.infer<typeof fatorVelocidadeSchema>

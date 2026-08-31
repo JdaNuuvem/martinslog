@@ -1,10 +1,16 @@
 import type { CenarioSimulacao, Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { EnvioNaoEncontradoError, ValorInvalidoError } from '@/domain/errors'
-import { calcularOcorridoEm, gerarRoteiro, statusDoEvento } from '@/domain/simulacao/roteiro'
+import {
+  calcularOcorridoEm,
+  gerarRoteiro,
+  statusDoEvento,
+  textoPadrao,
+} from '@/domain/simulacao/roteiro'
 import type { EventoRoteiro, LocalidadeSimulacao } from '@/domain/simulacao/tipos'
-import type { StatusShipment } from '@/domain/shipment/estados'
+import { garantirTransicao, transicoesValidas, type StatusShipment } from '@/domain/shipment/estados'
 import { ID_CONFIG_SIMULACAO, obterConfigSimulacao } from '@/server/simulacao-config'
+import { catalogoDoUsuario, obterStatusPorCodigo } from '@/server/status-rastreio-service'
 
 /**
  * Controles administrativos da simulação de transporte
@@ -393,5 +399,150 @@ export async function reiniciarLinhaDoTempo(
       { status: envio.status },
       { status: 'GENERATED', simulacaoIniciadaEm: agora, eventosGerados: roteiro.length },
     )
+  })
+}
+
+/**
+ * Aplica **agora** um status escolhido a dedo, gravando um evento forçado no
+ * fim da linha do tempo.
+ *
+ * Diferente de `forcarProximoEvento`, que apenas antecipa o que já estava
+ * previsto, aqui o administrador escolhe o código: é o caminho para "coloque
+ * este envio em SAIU_PARA_ENTREGA agora", sem precisar antecipar uma a uma as
+ * etapas do meio.
+ *
+ * O que a função NÃO faz, de propósito:
+ *
+ * - **Não contorna a máquina de estados.** `garantirTransicao` decide se o
+ *   salto é possível; recusar é melhor do que gravar um envio em estado
+ *   impossível, que quebraria toda leitura posterior.
+ * - **Não apaga o passado.** Os eventos já vistos pelo cliente continuam lá.
+ *   Some apenas o futuro que o salto tornou inalcançável — um evento cujo
+ *   status não pode mais suceder o aplicado ficaria pendurado, travando a
+ *   sincronização no primeiro `break` dela.
+ */
+export async function aplicarStatusAgora(
+  actorUserId: string,
+  shipmentId: string,
+  codigo: string,
+  agora: Date = new Date(),
+): Promise<{ status: StatusShipment }> {
+  return prisma.$transaction(async (tx) => {
+    const envio = await tx.shipment.findUnique({
+      where: { id: shipmentId },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        simulacaoIniciadaEm: true,
+        fatorSimulacao: true,
+        remetente: true,
+        destinatario: true,
+      },
+    })
+
+    if (!envio) {
+      throw new EnvioNaoEncontradoError(`Envio não encontrado: ${shipmentId}`)
+    }
+
+    const catalogo = await catalogoDoUsuario(envio.userId, tx)
+    const statusPorCodigo = await obterStatusPorCodigo(envio.userId, tx)
+
+    const alvo = statusDoEvento(codigo, statusPorCodigo)
+    if (alvo !== envio.status) {
+      garantirTransicao(envio.status, alvo)
+    }
+
+    const texto = catalogo.textos[codigo] ?? textoPadrao(codigo)
+    if (!texto) {
+      throw new ValorInvalidoError(
+        `Código ${codigo} não existe no catálogo desta conta nem no roteiro padrão.`,
+      )
+    }
+
+    const ultimo = await tx.trackingEvent.findFirst({
+      where: { shipmentId },
+      orderBy: { sequencia: 'desc' },
+      select: { sequencia: true },
+    })
+
+    // Eventos futuros que o salto tornou impossíveis. Os que ainda cabem
+    // depois do status aplicado permanecem — pular para "saiu para entrega"
+    // não deve apagar a entrega que viria em seguida.
+    const futuros = await tx.trackingEvent.findMany({
+      where: { shipmentId, ocorridoEm: { gt: agora } },
+      select: { id: true, codigo: true },
+    })
+
+    const inalcancaveis = futuros
+      .filter((evento) => {
+        let destino: StatusShipment
+        try {
+          destino = statusDoEvento(evento.codigo, statusPorCodigo)
+        } catch {
+          // Código sem tradução: mantido. Apagar o que não se entende é pior
+          // que deixá-lo parado.
+          return false
+        }
+        return destino !== alvo && !transicoesValidas[alvo].includes(destino)
+      })
+      .map((evento) => evento.id)
+
+    if (inalcancaveis.length > 0) {
+      await tx.trackingEvent.deleteMany({ where: { id: { in: inalcancaveis } } })
+    }
+
+    const destino = localidadeDoEndereco(
+      alvo === 'DELIVERED' || alvo === 'POSTED' ? envio.destinatario : envio.remetente,
+      'destinatário',
+    )
+
+    const inicio = envio.simulacaoIniciadaEm ?? agora
+    const offsetMinutos = Math.max(
+      0,
+      Math.round(((agora.getTime() - inicio.getTime()) * envio.fatorSimulacao) / 60_000),
+    )
+
+    await tx.trackingEvent.create({
+      data: {
+        shipmentId: envio.id,
+        sequencia: (ultimo?.sequencia ?? 0) + 1,
+        offsetMinutos,
+        codigo,
+        status: codigo,
+        titulo: texto.titulo,
+        descricao: texto.descricao,
+        cidade: destino.cidade,
+        uf: destino.uf,
+        ocorridoEm: agora,
+        forcado: true,
+      },
+    })
+
+    const dados: Prisma.ShipmentUpdateInput = {}
+    if (alvo !== envio.status) {
+      dados.status = alvo
+      if (alvo === 'POSTED') dados.postadoEm = agora
+      if (alvo === 'DELIVERED') dados.entregueEm = agora
+      if (codigo === 'DEVOLVIDO') dados.devolvidoEm = agora
+      await tx.shipment.update({ where: { id: envio.id }, data: dados })
+    }
+
+    await registrarAuditoria(
+      tx,
+      actorUserId,
+      'SIMULACAO_APLICAR_STATUS',
+      'Shipment',
+      envio.id,
+      { status: envio.status } as Prisma.InputJsonValue,
+      {
+        status: alvo,
+        codigo,
+        aplicadoEm: agora.toISOString(),
+        eventosDescartados: inalcancaveis.length,
+      } as Prisma.InputJsonValue,
+    )
+
+    return { status: alvo }
   })
 }
