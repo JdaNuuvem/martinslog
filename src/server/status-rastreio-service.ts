@@ -26,6 +26,8 @@ export type EntradaStatus = {
   descricao: string
   cenario?: CenarioSimulacao | null
   fracaoPrazo?: number | null
+  /** Posição em dias após a emissão. Preenchida, prevalece sobre a fração. */
+  diasAposEmissao?: number | null
   statusResultante?: StatusShipment | null
   ativo?: boolean
 }
@@ -36,6 +38,7 @@ function paraLinha(registro: {
   descricao: string
   cenario: string | null
   fracaoPrazo: number | null
+  diasAposEmissao: number | null
   statusResultante: string | null
   ativo: boolean
 }): LinhaStatus {
@@ -45,6 +48,7 @@ function paraLinha(registro: {
     descricao: registro.descricao,
     cenario: (registro.cenario as CenarioSimulacao | null) ?? null,
     fracaoPrazo: registro.fracaoPrazo,
+    diasAposEmissao: registro.diasAposEmissao,
     statusResultante: (registro.statusResultante as StatusShipment | null) ?? null,
     ativo: registro.ativo,
   }
@@ -96,8 +100,22 @@ export async function catalogoDoUsuario(
  * uma emissão de etiqueta horas depois. Não substitui a validação da
  * geração: aquela é a barreira real.
  */
-async function conferirPreviaDoRoteiro(userId: string, catalogo: CatalogoResolvido): Promise<void> {
-  const cenarios = new Set(catalogo.etapasExtras.map((e) => e.cenario))
+const TODOS_CENARIOS: readonly CenarioSimulacao[] = [
+  'ENTREGA_NORMAL',
+  'ATRASO',
+  'TENTATIVA_FALHA',
+  'EXTRAVIO',
+  'DEVOLUCAO',
+]
+
+async function conferirPreviaDoRoteiro(catalogo: CatalogoResolvido): Promise<void> {
+  // Reposicionar uma etapa do roteiro padrão afeta TODOS os cenários, não só
+  // os que ganharam etapa extra: mover a postagem para depois da entrega
+  // quebra a entrega normal, onde nenhuma etapa foi criada.
+  const cenarios =
+    Object.keys(catalogo.posicoesDias).length > 0
+      ? new Set(TODOS_CENARIOS)
+      : new Set(catalogo.etapasExtras.map((e) => e.cenario))
 
   for (const cenario of cenarios) {
     try {
@@ -108,6 +126,7 @@ async function conferirPreviaDoRoteiro(userId: string, catalogo: CatalogoResolvi
         destino: { cidade: 'Rio de Janeiro', uf: 'RJ' },
         textos: catalogo.textos,
         etapasExtras: catalogo.etapasExtras,
+        posicoesDias: catalogo.posicoesDias,
       })
     } catch (error) {
       throw new ValorInvalidoError(
@@ -136,15 +155,17 @@ export async function salvarStatus(userId: string, entrada: EntradaStatus) {
 
   const cenario = entrada.cenario ?? null
   const fracaoPrazo = entrada.fracaoPrazo ?? null
+  const diasAposEmissao = entrada.diasAposEmissao ?? null
   const statusResultante = entrada.statusResultante ?? null
 
-  validarStatusCustomizado({ codigo, cenario, fracaoPrazo, statusResultante })
+  validarStatusCustomizado({ codigo, cenario, fracaoPrazo, diasAposEmissao, statusResultante })
 
   const campos = {
     titulo: entrada.titulo.trim(),
     descricao: entrada.descricao.trim(),
     cenario,
     fracaoPrazo,
+    diasAposEmissao,
     statusResultante,
     ativo: entrada.ativo ?? true,
   }
@@ -163,7 +184,7 @@ export async function salvarStatus(userId: string, entrada: EntradaStatus) {
   // Confere depois de gravar, dentro do mesmo pedido: se a combinação
   // quebrar a linha do tempo, desfaz e devolve erro explicável.
   try {
-    await conferirPreviaDoRoteiro(userId, await catalogoDoUsuario(userId))
+    await conferirPreviaDoRoteiro(await catalogoDoUsuario(userId))
   } catch (error) {
     // Volta ao estado anterior: restaura a linha antiga se havia uma, ou
     // apaga a que acabou de nascer.
@@ -176,6 +197,7 @@ export async function salvarStatus(userId: string, entrada: EntradaStatus) {
             descricao: existente.descricao,
             cenario: existente.cenario,
             fracaoPrazo: existente.fracaoPrazo,
+            diasAposEmissao: existente.diasAposEmissao,
             statusResultante: existente.statusResultante,
             ativo: existente.ativo,
           },

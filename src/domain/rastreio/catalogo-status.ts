@@ -23,6 +23,15 @@ export type LinhaStatus = {
   /** Preenchidos só em status criados pela conta, que entram no roteiro. */
   cenario: CenarioSimulacao | null
   fracaoPrazo: number | null
+  /**
+   * Posição em dias corridos após a emissão, alternativa a `fracaoPrazo`.
+   *
+   * Preenchida, vence a fração: quem escreveu "2 dias" pediu um número
+   * absoluto, e reconvertê-lo em fração do prazo daria posições diferentes em
+   * cada serviço — o oposto do que foi pedido. Em um código do roteiro padrão
+   * ela **reposiciona** a etapa existente, sem criar uma segunda.
+   */
+  diasAposEmissao: number | null
   statusResultante: StatusShipment | null
   ativo: boolean
 }
@@ -30,6 +39,8 @@ export type LinhaStatus = {
 /** Etapa extra pronta para ser fundida no roteiro. */
 export type EtapaExtra = {
   fracao: number
+  /** Quando presente, posiciona a etapa em dias em vez de fração do prazo. */
+  dias?: number
   codigo: string
   titulo: string
   descricao: string
@@ -40,6 +51,12 @@ export type EtapaExtra = {
 export type CatalogoResolvido = {
   textos: Record<string, { titulo: string; descricao: string }>
   etapasExtras: EtapaExtra[]
+  /**
+   * Reposicionamento em dias por código, aplicado às etapas que o roteiro já
+   * gera sozinho. É o que permite "muda de status a cada X dias" sem
+   * reescrever o motor de cenários.
+   */
+  posicoesDias: Record<string, number>
 }
 
 /**
@@ -72,6 +89,13 @@ const STATUS_TERMINAIS: readonly StatusShipment[] = ['DELIVERED', 'LOST', 'CANCE
 const FRACAO_MAXIMA = 5
 
 /**
+ * Teto da posição em dias. Um ano de trânsito não é simulação de transporte,
+ * é dedo escorregando na tecla — e um offset absurdo empurraria a timeline
+ * inteira para um futuro que ninguém veria.
+ */
+const DIAS_MAXIMO = 365
+
+/**
  * Converte o nome digitado pelo usuário em um código estável: sem acento,
  * maiúsculas, separado por sublinhado. O código é a chave de sobreposição,
  * então precisa sobreviver a espaços a mais e a diferenças de acentuação.
@@ -102,20 +126,41 @@ export function validarStatusCustomizado(entrada: {
   codigo: string
   cenario: CenarioSimulacao | null
   fracaoPrazo: number | null
+  diasAposEmissao?: number | null
   statusResultante: StatusShipment | null
 }): void {
   const { codigo, cenario, fracaoPrazo, statusResultante } = entrada
+  const diasAposEmissao = entrada.diasAposEmissao ?? null
+  const ehPadrao = (CODIGOS_PADRAO as readonly string[]).includes(codigo)
 
-  // Sem fração, é só uma reescrita de copy: não entra no roteiro e não
-  // precisa dos demais campos.
-  if (fracaoPrazo === null) {
+  if (diasAposEmissao !== null) {
+    if (!Number.isFinite(diasAposEmissao) || diasAposEmissao < 0 || diasAposEmissao > DIAS_MAXIMO) {
+      throw new ValorInvalidoError(
+        `Dias após a emissão deve estar entre 0 e ${DIAS_MAXIMO}, recebido: ${diasAposEmissao}`,
+      )
+    }
+  }
+
+  // Reposicionar um código do roteiro padrão é legítimo e não exige cenário
+  // nem status resultante: a etapa já existe no motor, com os dois definidos.
+  // O que continua proibido é transformá-la em etapa nova — daí a fração
+  // seguir barrada para esses códigos, logo abaixo.
+  if (ehPadrao && diasAposEmissao !== null && fracaoPrazo === null) {
     return
   }
 
-  if (!Number.isFinite(fracaoPrazo) || fracaoPrazo <= 0 || fracaoPrazo > FRACAO_MAXIMA) {
-    throw new ValorInvalidoError(
-      `Fração do prazo deve ser maior que 0 e no máximo ${FRACAO_MAXIMA}, recebida: ${fracaoPrazo}`,
-    )
+  // Sem posição nenhuma, é só uma reescrita de copy: não entra no roteiro e
+  // não precisa dos demais campos.
+  if (fracaoPrazo === null && diasAposEmissao === null) {
+    return
+  }
+
+  if (fracaoPrazo !== null) {
+    if (!Number.isFinite(fracaoPrazo) || fracaoPrazo <= 0 || fracaoPrazo > FRACAO_MAXIMA) {
+      throw new ValorInvalidoError(
+        `Fração do prazo deve ser maior que 0 e no máximo ${FRACAO_MAXIMA}, recebida: ${fracaoPrazo}`,
+      )
+    }
   }
 
   if (!cenario) {
@@ -132,15 +177,26 @@ export function validarStatusCustomizado(entrada: {
     )
   }
 
-  if ((CODIGOS_PADRAO as readonly string[]).includes(codigo)) {
+  if (ehPadrao) {
     throw new ValorInvalidoError(
-      `O código ${codigo} já é gerado pelo roteiro padrão; personalize o texto dele em vez de criar uma etapa nova.`,
+      `O código ${codigo} já é gerado pelo roteiro padrão; personalize o texto dele, ou mova-o com "dias após a emissão", em vez de criar uma etapa nova.`,
     )
   }
 }
 
 function ehEtapaExtra(linha: LinhaStatus): boolean {
-  return linha.ativo && linha.fracaoPrazo !== null && !!linha.cenario && !!linha.statusResultante
+  return (
+    linha.ativo &&
+    !(CODIGOS_PADRAO as readonly string[]).includes(linha.codigo) &&
+    (linha.fracaoPrazo !== null || linha.diasAposEmissao !== null) &&
+    !!linha.cenario &&
+    !!linha.statusResultante
+  )
+}
+
+/** Ordem de uma etapa extra para o `sort`, em "dias equivalentes" grosseiros. */
+function chaveDeOrdem(etapa: EtapaExtra): number {
+  return etapa.dias ?? etapa.fracao
 }
 
 /**
@@ -167,17 +223,36 @@ export function resolverCatalogo(
     textos[linha.codigo] = { titulo: linha.titulo, descricao: linha.descricao }
   }
 
-  const etapasExtras = daConta
-    .filter(ehEtapaExtra)
-    .map((linha) => ({
-      fracao: linha.fracaoPrazo as number,
+  // Etapas novas podem vir do catálogo padrão (criadas pelo administrador,
+  // valem para todo mundo) e do catálogo da conta. As da conta vêm depois
+  // para que uma linha dela cubra a padrão de mesmo código.
+  const extrasPorCodigo = new Map<string, EtapaExtra>()
+
+  for (const linha of [...padrao, ...daConta]) {
+    if (!ehEtapaExtra(linha)) continue
+    extrasPorCodigo.set(linha.codigo, {
+      fracao: linha.fracaoPrazo ?? 0,
+      ...(linha.diasAposEmissao !== null ? { dias: linha.diasAposEmissao } : {}),
       codigo: linha.codigo,
       titulo: linha.titulo,
       descricao: linha.descricao,
       cenario: linha.cenario as CenarioSimulacao,
       statusResultante: linha.statusResultante as StatusShipment,
-    }))
-    .sort((a, b) => a.fracao - b.fracao)
+    })
+  }
 
-  return { textos, etapasExtras }
+  const etapasExtras = [...extrasPorCodigo.values()].sort(
+    (a, b) => chaveDeOrdem(a) - chaveDeOrdem(b),
+  )
+
+  // Reposicionamento das etapas que o motor já gera. Vale para qualquer
+  // código, padrão ou da conta; para os da conta é redundante com a própria
+  // etapa extra, e informá-lo duas vezes não muda o resultado.
+  const posicoesDias: Record<string, number> = {}
+  for (const linha of [...padrao, ...daConta]) {
+    if (!linha.ativo || linha.diasAposEmissao === null) continue
+    posicoesDias[linha.codigo] = linha.diasAposEmissao
+  }
+
+  return { textos, etapasExtras, posicoesDias }
 }

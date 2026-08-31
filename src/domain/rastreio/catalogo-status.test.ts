@@ -15,6 +15,7 @@ function linha(sobrescritas: Partial<LinhaStatus> = {}): LinhaStatus {
     descricao: 'Objeto postado',
     cenario: null,
     fracaoPrazo: null,
+    diasAposEmissao: null,
     statusResultante: null,
     ativo: true,
     ...sobrescritas,
@@ -190,5 +191,60 @@ describe('validarStatusCustomizado', () => {
         statusResultante: 'POSTED',
       }),
     ).toThrow(ValorInvalidoError)
+  })
+})
+
+describe('validarStatusCustomizado — posição em dias absolutos', () => {
+  /**
+   * Cobertura da validação de `diasAposEmissao`, escrita depois do código
+   * (que veio de outra sessão) para registrar o que a regra permite. Sem
+   * estes casos, a faixa aceita existia só na implementação.
+   */
+  function statusEmDias(diasAposEmissao: number | null, codigo = 'EM_CONFERENCIA') {
+    return {
+      codigo,
+      cenario: 'ENTREGA_NORMAL' as const,
+      fracaoPrazo: null,
+      diasAposEmissao,
+      statusResultante: 'POSTED' as const,
+    }
+  }
+
+  it('aceita um número de dias dentro da faixa', () => {
+    for (const dias of [0, 1, 30, 365]) {
+      expect(() => validarStatusCustomizado(statusEmDias(dias))).not.toThrow()
+    }
+  })
+
+  it('aceita nulo: é o padrão de quem não posiciona por dias', () => {
+    expect(() => validarStatusCustomizado(statusEmDias(null))).not.toThrow()
+  })
+
+  it('recusa dias negativos — nada acontece antes da emissão', () => {
+    expect(() => validarStatusCustomizado(statusEmDias(-1))).toThrow(ValorInvalidoError)
+  })
+
+  it('recusa dias acima do máximo', () => {
+    expect(() => validarStatusCustomizado(statusEmDias(366))).toThrow(ValorInvalidoError)
+  })
+
+  it('recusa valor não finito', () => {
+    for (const dias of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(() => validarStatusCustomizado(statusEmDias(dias))).toThrow(ValorInvalidoError)
+    }
+  })
+
+  it('permite reposicionar um código do roteiro padrão por dias, sem transformá-lo em etapa nova', () => {
+    // A etapa já existe no motor com cenário e status definidos, então
+    // reposicioná-la não exige os demais campos.
+    expect(() =>
+      validarStatusCustomizado({
+        codigo: CODIGOS_PADRAO[1]!,
+        cenario: null,
+        fracaoPrazo: null,
+        diasAposEmissao: 3,
+        statusResultante: null,
+      }),
+    ).not.toThrow()
   })
 })

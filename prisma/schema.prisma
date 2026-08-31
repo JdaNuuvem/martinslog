@@ -418,6 +418,7 @@ model StatusRastreio {
   descricao        String
   cenario          CenarioSimulacao?
   fracaoPrazo      Float?
+  diasAposEmissao  Float?
   statusResultante StatusShipment?
   ativo            Boolean           @default(true)
   criadoEm         DateTime          @default(now())

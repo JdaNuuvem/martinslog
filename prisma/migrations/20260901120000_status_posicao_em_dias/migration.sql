@@ -1,0 +1,17 @@
+-- Posição de um status em DIAS após a emissão, alternativa à fração do prazo.
+--
+-- Até aqui a única forma de posicionar uma etapa era `fracaoPrazo`: a etapa
+-- caía em 0,25 · P, onde P é o prazo do serviço. Isso amarra a linha do tempo
+-- ao serviço contratado, o que é o certo para simular transporte real, mas
+-- impede a operação de dizer "muda de status a cada 2 dias, ponto".
+--
+-- As duas convivem, e `diasAposEmissao` vence quando as duas estão
+-- preenchidas: quem define a posição em dias está declarando um número
+-- absoluto, e traduzi-lo de volta para fração do prazo mudaria o que foi
+-- pedido em todo serviço com prazo diferente.
+--
+-- Vale também para os códigos do roteiro padrão: preencher esta coluna em uma
+-- linha do catálogo padrão (userId nulo) **reposiciona** aquela etapa, em vez
+-- de criar uma nova — repetir POSTADO na timeline seria pior que não poder
+-- movê-lo.
+ALTER TABLE "status_rastreio" ADD COLUMN "diasAposEmissao" DOUBLE PRECISION;
