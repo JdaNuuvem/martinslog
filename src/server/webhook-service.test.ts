@@ -341,12 +341,18 @@ describe('dispararPendentes', () => {
     const app = await criarApp()
     await enfileirarEvento(shipmentId, 'order.created')
     await prisma.webhookApp.update({ where: { id: app.id }, data: { ativo: false } })
-    const espiao = vi.spyOn(globalThis, 'fetch')
 
-    const resultado = await dispararPendentes()
+    // A fila é global e outros arquivos rodam em paralelo: afirma-se o
+    // efeito sobre esta entrega, não a ausência total de `fetch` nem a
+    // contagem do disparo.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('ok', { status: 200 }))
 
-    expect(espiao).not.toHaveBeenCalled()
-    expect(resultado.desistidas).toBe(1)
+    await dispararPendentes()
+
+    const entrega = await primeiraEntrega()
+    expect(entrega?.entregueEm).toBeNull()
+    expect(entrega?.proximaTentativaEm).toBeNull()
+    expect(entrega?.erro).toMatch(/desativado/i)
   })
 
   it('recusa destino cuja URL resolve para rede interna, sem chamar fetch', async () => {
