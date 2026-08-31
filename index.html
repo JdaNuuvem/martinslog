@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Martins Log — Transportadora e Logística | Rastreie sua encomenda</title>
+<meta name="description" content="Transportadora rodoviária de cargas com frota própria, seguro total e rastreamento 24h. Rastreie sua encomenda pelo código e acompanhe a entrega em tempo real.">
+<meta name="theme-color" content="#0E1E3C">
+
+<!-- Open Graph / Twitter -->
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="Martins Log">
+<meta property="og:title" content="Martins Log — Transportadora e Logística">
+<meta property="og:description" content="Frota própria, seguro total da carga e rastreamento 24h. Rastreie sua encomenda em tempo real.">
+<meta property="og:image" content="assets/img/logo-martins-log-640.png">
+<meta property="og:image:width" content="640">
+<meta property="og:image:height" content="640">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Martins Log — Transportadora e Logística">
+<meta name="twitter:description" content="Frota própria, seguro total da carga e rastreamento 24h.">
+<meta name="twitter:image" content="assets/img/logo-martins-log-640.png">
+
+<link rel="icon" href="assets/img/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/img/favicon-180.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@700;800;900&display=swap">
+
+<link rel="stylesheet" href="assets/css/style.css">
+
+<script>
+  /* Marca que há JavaScript ativo antes da primeira pintura. É isso que
+     libera as animações de entrada: sem esta classe o conteúdo nasce
+     visível, e a página nunca fica em branco se o script falhar. */
+  document.documentElement.className += ' js';
+
+  /* Pontos de integração, fáceis de trocar. */
+  window.MARTINS_CONFIG = {
+    rastreioEndpoint: '/api/rastreio',    // GET  {base}/{codigo}
+    contatoEndpoint:  '/api/contato',     // POST
+    whatsapp:         '5500000000000'     // TODO: número real
+  };
+</script>
+
+<!-- TODO: preencher com os dados reais da empresa antes de publicar -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "MovingCompany",
+  "name": "Martins Log",
+  "description": "Transportadora rodoviária de cargas com frota própria, seguro total e rastreamento 24h.",
+  "image": "assets/img/logo-martins-log-640.png",
+  "telephone": "+55 00 0000-0000",
+  "email": "contato@martinslog.com.br",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "Rua Exemplo, 000",
+    "addressLocality": "Cidade",
+    "addressRegion": "UF",
+    "postalCode": "00000-000",
+    "addressCountry": "BR"
+  },
+  "openingHours": "Mo-Fr 08:00-18:00",
+  "areaServed": { "@type": "Country", "name": "Brasil" }
+}
+</script>
+</head>
+
+<body>
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+<!-- ===== HEADER ===== -->
+<header class="cabecalho" id="cabecalho">
+  <div class="container cabecalho__interno">
+    <a class="cabecalho__marca" href="#inicio" aria-label="Martins Log — ir para o início">
+      <picture>
+        <source srcset="assets/img/logo-martins-log-640.webp" type="image/webp">
+        <img src="assets/img/logo-martins-log-640.png" alt="Martins Log" width="48" height="48" fetchpriority="high">
+      </picture>
+      <span class="cabecalho__nome">Martins<span>Log</span></span>
+    </a>
+
+    <nav class="menu" id="menu" aria-label="Navegação principal">
+      <button class="menu__fechar" type="button" aria-label="Fechar menu">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <ul class="menu__lista">
+        <li><a href="#inicio">Início</a></li>
+        <li><a href="#servicos">Serviços</a></li>
+        <li><a href="#rastreio">Rastreio</a></li>
+        <li><a href="#sobre">Sobre</a></li>
+        <li><a href="#cobertura">Cobertura</a></li>
+        <li><a href="#contato">Contato</a></li>
+      </ul>
+    </nav>
+
+    <div class="cabecalho__acoes">
+      <!-- TODO: telefone real -->
+      <a class="cabecalho__fone" href="tel:+550000000000">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2Z"/></svg>
+        <span>(00) 0000-0000</span>
+      </a>
+      <a class="botao botao--primario botao--pill cabecalho__cta" href="#contato">Solicitar cotação</a>
+      <button class="hamburguer" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="menu__fundo" hidden></div>
+
+<main id="conteudo">
+
+  <!-- ===== HERO ===== -->
+  <section class="hero" id="inicio">
+    <div class="hero__estrada" aria-hidden="true">
+      <svg viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+        <path d="M-100 900C180 700 220 520 460 380 700 240 760 120 1100 40 1300 -8 1420 -20 1560 0" fill="none" stroke="#fff" stroke-width="120" opacity=".05"/>
+        <path d="M-100 900C180 700 220 520 460 380 700 240 760 120 1100 40 1300 -8 1420 -20 1560 0" fill="none" stroke="#fff" stroke-width="3" stroke-dasharray="26 34" opacity=".28"/>
+        <path d="M-140 960C140 760 180 580 420 440 660 300 720 180 1060 100 1260 52 1380 40 1520 60" fill="none" stroke="#E8323C" stroke-width="3" stroke-dasharray="18 40" opacity=".35"/>
+      </svg>
+    </div>
+    <div class="hero__brilho" aria-hidden="true"></div>
+
+    <div class="container hero__grade">
+      <div class="hero__texto">
+        <p class="eyebrow eyebrow--claro">Transporte rodoviário de cargas</p>
+        <h1 class="hero__titulo">
+          Sua carga no destino certo,<br>
+          <span class="hero__destaque">no prazo certo</span>
+        </h1>
+        <p class="hero__apoio">
+          Frota própria, motoristas da casa e rastreamento em tempo real do
+          embarque à entrega. Você acompanha cada quilômetro sem precisar ligar.
+        </p>
+        <div class="hero__botoes">
+          <a class="botao botao--primario botao--grande" href="#contato">Solicitar cotação</a>
+          <a class="botao botao--contorno botao--grande" href="#" data-whatsapp target="_blank" rel="noopener">
+            <svg class="botao__icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-12.6 7.3L3 20.5l1.8-5.3A8.5 8.5 0 1 1 21 11.5Z"/></svg>
+            Falar no WhatsApp
+          </a>
+        </div>
+      </div>
+
+      <!-- ===== CARD DE RASTREIO ===== -->
+      <div class="hero__card" id="rastreio">
+        <div class="rastreio">
+          <div class="rastreio__topo">
+            <span class="rastreio__icone" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="m21 8-9-5-9 5 9 5 9-5Zm0 0v8l-9 5-9-5V8"/><path d="m7.5 5.5 9 5"/></svg>
+            </span>
+            <div>
+              <h2 class="rastreio__titulo">Rastreie sua encomenda</h2>
+              <p class="rastreio__subtitulo">Informe o código de rastreio para acompanhar sua entrega em tempo real.</p>
+            </div>
+          </div>
+
+          <form class="rastreio__form" id="form-rastreio" novalidate>
+            <div class="rastreio__campo">
+              <label class="sr-only" for="codigo">Código de rastreio</label>
+              <span class="rastreio__lupa" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              </span>
+              <input id="codigo" name="codigo" type="text" placeholder="Ex.: ML123456789BR"
+                     inputmode="latin" autocomplete="off" spellcheck="false"
+                     aria-describedby="erro-codigo">
+              <button class="botao botao--primario rastreio__enviar" type="submit">
+                <span class="rastreio__enviar-texto">Rastrear</span>
+                <span class="spinner" hidden aria-hidden="true"></span>
+              </button>
+            </div>
+            <p class="campo__erro" id="erro-codigo" role="status" hidden></p>
+          </form>
+
+          <div class="rastreio__resultado" id="resultado" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <ul class="selos">
+        <li class="selo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17h4V5H2v12h3m5 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0m0 0h3m-3-9h4l3 4v5h-2m0 0a2 2 0 1 1-4 0"/></svg>
+          <span>Frota própria</span>
+        </li>
+        <li class="selo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>
+          <span>Seguro total da carga</span>
+        </li>
+        <li class="selo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <span>Rastreamento 24h</span>
+        </li>
+        <li class="selo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18Z"/></svg>
+          <span>Entrega em todo o Brasil</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="divisor-onda" aria-hidden="true">
+      <svg viewBox="0 0 1440 90" preserveAspectRatio="none"><path d="M0 90V40c240 40 480 55 720 30S1200 10 1440 30v60Z" fill="#fff"/></svg>
+    </div>
+  </section>
+
+  <!-- ===== SERVIÇOS ===== -->
+  <section class="secao" id="servicos">
+    <div class="container">
+      <header class="secao__cabecalho revelar">
+        <p class="eyebrow">O que fazemos</p>
+        <h2 class="secao__titulo">Soluções de transporte para cada tipo de carga</h2>
+        <span class="secao__linha" aria-hidden="true"></span>
+        <p class="secao__apoio">Do volume avulso ao caminhão fechado, com a mesma rastreabilidade e o mesmo cuidado com o prazo.</p>
+      </header>
+
+      <div class="cards">
+        <article class="card revelar">
+          <span class="card__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg></span>
+          <h3 class="card__titulo">Carga fracionada</h3>
+          <p class="card__texto">Sua mercadoria dividindo espaço no veículo, com custo proporcional ao que ela ocupa.</p>
+          <span class="card__link">Saiba mais <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span>
+        </article>
+
+        <article class="card revelar">
+          <span class="card__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 17h4V5H2v12h3m5 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0m0 0h3m-3-9h4l3 4v5h-2m0 0a2 2 0 1 1-4 0"/></svg></span>
+          <h3 class="card__titulo">Carga dedicada / lotação</h3>
+          <p class="card__texto">Veículo exclusivo para o seu embarque, direto da origem ao destino, sem redistribuição.</p>
+          <span class="card__link">Saiba mais <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span>
+        </article>
+
+        <article class="card revelar">
+          <span class="card__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg></span>
+          <h3 class="card__titulo">Entrega expressa</h3>
+          <p class="card__texto">Prazos reduzidos para cargas urgentes, com prioridade de embarque e acompanhamento próximo.</p>
+          <span class="card__link">Saiba mais <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span>
+        </article>
+
+        <article class="card revelar">
+          <span class="card__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 21V8l9-5 9 5v13"/><path d="M3 21h18M9 21v-6h6v6"/></svg></span>
+          <h3 class="card__titulo">Armazenagem</h3>
+          <p class="card__texto">Estrutura para guarda, separação e expedição da mercadoria entre a coleta e a entrega.</p>
+          <span class="card__link">Saiba mais <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span>
+        </article>
+
+        <article class="card revelar">
+          <span class="card__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2h12l2 6H4l2-6Z"/><path d="M4 8v12h16V8M9 12h6"/></svg></span>
+          <h3 class="card__titulo">Logística para e-commerce</h3>
+          <p class="card__texto">Coleta, expedição e entrega ao consumidor final, com código de rastreio para o seu cliente.</p>
+          <span class="card__link">Saiba mais <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span>
+        </article>
+
+        <article class="card revelar">
+          <span class="card__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V9l8-6 8 6v11"/><path d="M4 20h16M10 20v-5h4v5M9 10h6"/></svg></span>
+          <h3 class="card__titulo">Mudanças e transferências</h3>
+          <p class="card__texto">Cargas residenciais e industriais, com equipe preparada para carregamento e descarga.</p>
+          <span class="card__link">Saiba mais <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></span>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== NÚMEROS ===== -->
+  <section class="numeros" id="numeros">
+    <div class="numeros__estrada" aria-hidden="true">
+      <svg viewBox="0 0 1440 320" preserveAspectRatio="none">
+        <path d="M-50 300C260 240 420 120 760 90s520-60 780-30" fill="none" stroke="#fff" stroke-width="70" opacity=".04"/>
+        <path d="M-50 300C260 240 420 120 760 90s520-60 780-30" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="20 30" opacity=".2"/>
+      </svg>
+    </div>
+    <div class="container">
+      <!-- TODO: confirmar com o cliente -->
+      <ul class="numeros__lista">
+        <li class="numero revelar">
+          <strong class="numero__valor" data-contador="15" data-prefixo="+">+0</strong>
+          <span class="numero__rotulo">anos na estrada</span>
+        </li>
+        <li class="numero revelar">
+          <strong class="numero__valor" data-contador="120" data-prefixo="+" data-sufixo=" mil">+0</strong>
+          <span class="numero__rotulo">entregas realizadas</span>
+        </li>
+        <li class="numero revelar">
+          <strong class="numero__valor" data-contador="1800" data-prefixo="+">+0</strong>
+          <span class="numero__rotulo">cidades atendidas</span>
+        </li>
+        <li class="numero revelar">
+          <strong class="numero__valor" data-contador="80" data-prefixo="+">+0</strong>
+          <span class="numero__rotulo">veículos na frota</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===== SOBRE ===== -->
+  <section class="secao" id="sobre">
+    <div class="container sobre__grade">
+      <div class="sobre__visual revelar" aria-hidden="true">
+        <span class="sobre__bloco"></span>
+        <div class="sobre__moldura">
+          <picture>
+            <source srcset="assets/img/logo-martins-log-640.webp" type="image/webp">
+            <img src="assets/img/logo-martins-log-640.png" alt="" width="640" height="640" loading="lazy">
+          </picture>
+        </div>
+      </div>
+
+      <div class="sobre__texto revelar">
+        <p class="eyebrow">Sobre a Martins Log</p>
+        <h2 class="secao__titulo secao__titulo--esq">Gente que conhece a estrada</h2>
+        <span class="secao__linha secao__linha--esq" aria-hidden="true"></span>
+        <p>
+          A Martins Log nasceu do chão de garagem: motorista que virou transportadora
+          e nunca deixou de acompanhar a operação de perto. Hoje somos uma frota
+          própria de veículos monitorados, com equipe de motoristas contratados pela
+          casa — não terceirizados de última hora.
+        </p>
+        <p>
+          Cada carga que sai da nossa base tem um responsável com nome e telefone.
+          É esse compromisso que faz nosso cliente voltar: quando algo foge do
+          previsto, você fica sabendo por nós antes de perguntar.
+        </p>
+
+        <ul class="lista-check">
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 13 4 4L19 7"/></svg>Frota própria e monitorada</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 13 4 4L19 7"/></svg>Seguro total da carga</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 13 4 4L19 7"/></svg>Equipe própria de motoristas</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 13 4 4L19 7"/></svg>Atendimento direto, sem call center</li>
+        </ul>
+
+        <a class="botao botao--navy" href="#contato">Conheça a empresa</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== COBERTURA ===== -->
+  <section class="secao secao--cinza" id="cobertura">
+    <div class="container">
+      <header class="secao__cabecalho revelar">
+        <p class="eyebrow">Onde chegamos</p>
+        <h2 class="secao__titulo">Cobertura nacional</h2>
+        <span class="secao__linha" aria-hidden="true"></span>
+        <p class="secao__apoio">Passe o mouse sobre uma região para vê-la destacada no mapa.</p>
+      </header>
+
+      <div class="cobertura__grade">
+        <div class="cobertura__mapa revelar">
+          <!-- Silhueta simplificada do Brasil, dividida nas 5 regiões.
+               Os vértices vêm de uma projeção linear das coordenadas reais
+               (x = (lon+74)*12, y = (5,3-lat)*12,8), então a proporção e o
+               contorno batem com o país — sem a precisão de um shapefile,
+               que aqui só pesaria. As bordas compartilhadas usam os mesmos
+               pontos nas duas regiões, para não abrir fresta entre elas. -->
+          <svg viewBox="0 0 480 520" role="img" aria-label="Mapa do Brasil com as regiões atendidas">
+            <g class="mapa__regioes">
+              <path class="mapa__regiao" data-regiao="norte"
+                d="M1 164 20 110 55 55 100 20 168 10 215 32 276 19 290 72 306 87 302 160 300 240 230 200 156 225 120 235 100 215 40 200 12 193Z"/>
+              <path class="mapa__regiao" data-regiao="nordeste"
+                d="M306 87 356 100 420 120 465 142 470 162 450 205 426 236 415 290 408 270 336 255 300 240 302 160Z"/>
+              <path class="mapa__regiao" data-regiao="centro-oeste"
+                d="M156 225 230 200 300 240 300 300 272 318 252 355 192 320 160 270Z"/>
+              <path class="mapa__regiao" data-regiao="sudeste"
+                d="M300 240 336 255 408 270 415 290 395 330 370 362 330 392 252 355 272 318 300 300Z"/>
+              <path class="mapa__regiao" data-regiao="sul"
+                d="M252 355 330 392 306 419 286 452 247 500 228 455 233 395Z"/>
+            </g>
+          </svg>
+        </div>
+
+        <div class="cobertura__lista revelar">
+          <p class="cobertura__intro">Atendemos as cinco regiões do país, com rotas regulares e prazos definidos por trecho.</p>
+          <ul class="chips">
+            <li><button class="chip" type="button" data-regiao="sudeste">Sudeste</button></li>
+            <li><button class="chip" type="button" data-regiao="sul">Sul</button></li>
+            <li><button class="chip" type="button" data-regiao="centro-oeste">Centro-Oeste</button></li>
+            <li><button class="chip" type="button" data-regiao="nordeste">Nordeste</button></li>
+            <li><button class="chip" type="button" data-regiao="norte">Norte</button></li>
+          </ul>
+          <p class="cobertura__nota">Consulte prazos e disponibilidade para a sua rota.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CONTATO ===== -->
+  <section class="secao" id="contato">
+    <div class="container">
+      <header class="secao__cabecalho revelar">
+        <p class="eyebrow">Fale com a gente</p>
+        <h2 class="secao__titulo">Solicite sua cotação</h2>
+        <span class="secao__linha" aria-hidden="true"></span>
+        <p class="secao__apoio">Conte a rota e o tipo de carga. Respondemos com valor e prazo em até 1 dia útil.</p>
+      </header>
+
+      <div class="contato__grade">
+        <form class="formulario revelar" id="form-contato" novalidate>
+          <div class="campo">
+            <label for="nome">Nome <span aria-hidden="true">*</span></label>
+            <input id="nome" name="nome" type="text" autocomplete="name" required aria-describedby="erro-nome">
+            <p class="campo__erro" id="erro-nome" role="status" hidden></p>
+          </div>
+
+          <div class="campo">
+            <label for="email">E-mail <span aria-hidden="true">*</span></label>
+            <input id="email" name="email" type="email" autocomplete="email" required aria-describedby="erro-email">
+            <p class="campo__erro" id="erro-email" role="status" hidden></p>
+          </div>
+
+          <div class="campo">
+            <label for="telefone">Telefone / WhatsApp <span aria-hidden="true">*</span></label>
+            <input id="telefone" name="telefone" type="tel" inputmode="tel" autocomplete="tel"
+                   placeholder="(00) 00000-0000" maxlength="15" required aria-describedby="erro-telefone">
+            <p class="campo__erro" id="erro-telefone" role="status" hidden></p>
+          </div>
+
+          <div class="campo">
+            <label for="tipoCarga">Tipo de carga</label>
+            <select id="tipoCarga" name="tipoCarga">
+              <option value="">Selecione</option>
+              <option>Carga fracionada</option>
+              <option>Carga dedicada / lotação</option>
+              <option>Entrega expressa</option>
+              <option>Armazenagem</option>
+              <option>Logística para e-commerce</option>
+              <option>Mudanças e transferências</option>
+            </select>
+          </div>
+
+          <div class="campo">
+            <label for="origem">Origem (cidade/UF) <span aria-hidden="true">*</span></label>
+            <input id="origem" name="origem" type="text" placeholder="São Paulo/SP" required aria-describedby="erro-origem">
+            <p class="campo__erro" id="erro-origem" role="status" hidden></p>
+          </div>
+
+          <div class="campo">
+            <label for="destino">Destino (cidade/UF) <span aria-hidden="true">*</span></label>
+            <input id="destino" name="destino" type="text" placeholder="Curitiba/PR" required aria-describedby="erro-destino">
+            <p class="campo__erro" id="erro-destino" role="status" hidden></p>
+          </div>
+
+          <div class="campo campo--largo">
+            <label for="mensagem">Mensagem</label>
+            <textarea id="mensagem" name="mensagem" rows="4" placeholder="Peso aproximado, quantidade de volumes, prazo desejado..."></textarea>
+          </div>
+
+          <div class="campo campo--largo">
+            <button class="botao botao--primario botao--bloco" type="submit" id="btn-contato">
+              <span class="btn__texto">Solicitar cotação</span>
+              <span class="spinner" hidden aria-hidden="true"></span>
+            </button>
+          </div>
+        </form>
+
+        <aside class="contato__blocos revelar">
+          <!-- TODO: dados reais -->
+          <a class="contato__item" href="tel:+550000000000">
+            <span class="contato__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2Z"/></svg></span>
+            <span><strong>Telefone</strong>(00) 0000-0000</span>
+          </a>
+          <a class="contato__item" href="#" data-whatsapp target="_blank" rel="noopener">
+            <span class="contato__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-12.6 7.3L3 20.5l1.8-5.3A8.5 8.5 0 1 1 21 11.5Z"/></svg></span>
+            <span><strong>WhatsApp</strong>(00) 00000-0000</span>
+          </a>
+          <a class="contato__item" href="mailto:contato@martinslog.com.br">
+            <span class="contato__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6h18v12H3z"/><path d="m3 7 9 6 9-6"/></svg></span>
+            <span><strong>E-mail</strong>contato@martinslog.com.br</span>
+          </a>
+          <div class="contato__item contato__item--estatico">
+            <span class="contato__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
+            <span><strong>Endereço</strong>Rua Exemplo, 000 — Centro, Cidade/UF</span>
+          </div>
+          <div class="contato__item contato__item--estatico">
+            <span class="contato__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+            <span><strong>Atendimento</strong>Segunda a sexta, 8h às 18h</span>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ===== FOOTER ===== -->
+<footer class="rodape">
+  <div class="rodape__estrada" aria-hidden="true">
+    <svg viewBox="0 0 1440 400" preserveAspectRatio="none">
+      <path d="M-60 400C240 300 380 180 720 140s520-70 800-40" fill="none" stroke="#fff" stroke-width="90" opacity=".03"/>
+      <path d="M-60 400C240 300 380 180 720 140s520-70 800-40" fill="none" stroke="#E8323C" stroke-width="2" stroke-dasharray="18 30" opacity=".25"/>
+    </svg>
+  </div>
+
+  <div class="container rodape__grade">
+    <div class="rodape__marca">
+      <picture>
+        <source srcset="assets/img/logo-martins-log-640.webp" type="image/webp">
+        <img src="assets/img/logo-martins-log-640.png" alt="Martins Log" width="64" height="64" loading="lazy">
+      </picture>
+      <p>Transportadora rodoviária de cargas com frota própria, seguro total e rastreamento em tempo real.</p>
+      <ul class="redes">
+        <li><a href="#" aria-label="Instagram da Martins Log"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".8" fill="currentColor"/></svg></a></li>
+        <li><a href="#" aria-label="Facebook da Martins Log"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 9h3V6h-3a4 4 0 0 0-4 4v2H8v3h2v7h3v-7h2.5l.5-3H13v-2a1 1 0 0 1 1-1Z"/></svg></a></li>
+        <li><a href="#" data-whatsapp target="_blank" rel="noopener" aria-label="WhatsApp da Martins Log"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-12.6 7.3L3 20.5l1.8-5.3A8.5 8.5 0 1 1 21 11.5Z"/></svg></a></li>
+      </ul>
+    </div>
+
+    <div class="rodape__coluna">
+      <h3>Serviços</h3>
+      <ul>
+        <li><a href="#servicos">Carga fracionada</a></li>
+        <li><a href="#servicos">Carga dedicada</a></li>
+        <li><a href="#servicos">Entrega expressa</a></li>
+        <li><a href="#servicos">Armazenagem</a></li>
+        <li><a href="#servicos">E-commerce</a></li>
+      </ul>
+    </div>
+
+    <div class="rodape__coluna">
+      <h3>Institucional</h3>
+      <ul>
+        <li><a href="#sobre">Sobre a empresa</a></li>
+        <li><a href="#cobertura">Área de cobertura</a></li>
+        <li><a href="#rastreio">Rastrear encomenda</a></li>
+        <li><a href="#contato">Solicitar cotação</a></li>
+      </ul>
+    </div>
+
+    <div class="rodape__coluna">
+      <h3>Contato</h3>
+      <!-- TODO: dados reais -->
+      <ul>
+        <li><a href="tel:+550000000000">(00) 0000-0000</a></li>
+        <li><a href="mailto:contato@martinslog.com.br">contato@martinslog.com.br</a></li>
+        <li>Rua Exemplo, 000 — Centro</li>
+        <li>Cidade/UF — CEP 00000-000</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="rodape__base">
+    <div class="container rodape__base-interno">
+      <!-- TODO: CNPJ real -->
+      <p>© 2026 Martins Log — Todos os direitos reservados. CNPJ 00.000.000/0001-00</p>
+      <p><a href="#">Política de Privacidade</a></p>
+    </div>
+  </div>
+</footer>
+
+<a class="whatsapp-flutuante" href="#" data-whatsapp target="_blank" rel="noopener" aria-label="Falar com a Martins Log no WhatsApp">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.04 2A9.9 9.9 0 0 0 2.1 11.9c0 1.75.46 3.46 1.34 4.97L2 22l5.28-1.38a9.9 9.9 0 0 0 4.76 1.21h.01a9.9 9.9 0 0 0 9.9-9.9A9.9 9.9 0 0 0 12.04 2Zm5.8 14.05c-.24.68-1.42 1.32-1.96 1.36-.5.04-.99.22-3.35-.7-2.82-1.1-4.6-3.98-4.74-4.17-.14-.19-1.13-1.5-1.13-2.87s.72-2.03.97-2.31c.25-.28.55-.35.73-.35l.52.01c.17 0 .4-.06.62.48l.85 2.06c.07.14.12.31.02.5-.1.19-.14.3-.28.47l-.42.49c-.14.14-.28.29-.12.57.16.28.72 1.18 1.54 1.91 1.06.94 1.95 1.23 2.23 1.37.28.14.44.12.6-.07l.86-1c.2-.24.36-.19.6-.1l1.72.81c.25.12.42.18.48.28.06.1.06.6-.18 1.28Z"/></svg>
+  <span class="whatsapp-flutuante__anel" aria-hidden="true"></span>
+</a>
+
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<script src="assets/js/main.js" defer></script>
+</body>
+</html>
