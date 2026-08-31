@@ -144,7 +144,18 @@ Ledger append-only. Saldo é campo materializado em `Wallet`, sempre escrito jun
 entrada de ledger na mesma transação. Nada de recalcular saldo somando o ledger em
 tempo de leitura, e nada de atualizar saldo sem gravar a entrada.
 
-Estorno nunca apaga o débito: gera novo `LedgerEntry` de crédito referenciando o envio.
+**Não há estorno automático em nenhuma situação** (decisão do usuário, 2026-08-31). Envio
+extraviado, cancelado antes da postagem ou cancelado depois dela **não** devolve valor à
+carteira. O débito feito no pagamento é definitivo.
+
+Consequência de projeto, e é o motivo de a regra estar escrita aqui: o único caminho que
+credita a carteira passa a ser a recarga confirmada por administrador. Nenhum evento de
+rastreio, cancelamento ou sincronização move dinheiro. Isso elimina a classe inteira de
+defeitos de crédito duplicado por retentativa ou por corrida, e torna o ledger de crédito
+auditável por uma única origem.
+
+Se um caso concreto exigir devolução, ela acontece como **crédito manual administrativo**,
+com justificativa registrada em `AuditLog` — visível, rastreável e decidido por uma pessoa.
 
 ### 5.3 Carrinho e checkout
 

@@ -86,8 +86,8 @@ Igual ao normal até `SAIU_PARA_ENTREGA` (0,85·P). Então:
 ### EXTRAVIO
 
 Igual ao normal até o evento 4. Então `1,50·P` — `EXTRAVIADO`: "Objeto não localizado no fluxo
-postal". **Move o envio para `LOST` e dispara o estorno** conforme a regra 5.4 da spec
-principal: crédito na carteira, sem apagar o débito original.
+postal". **Move o envio para `LOST`. NÃO estorna** — decisão do usuário de 2026-08-31:
+nenhuma situação devolve valor à carteira. Ver a seção 5.2 da spec principal.
 
 ### DEVOLUCAO
 
@@ -95,8 +95,8 @@ Igual à tentativa falha até `AGUARDANDO_RETIRADA`. Então:
 - `2,50·P` — `DEVOLUCAO_INICIADA`: "Objeto devolvido ao remetente por prazo de retirada expirado"
 - `3,00·P` — `DEVOLVIDO`: "Objeto entregue ao remetente"
 
-Devolução **não** estorna: o serviço foi prestado. Regra explícita, para não virar discussão
-depois.
+Devolução **não** estorna, assim como nenhum outro desfecho. Desde 2026-08-31 não existe
+estorno automático em situação alguma — extravio, devolução e cancelamento mantêm o débito.
 
 ## 4. Nomes de unidade
 
