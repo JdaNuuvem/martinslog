@@ -156,42 +156,100 @@ svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.75;strok
 .hamburguer[aria-expanded="true"] span:nth-child(2){opacity:0}
 .hamburguer[aria-expanded="true"] span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
 
-/* Menu: drawer no mobile, linha horizontal no desktop. */
+/* Menu: gaveta no celular, barra horizontal no desktop.
+   A gaveta é uma coluna: marca no topo, links no meio, contato preso embaixo.
+   Sem esse bloco de contato ela ficava com um vazio enorme na metade de baixo
+   e sem nenhuma ação — que é justamente onde o dedo alcança primeiro. */
 .menu{
   position:fixed;inset:0 0 0 auto;z-index:110;
-  width:min(320px,86vw);
+  display:flex;flex-direction:column;
+  width:min(360px,88vw);
+  padding:18px 22px calc(22px + env(safe-area-inset-bottom));
   background:var(--navy-900);
-  padding:80px 28px 28px;
   transform:translateX(100%);
-  transition:transform .3s ease;
-  overflow-y:auto;
+  transition:transform .32s cubic-bezier(.22,.61,.36,1);
+  overflow-y:auto;overscroll-behavior:contain;
+  isolation:isolate;
 }
 .menu--aberto{transform:translateX(0)}
 
 .menu__fundo{
   position:fixed;inset:0;z-index:105;
-  background:rgba(6,14,30,.6);
-  backdrop-filter:blur(2px);
+  background:rgba(6,14,30,.62);
+  backdrop-filter:blur(3px);
 }
+
+.menu__topo{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding-bottom:16px;margin-bottom:6px;
+  border-bottom:1px solid rgba(255,255,255,.1);
+}
+.menu__marca{display:flex;align-items:center;gap:10px}
+.menu__marca img{width:38px;height:38px;object-fit:contain}
+.menu__marca > span{
+  font-family:var(--fonte-titulo);font-weight:900;font-size:1.05rem;
+  text-transform:uppercase;letter-spacing:-.02em;color:var(--white);line-height:1;
+}
+.menu__marca > span span{color:var(--red-500)}
 
 .menu__fechar{
-  position:absolute;top:18px;right:18px;
-  width:44px;height:44px;padding:10px;
-  background:none;border:0;color:var(--white);
+  width:44px;height:44px;padding:11px;flex:none;
+  background:rgba(255,255,255,.07);border:0;border-radius:10px;
+  color:var(--white);
 }
 
-.menu__lista{display:flex;flex-direction:column;gap:4px}
+.menu__lista{display:flex;flex-direction:column}
+.menu__lista li + li{border-top:1px solid rgba(255,255,255,.07)}
 .menu__lista a{
-  display:block;position:relative;
-  padding:14px 4px;
-  font-size:1.15rem;font-weight:600;color:rgba(255,255,255,.9);
+  display:flex;align-items:center;position:relative;
+  min-height:52px;padding:14px 4px 14px 16px;
+  font-size:1.05rem;font-weight:600;color:rgba(255,255,255,.82);
+  transition:color .2s;
 }
-.menu__lista a::after{
-  content:"";position:absolute;left:4px;bottom:8px;
-  width:0;height:2px;background:var(--red-500);transition:width .25s;
+/* Barra vermelha marcando a seção em que o leitor está. */
+.menu__lista a::before{
+  content:"";position:absolute;left:0;top:50%;
+  width:3px;height:0;border-radius:2px;
+  background:var(--red-500);
+  transform:translateY(-50%);transition:height .25s;
 }
 .menu__lista a.ativo{color:var(--white)}
-.menu__lista a.ativo::after{width:26px}
+.menu__lista a.ativo::before{height:22px}
+
+/* Entrada escalonada dos itens, presa à abertura da gaveta. */
+.menu__lista li{opacity:0;transform:translateX(12px);transition:opacity .3s ease,transform .3s ease}
+.menu--aberto .menu__lista li{opacity:1;transform:none}
+.menu--aberto .menu__lista li:nth-child(1){transition-delay:.05s}
+.menu--aberto .menu__lista li:nth-child(2){transition-delay:.09s}
+.menu--aberto .menu__lista li:nth-child(3){transition-delay:.13s}
+.menu--aberto .menu__lista li:nth-child(4){transition-delay:.17s}
+.menu--aberto .menu__lista li:nth-child(5){transition-delay:.21s}
+.menu--aberto .menu__lista li:nth-child(6){transition-delay:.25s}
+
+.menu__acoes{
+  display:grid;gap:10px;
+  margin-top:auto;padding-top:22px;
+}
+.menu__fone{
+  display:flex;align-items:center;gap:12px;
+  min-height:48px;margin-bottom:4px;
+  color:var(--white);
+}
+.menu__fone svg{
+  width:38px;height:38px;padding:10px;flex:none;
+  border-radius:10px;background:rgba(232,50,60,.16);color:var(--red-500);
+}
+.menu__fone span{display:flex;flex-direction:column;font-weight:600;line-height:1.25}
+.menu__fone small{
+  font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:rgba(255,255,255,.5);
+}
+
+.menu__estrada{
+  position:absolute;left:0;right:0;bottom:0;z-index:-1;
+  height:120px;pointer-events:none;
+}
+.menu__estrada svg{width:100%;height:100%;stroke:none}
 
 body.travado{overflow:hidden}
 
@@ -682,15 +740,31 @@ body.travado{overflow:hidden}
   .hamburguer{display:none}
   .menu__fundo{display:none}
 
-  /* No desktop o menu deixa de ser drawer e vira barra horizontal. */
+  /* No desktop o menu deixa de ser gaveta e vira barra horizontal. Marca,
+     contato e faixa existem só na gaveta e saem daqui. */
   .menu{
     position:static;width:auto;padding:0;background:none;
-    transform:none;overflow:visible;margin-left:24px;
+    display:block;transform:none;overflow:visible;margin-left:24px;
+    isolation:auto;
   }
-  .menu__fechar{display:none}
+  .menu__topo,.menu__fechar,.menu__acoes,.menu__estrada{display:none}
+
   .menu__lista{flex-direction:row;gap:26px}
-  .menu__lista a{padding:8px 0;font-size:.93rem;font-weight:500;color:rgba(255,255,255,.8)}
-  .menu__lista a::after{left:0;bottom:0}
+  /* Os itens são revelados pela abertura da gaveta, que nunca acontece aqui —
+     sem este reset eles ficariam invisíveis no desktop. */
+  .menu__lista li{opacity:1;transform:none;transition:none}
+  .menu__lista li + li{border-top:0}
+  .menu__lista a{
+    display:block;min-height:0;padding:8px 0;
+    font-size:.93rem;font-weight:500;color:rgba(255,255,255,.8);
+  }
+  /* No desktop o indicador vira sublinhado, não barra lateral. */
+  .menu__lista a::before{
+    left:0;top:auto;bottom:0;
+    width:0;height:2px;transform:none;
+    transition:width .25s;
+  }
+  .menu__lista a.ativo::before{height:2px;width:100%}
   @media (hover:hover){.menu__lista a:hover{color:var(--white)}}
 
   .hero{padding-top:0}

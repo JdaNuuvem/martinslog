@@ -88,10 +88,27 @@
       <span class="cabecalho__nome">Martins<span>Log</span></span>
     </a>
 
+    <!-- A camada escura precisa morar aqui dentro, junto do menu. Fora do
+         header ela cai em outro contexto de empilhamento e acaba pintada por
+         cima da gaveta, deixando o menu apagado e borrado. -->
+    <div class="menu__fundo" hidden></div>
+
     <nav class="menu" id="menu" aria-label="Navegação principal">
-      <button class="menu__fechar" type="button" aria-label="Fechar menu">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-      </button>
+      <!-- Cabeçalho, contato e faixa só existem no drawer do celular; a partir
+           de 1024px o menu vira barra horizontal e eles somem. -->
+      <div class="menu__topo">
+        <span class="menu__marca">
+          <picture>
+            <source srcset="assets/img/logo-martins-log-640.webp" type="image/webp">
+            <img src="assets/img/logo-martins-log-640.png" alt="" width="40" height="40" loading="lazy">
+          </picture>
+          <span>Martins<span>Log</span></span>
+        </span>
+        <button class="menu__fechar" type="button" aria-label="Fechar menu">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+
       <ul class="menu__lista">
         <li><a href="#inicio">Início</a></li>
         <li><a href="#servicos">Serviços</a></li>
@@ -100,6 +117,29 @@
         <li><a href="#cobertura">Cobertura</a></li>
         <li><a href="#contato">Contato</a></li>
       </ul>
+
+      <div class="menu__acoes">
+        <!-- TODO: telefone real -->
+        <a class="menu__fone" href="tel:+550000000000">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2Z"/></svg>
+          <span>
+            <small>Fale agora</small>
+            (00) 0000-0000
+          </span>
+        </a>
+        <a class="botao botao--primario botao--bloco" href="#" data-whatsapp target="_blank" rel="noopener">
+          <svg class="botao__icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-12.6 7.3L3 20.5l1.8-5.3A8.5 8.5 0 1 1 21 11.5Z"/></svg>
+          Falar no WhatsApp
+        </a>
+        <a class="botao botao--contorno botao--bloco" href="#contato">Solicitar cotação</a>
+      </div>
+
+      <span class="menu__estrada" aria-hidden="true">
+        <svg viewBox="0 0 320 120" preserveAspectRatio="none">
+          <path d="M-20 120C60 84 96 52 200 32 264 20 300 16 340 18" fill="none" stroke="#fff" stroke-width="34" opacity=".05"/>
+          <path d="M-20 120C60 84 96 52 200 32 264 20 300 16 340 18" fill="none" stroke="#E8323C" stroke-width="2" stroke-dasharray="14 22" opacity=".4"/>
+        </svg>
+      </span>
     </nav>
 
     <div class="cabecalho__acoes">
@@ -115,8 +155,6 @@
     </div>
   </div>
 </header>
-
-<div class="menu__fundo" hidden></div>
 
 <main id="conteudo">
 
