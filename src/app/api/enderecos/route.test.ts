@@ -165,18 +165,27 @@ describe('POST /api/enderecos', () => {
 })
 
 describe('corrida por endereço padrão (rodada de correção 1)', () => {
-  it('duas criações concorrentes com padrao:true terminam com exatamente um endereço padrão', async () => {
+  it('criações concorrentes com padrao:true terminam com exatamente um endereço padrão', async () => {
     const usuario = await criarUsuarioDeTeste('corridaCria')
     usuariosCriados.push(usuario.id)
     const sessionId = await criarSessionId(usuario.id)
 
-    const [respostaA, respostaB] = await Promise.all([
-      POST(criarRequest('POST', sessionId, { ...corpoRemetenteValido, apelido: 'A' })),
-      POST(criarRequest('POST', sessionId, { ...corpoRemetenteValido, apelido: 'B' })),
-    ])
+    // Quatro, não duas. Com apenas duas criações concorrentes este teste
+    // passava mesmo com o lock consultivo removido — a primeira transação
+    // costuma commitar antes de a segunda rodar seu `updateMany`, e a
+    // corrida não se manifesta. Verificado: com duas, verde em três rodadas
+    // sem o lock; com quatro, vermelho de forma consistente. Não reduza.
+    const respostas = await Promise.all(
+      ['A', 'B', 'C', 'D'].map((apelido) =>
+        POST(criarRequest('POST', sessionId, { ...corpoRemetenteValido, apelido })),
+      ),
+    )
 
-    expect(respostaA.status).toBe(201)
-    expect(respostaB.status).toBe(201)
+    for (const resposta of respostas) {
+      // Nenhuma pode falhar: o lock faz as seguintes esperarem e enxergarem
+      // o padrão já commitado, em vez de esbarrarem no índice único parcial.
+      expect(resposta.status).toBe(201)
+    }
 
     const padroes = await prisma.address.findMany({
       where: { userId: usuario.id, tipo: 'REMETENTE', padrao: true, arquivadoEm: null },
