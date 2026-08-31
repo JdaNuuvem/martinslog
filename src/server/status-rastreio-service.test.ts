@@ -4,6 +4,7 @@ import { ValorInvalidoError } from '@/domain/errors'
 import {
   catalogoDoUsuario,
   listarStatusDaConta,
+  obterStatusPorCodigo,
   removerStatus,
   salvarStatus,
 } from './status-rastreio-service'
@@ -151,5 +152,32 @@ describe('removerStatus', () => {
 
     await expect(removerStatus(intruso, linha.id)).rejects.toThrow(ValorInvalidoError)
     expect(await listarStatusDaConta(dono)).toHaveLength(1)
+  })
+})
+
+describe('obterStatusPorCodigo', () => {
+  it('traduz só as etapas que entram no roteiro', async () => {
+    const userId = await criarUsuario()
+
+    // Reescrita de copy: o código continua sendo um dos que o motor conhece,
+    // então não precisa de tradução.
+    await salvarStatus(userId, { nome: 'POSTADO', titulo: 'Saiu da loja', descricao: 'x' })
+    await salvarStatus(userId, {
+      nome: 'Em conferência',
+      titulo: 'Em conferência',
+      descricao: 'x',
+      cenario: 'ENTREGA_NORMAL',
+      fracaoPrazo: 0.4,
+      statusResultante: 'POSTED',
+    })
+
+    const mapa = await obterStatusPorCodigo(userId)
+
+    expect(mapa).toEqual({ EM_CONFERENCIA: 'POSTED' })
+  })
+
+  it('devolve mapa vazio para conta sem etapas próprias', async () => {
+    const userId = await criarUsuario()
+    expect(await obterStatusPorCodigo(userId)).toEqual({})
   })
 })

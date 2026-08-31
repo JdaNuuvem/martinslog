@@ -193,5 +193,31 @@ export async function removerStatus(userId: string, id: string): Promise<void> {
   }
 }
 
+/**
+ * Mapa código→status de envio das etapas criadas pela conta.
+ *
+ * É o que os pontos de **leitura** precisam para traduzir um evento
+ * customizado: `sincronizarEnvio`, a consulta de rastreio e a listagem de
+ * envios recebem este mapa e passam a saber que `EM_CONFERENCIA` significa
+ * `POSTED`. Sem ele, o evento aparece na timeline com o texto certo, mas o
+ * status do envio para ali — limitação silenciosa, não quebra.
+ *
+ * Só inclui as etapas ativas que entram no roteiro. Uma linha que apenas
+ * reescreve a copy de um código padrão não precisa de tradução: o código
+ * continua sendo um dos que o motor já conhece.
+ */
+export async function obterStatusPorCodigo(
+  userId: string,
+): Promise<Record<string, StatusShipment>> {
+  const { etapasExtras } = await catalogoDoUsuario(userId)
+
+  const mapa: Record<string, StatusShipment> = {}
+  for (const etapa of etapasExtras) {
+    mapa[etapa.codigo] = etapa.statusResultante
+  }
+
+  return mapa
+}
+
 /** Códigos do roteiro padrão, para a tela oferecer a lista de personalizáveis. */
 export { CODIGOS_PADRAO }
