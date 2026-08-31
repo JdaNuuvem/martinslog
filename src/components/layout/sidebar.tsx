@@ -12,7 +12,9 @@ import {
   IconeIntegracoes,
   IconePerfil,
   IconeRastreio,
+  IconeSair,
 } from './icones'
+import { useLogout } from './usar-logout'
 
 export const SIDEBAR_ID = 'menu-navegacao'
 
@@ -31,6 +33,8 @@ type SidebarProps = {
   onFechar: () => void
   /** Botão que abre o menu; recebe o foco de volta quando ele fecha. */
   botaoMenuRef?: RefObject<HTMLButtonElement | null>
+  /** Ver `TopbarProps.autenticado` — controla se "Sair" aparece no menu mobile. */
+  autenticado: boolean
 }
 
 /**
@@ -39,10 +43,11 @@ type SidebarProps = {
  * disso, deslizando para dentro/fora com `translate`. Operável por
  * teclado e fechável com Escape.
  */
-export function Sidebar({ aberta, onFechar, botaoMenuRef }: SidebarProps) {
+export function Sidebar({ aberta, onFechar, botaoMenuRef, autenticado }: SidebarProps) {
   const pathname = usePathname()
   const navRef = useRef<HTMLElement>(null)
   const estavaAberta = useRef(false)
+  const { sair, saindo } = useLogout()
 
   useEffect(() => {
     if (!aberta) return
@@ -130,6 +135,24 @@ export function Sidebar({ aberta, onFechar, botaoMenuRef }: SidebarProps) {
               </Link>
             )
           })}
+
+          {/*
+           * Só em mobile: no desktop o "Sair" já vive na topbar, ao lado do
+           * sino. Aqui, dentro do menu retrátil, é onde ele cabe sem
+           * espremer nome, saldo e sino na largura estreita da topbar.
+           */}
+          {autenticado ? (
+            <button
+              type="button"
+              onClick={sair}
+              disabled={saindo}
+              aria-busy={saindo}
+              className="flex items-center gap-3 rounded-r-lg border-l-4 border-transparent px-3 py-2 text-sm font-medium text-texto-secundario hover:bg-superficie-bloco focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60 lg:hidden"
+            >
+              <IconeSair />
+              {saindo ? 'Saindo…' : 'Sair'}
+            </button>
+          ) : null}
 
           <div className="mt-auto rounded-xl bg-superficie-bloco p-4 text-center text-xs text-texto-secundario">
             Espaço reservado para campanha

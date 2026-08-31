@@ -26,5 +26,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/login')
   }
 
-  return <AppShell nomeUsuario={sessao.nome}>{children}</AppShell>
+  return (
+    <AppShell nomeUsuario={sessao.nome} autenticado>
+      {children}
+    </AppShell>
+  )
 }

@@ -7,6 +7,13 @@ import { Topbar } from './topbar'
 type AppShellProps = {
   children: ReactNode
   nomeUsuario?: string
+  /**
+   * A calculadora pública renderiza este shell para visitantes sem sessão
+   * (nome fixo "VISITANTE"); só o grupo `(app)`, atrás da guarda de sessão,
+   * passa `true`. Controla a exibição do botão "Sair" — sem sessão não há
+   * o que encerrar.
+   */
+  autenticado?: boolean
 }
 
 /**
@@ -19,7 +26,7 @@ type AppShellProps = {
  * menu fecha. Sem esse par, quem navega por teclado perde a posição ao
  * fechar o menu e cai no início da página.
  */
-export function AppShell({ children, nomeUsuario = 'VISITANTE' }: AppShellProps) {
+export function AppShell({ children, nomeUsuario = 'VISITANTE', autenticado = false }: AppShellProps) {
   const [menuAberto, setMenuAberto] = useState(false)
   const botaoMenuRef = useRef<HTMLButtonElement>(null)
 
@@ -30,11 +37,13 @@ export function AppShell({ children, nomeUsuario = 'VISITANTE' }: AppShellProps)
         menuAberto={menuAberto}
         onAlternarMenu={() => setMenuAberto((atual) => !atual)}
         botaoMenuRef={botaoMenuRef}
+        autenticado={autenticado}
       />
       <Sidebar
         aberta={menuAberto}
         onFechar={() => setMenuAberto(false)}
         botaoMenuRef={botaoMenuRef}
+        autenticado={autenticado}
       />
       <main className="min-w-0 px-4 pb-8 pt-topbar lg:pl-sidebar">
         <div className="pt-8">{children}</div>
