@@ -300,6 +300,18 @@
     };
   }
 
+  /* O grupo da etapa e o texto que o cliente lê são coisas diferentes:
+     "Coletado" e "Chegou à unidade" caem os dois em "Em trânsito" na barra de
+     progresso, mas no histórico cada evento precisa dizer o que de fato
+     aconteceu. Então o texto do backend é preservado — só um token de máquina
+     (EM_TRANSITO, OUT_FOR_DELIVERY) é trocado pelo rótulo legível. */
+  function rotuloEvento(texto) {
+    var s = String(texto || '').trim();
+    if (!s) return classificarStatus(s).rotulo;
+    if (/^[A-Z0-9_]+$/.test(s)) return classificarStatus(s).rotulo;
+    return s;
+  }
+
   /* Dados de exemplo: permitem validar o visual sem backend (?demo=1). */
   function respostaDemo(codigo) {
     var agora = Date.now();
@@ -401,7 +413,7 @@
       var topo = criar('div', 'resultado__topo');
       var linha = criar('div', 'resultado__linha');
       if (dados.codigo) linha.appendChild(criar('span', 'resultado__codigo', dados.codigo));
-      linha.appendChild(criar('span', 'badge badge--' + info.badge, info.rotulo));
+      linha.appendChild(criar('span', 'badge badge--' + info.badge, rotuloEvento(dados.status)));
       topo.appendChild(linha);
 
       if (dados.origem || dados.destino) {
@@ -433,7 +445,7 @@
 
           var quando = formatarDataHora(ev.data);
           if (quando) item.appendChild(criar('p', 'evento__data', quando));
-          if (ev.status) item.appendChild(criar('p', 'evento__status', classificarStatus(ev.status).rotulo));
+          if (ev.status) item.appendChild(criar('p', 'evento__status', rotuloEvento(ev.status)));
           if (ev.local) item.appendChild(criar('p', 'evento__local', ev.local));
           if (ev.descricao) item.appendChild(criar('p', 'evento__descricao', ev.descricao));
           tl.appendChild(item);
