@@ -1,19 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { z } from 'zod'
 import { DomainError } from '@/domain/errors'
 import { gerarCotacao } from '@/server/cotacao-service'
+import { cotacaoRequestSchema } from '@/lib/cotacao-schema'
 
 const ANON_SESSION_COOKIE = 'anon_session_id'
 
-const schema = z.object({
-  cepOrigem: z.string(),
-  cepDestino: z.string(),
-  formato: z.enum(['CAIXA', 'ROLO', 'ENVELOPE']).default('CAIXA'),
-  pesoG: z.number().int().positive().max(30000),
-  alturaCm: z.number().positive(),
-  larguraCm: z.number().positive(),
-  comprimentoCm: z.number().positive(),
-})
+const schema = cotacaoRequestSchema
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   let corpo: unknown
