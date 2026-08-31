@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { aplicarCredito, aplicarDebito } from './ledger'
-import { SaldoInsuficienteError } from '../errors'
+import { SaldoInsuficienteError, ValorInvalidoError } from '../errors'
 
 describe('aplicarDebito', () => {
   it('reduz o saldo', () => {
@@ -18,16 +18,21 @@ describe('aplicarDebito', () => {
   })
 
   it('recusa valor zero ou negativo', () => {
-    expect(() => aplicarDebito(1000, 0)).toThrow()
-    expect(() => aplicarDebito(1000, -5)).toThrow()
+    expect(() => aplicarDebito(1000, 0)).toThrow(ValorInvalidoError)
+    expect(() => aplicarDebito(1000, -5)).toThrow(ValorInvalidoError)
   })
 
   it('recusa valor não inteiro', () => {
-    expect(() => aplicarDebito(1000, 14.16)).toThrow()
+    expect(() => aplicarDebito(1000, 14.16)).toThrow(ValorInvalidoError)
   })
 
   it('recusa valor NaN', () => {
-    expect(() => aplicarDebito(1000, NaN)).toThrow()
+    expect(() => aplicarDebito(1000, NaN)).toThrow(ValorInvalidoError)
+  })
+
+  it('recusa valor Infinity ou -Infinity', () => {
+    expect(() => aplicarDebito(1000, Infinity)).toThrow(ValorInvalidoError)
+    expect(() => aplicarDebito(1000, -Infinity)).toThrow(ValorInvalidoError)
   })
 })
 
@@ -36,10 +41,12 @@ describe('aplicarCredito', () => {
     expect(aplicarCredito(0, 10000).saldoAposCentavos).toBe(10000)
   })
 
-  it('recusa valor zero, negativo, não inteiro ou NaN', () => {
-    expect(() => aplicarCredito(1000, 0)).toThrow()
-    expect(() => aplicarCredito(1000, -5)).toThrow()
-    expect(() => aplicarCredito(1000, 14.16)).toThrow()
-    expect(() => aplicarCredito(1000, NaN)).toThrow()
+  it('recusa valor zero, negativo, não inteiro, NaN, Infinity ou -Infinity', () => {
+    expect(() => aplicarCredito(1000, 0)).toThrow(ValorInvalidoError)
+    expect(() => aplicarCredito(1000, -5)).toThrow(ValorInvalidoError)
+    expect(() => aplicarCredito(1000, 14.16)).toThrow(ValorInvalidoError)
+    expect(() => aplicarCredito(1000, NaN)).toThrow(ValorInvalidoError)
+    expect(() => aplicarCredito(1000, Infinity)).toThrow(ValorInvalidoError)
+    expect(() => aplicarCredito(1000, -Infinity)).toThrow(ValorInvalidoError)
   })
 })

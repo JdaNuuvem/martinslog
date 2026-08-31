@@ -1,4 +1,4 @@
-import { SaldoInsuficienteError } from '../errors'
+import { SaldoInsuficienteError, ValorInvalidoError } from '../errors'
 
 export interface LancamentoCalculado {
   tipo: 'CREDITO' | 'DEBITO'
@@ -8,7 +8,7 @@ export interface LancamentoCalculado {
 
 function validarValorCentavos(valorCentavos: number): void {
   if (!Number.isInteger(valorCentavos) || valorCentavos <= 0) {
-    throw new RangeError(
+    throw new ValorInvalidoError(
       `Valor em centavos deve ser um inteiro positivo, recebido: ${valorCentavos}`,
     )
   }

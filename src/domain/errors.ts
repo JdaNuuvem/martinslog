@@ -21,6 +21,9 @@ export class CepInvalidoError extends DomainError {
 export class SaldoInsuficienteError extends DomainError {
   readonly codigo = 'SALDO_INSUFICIENTE'
 }
+export class ValorInvalidoError extends DomainError {
+  readonly codigo = 'VALOR_INVALIDO'
+}
 export class TransicaoInvalidaError extends DomainError {
   readonly codigo = 'TRANSICAO_INVALIDA'
 }
