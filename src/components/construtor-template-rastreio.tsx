@@ -1,9 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { CanvasFluxoRastreio } from './canvas-fluxo-rastreio'
 
 type ItemPaleta = {
   codigo: string
+  tipo: 'ETAPA' | 'COBRANCA'
   rotulo: string
   descricaoPadrao: string
   statusResultante: string
@@ -16,6 +18,10 @@ type Passo = {
   titulo: string
   descricao: string
   diasAposEmissao: number
+  tipo?: 'ETAPA' | 'COBRANCA'
+  x?: number
+  y?: number
+  valorCentavos?: number
 }
 
 type StatusPadrao = { codigo: string; titulo: string; descricao: string }
@@ -23,12 +29,6 @@ type StatusPadrao = { codigo: string; titulo: string; descricao: string }
 const CAMPO =
   'w-full rounded-lg border border-borda-campo bg-superficie-card px-3 py-2 text-sm text-texto-principal focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand'
 
-const ROTULO_STATUS: Record<string, string> = {
-  GENERATED: 'Etiqueta gerada',
-  POSTED: 'Em trânsito',
-  DELIVERED: 'Entregue',
-  LOST: 'Extraviado',
-}
 
 /**
  * Configuração do percurso do rastreio, como um fluxo.
@@ -48,14 +48,13 @@ const ROTULO_STATUS: Record<string, string> = {
 export function ConstrutorTemplateRastreio() {
   const [paleta, setPaleta] = useState<ItemPaleta[]>([])
   const [padraoDoFluxo, setPadraoDoFluxo] = useState<Passo[]>([])
-  const [statusPadrao, setStatusPadrao] = useState<StatusPadrao[]>([])
   const [passos, setPassos] = useState<Passo[]>([])
   const [usaTemplate, setUsaTemplate] = useState(false)
   const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
-  const [abertos, setAbertos] = useState<Set<number>>(new Set())
+  const [textosPendentes, setTextosPendentes] = useState(false)
 
   const carregar = useCallback(async () => {
     try {
@@ -88,7 +87,15 @@ export function ConstrutorTemplateRastreio() {
         // exibição — é o que o destinatário vai ler.
         const porCodigo = new Map(cat.padrao.map((item) => [item.codigo, item]))
         for (const item of cat.personalizados) porCodigo.set(item.codigo, item)
-        setStatusPadrao([...porCodigo.values()])
+
+        // Aplica o texto vigente aos nós do caminho padrão: é o que o
+        // destinatário lê hoje, e é ele que deve aparecer no canvas.
+        setPadraoDoFluxo((atuais) =>
+          atuais.map((passo) => {
+            const texto = porCodigo.get(passo.codigo)
+            return texto ? { ...passo, titulo: texto.titulo, descricao: texto.descricao } : passo
+          }),
+        )
       }
     } catch {
       setErro('Não foi possível conectar ao servidor.')
@@ -101,15 +108,6 @@ export function ConstrutorTemplateRastreio() {
     void carregar()
   }, [carregar])
 
-  function alternarAberto(indice: number) {
-    setAbertos((atuais) => {
-      const copia = new Set(atuais)
-      if (copia.has(indice)) copia.delete(indice)
-      else copia.add(indice)
-      return copia
-    })
-  }
-
   function acrescentar(item: ItemPaleta) {
     setErro(null)
     setPassos((atuais) => [
@@ -119,6 +117,7 @@ export function ConstrutorTemplateRastreio() {
         titulo: item.rotulo,
         descricao: item.descricaoPadrao,
         diasAposEmissao: item.diasSugeridos,
+        tipo: item.tipo,
       },
     ])
   }
@@ -136,6 +135,10 @@ export function ConstrutorTemplateRastreio() {
       copia.splice(destino, 0, movido!)
       return copia
     })
+  }
+
+  function moverNoCanvas(indice: number, x: number, y: number) {
+    setPassos((atuais) => atuais.map((passo, i) => (i === indice ? { ...passo, x, y } : passo)))
   }
 
   function editar(indice: number, campo: keyof Passo, valor: string | number) {
@@ -169,21 +172,39 @@ export function ConstrutorTemplateRastreio() {
   }
 
   /** Reescreve o texto de uma etapa do caminho padrão, via catálogo. */
-  async function salvarTextoPadrao(codigo: string, titulo: string, descricao: string) {
+  /**
+   * No caminho padrão os nós não são editáveis em estrutura, só em texto — e
+   * o texto vai para o catálogo, não para o template. A gravação acontece ao
+   * clicar em "Salvar textos", para não disparar uma requisição por tecla.
+   */
+  function editarTextoPadraoLocal(indice: number, campo: keyof Passo, valor: string | number) {
+    setPadraoDoFluxo((atuais) =>
+      atuais.map((passo, i) => (i === indice ? { ...passo, [campo]: valor } : passo)),
+    )
+    setTextosPendentes(true)
+  }
+
+  async function salvarTextosPadrao() {
     setErro(null)
     setAviso(null)
-    const resposta = await fetch('/api/status-rastreio', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ nome: codigo, titulo, descricao }),
-    })
-    if (!resposta.ok) {
-      const corpo = (await resposta.json().catch(() => ({}))) as { mensagem?: string }
-      setErro(corpo.mensagem ?? 'Não foi possível salvar o texto.')
-      return
+    for (const passo of padraoDoFluxo) {
+      const resposta = await fetch('/api/status-rastreio', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          nome: passo.codigo,
+          titulo: passo.titulo,
+          descricao: passo.descricao,
+        }),
+      })
+      if (!resposta.ok) {
+        const corpo = (await resposta.json().catch(() => ({}))) as { mensagem?: string }
+        setErro(corpo.mensagem ?? 'Não foi possível salvar os textos.')
+        return
+      }
     }
-    setAviso(`Texto de "${titulo}" salvo.`)
-    await carregar()
+    setTextosPendentes(false)
+    setAviso('Textos salvos. Envios novos usam estes textos na timeline.')
   }
 
   async function usarCaminhoPadrao() {
@@ -265,129 +286,25 @@ export function ConstrutorTemplateRastreio() {
       ) : null}
 
       {!carregando ? (
-        <ol className="flex flex-col">
-          {nosVisiveis.map((passo, indice) => {
-            const item = paleta.find((p) => p.codigo === passo.codigo)
-            const aberto = abertos.has(indice)
-            const textoPadrao = statusPadrao.find((s) => s.codigo === passo.codigo)
-            const titulo = usaTemplate ? passo.titulo : (textoPadrao?.titulo ?? passo.titulo)
-            const descricao = usaTemplate
-              ? passo.descricao
-              : (textoPadrao?.descricao ?? passo.descricao)
+        <CanvasFluxoRastreio
+          nos={nosVisiveis}
+          paleta={paleta}
+          editavel={usaTemplate}
+          onMover={moverNoCanvas}
+          onEditar={usaTemplate ? editar : editarTextoPadraoLocal}
+          onRemover={remover}
+          onReordenar={mover}
+        />
+      ) : null}
 
-            return (
-              <li key={`${passo.codigo}-${indice}`} className="flex flex-col">
-                <div className="flex items-stretch gap-3">
-                  {/* Trilho do fluxo: bolinha do nó e linha até o próximo. */}
-                  <div className="flex w-6 flex-col items-center pt-4" aria-hidden="true">
-                    <span
-                      className={`h-3 w-3 shrink-0 rounded-full ${
-                        item?.terminal ? 'bg-texto-secundario' : 'bg-brand'
-                      }`}
-                    />
-                    {indice < nosVisiveis.length - 1 ? (
-                      <span className="w-0.5 flex-1 bg-borda-campo" />
-                    ) : null}
-                  </div>
-
-                  <div className="mb-3 flex-1 rounded-lg border border-borda-campo bg-superficie-bloco">
-                    <div className="flex flex-wrap items-center justify-between gap-2 p-3">
-                      <button
-                        type="button"
-                        onClick={() => alternarAberto(indice)}
-                        aria-expanded={aberto}
-                        className="flex flex-1 flex-col items-start text-left focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
-                      >
-                        <span className="text-sm font-bold text-texto-principal">{titulo}</span>
-                        <span className="text-xs text-texto-secundario">
-                          {usaTemplate ? `Dia ${passo.diasAposEmissao} · ` : ''}
-                          {ROTULO_STATUS[item?.statusResultante ?? ''] ?? 'Em trânsito'}
-                          {item?.terminal ? ' · encerra o envio' : ''}
-                        </span>
-                      </button>
-
-                      {usaTemplate ? (
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            onClick={() => mover(indice, -1)}
-                            disabled={indice === 0}
-                            aria-label={`Subir ${titulo}`}
-                            className="rounded-lg px-2 py-1 text-brand-texto disabled:opacity-30"
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => mover(indice, 1)}
-                            disabled={indice === nosVisiveis.length - 1}
-                            aria-label={`Descer ${titulo}`}
-                            className="rounded-lg px-2 py-1 text-brand-texto disabled:opacity-30"
-                          >
-                            ↓
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => remover(indice)}
-                            aria-label={`Remover ${titulo}`}
-                            className="rounded-lg px-2 py-1 text-sm text-erro"
-                          >
-                            Remover
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-
-                    {aberto ? (
-                      <div className="flex flex-col gap-3 border-t border-borda-campo p-3">
-                        {usaTemplate ? (
-                          <>
-                            <label className="flex flex-col gap-1 text-xs text-texto-secundario">
-                              Título na timeline
-                              <input
-                                className={CAMPO}
-                                value={passo.titulo}
-                                onChange={(e) => editar(indice, 'titulo', e.target.value)}
-                              />
-                            </label>
-                            <label className="flex flex-col gap-1 text-xs text-texto-secundario">
-                              Descrição
-                              <input
-                                className={CAMPO}
-                                value={passo.descricao}
-                                onChange={(e) => editar(indice, 'descricao', e.target.value)}
-                              />
-                            </label>
-                            <label className="flex flex-col gap-1 text-xs text-texto-secundario">
-                              Dias após a emissão
-                              <input
-                                type="number"
-                                min={0}
-                                max={365}
-                                className={`${CAMPO} w-32`}
-                                value={passo.diasAposEmissao}
-                                onChange={(e) =>
-                                  editar(indice, 'diasAposEmissao', Number(e.target.value))
-                                }
-                              />
-                            </label>
-                          </>
-                        ) : (
-                          <EditorTextoPadrao
-                            codigo={passo.codigo}
-                            titulo={titulo}
-                            descricao={descricao}
-                            onSalvar={salvarTextoPadrao}
-                          />
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </li>
-            )
-          })}
-        </ol>
+      {!carregando && !usaTemplate && textosPendentes ? (
+        <button
+          type="button"
+          onClick={salvarTextosPadrao}
+          className="self-start rounded-pilula bg-brand px-6 py-2 text-sm font-medium text-white"
+        >
+          Salvar textos
+        </button>
       ) : null}
 
       {!carregando && usaTemplate ? (
@@ -425,55 +342,5 @@ export function ConstrutorTemplateRastreio() {
         </>
       ) : null}
     </section>
-  )
-}
-
-/** Edição do texto de uma etapa do caminho padrão, gravada no catálogo. */
-function EditorTextoPadrao({
-  codigo,
-  titulo,
-  descricao,
-  onSalvar,
-}: {
-  codigo: string
-  titulo: string
-  descricao: string
-  onSalvar: (codigo: string, titulo: string, descricao: string) => Promise<void>
-}) {
-  const [rascunhoTitulo, setRascunhoTitulo] = useState(titulo)
-  const [rascunhoDescricao, setRascunhoDescricao] = useState(descricao)
-  const [salvando, setSalvando] = useState(false)
-
-  return (
-    <>
-      <label className="flex flex-col gap-1 text-xs text-texto-secundario">
-        Título na timeline
-        <input
-          className={CAMPO}
-          value={rascunhoTitulo}
-          onChange={(e) => setRascunhoTitulo(e.target.value)}
-        />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-texto-secundario">
-        Descrição
-        <input
-          className={CAMPO}
-          value={rascunhoDescricao}
-          onChange={(e) => setRascunhoDescricao(e.target.value)}
-        />
-      </label>
-      <button
-        type="button"
-        disabled={salvando}
-        onClick={async () => {
-          setSalvando(true)
-          await onSalvar(codigo, rascunhoTitulo, rascunhoDescricao)
-          setSalvando(false)
-        }}
-        className="self-start rounded-pilula bg-brand px-4 py-1.5 text-sm font-medium text-white disabled:opacity-60"
-      >
-        {salvando ? 'Salvando…' : 'Salvar texto'}
-      </button>
-    </>
   )
 }

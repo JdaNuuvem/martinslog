@@ -16,18 +16,38 @@ import type { StatusShipment } from '../shipment/estados'
  * nenhum e fica com o caminho padrão.
  */
 
-/** Um passo do template, já com posição no tempo. */
+/**
+ * Natureza do nó.
+ *
+ * `ETAPA` é um evento comum da timeline. `COBRANCA` é uma etapa que carrega
+ * um valor a pagar — tributo de importação, taxa alfandegária —, e existe
+ * separada porque o que se pode fazer com ela é diferente: ela tem valor,
+ * aponta para um meio de pagamento e não pode ser apenas texto.
+ */
+export type TipoNo = 'ETAPA' | 'COBRANCA'
+
+/** Um passo do template, já com posição no tempo e no canvas. */
 export type PassoTemplate = {
   codigo: string
   titulo: string
   descricao: string
   /** Dias após a emissão. Zero é o instante da emissão. */
   diasAposEmissao: number
+  /** Ausente em templates antigos, que só tinham etapas. */
+  tipo?: TipoNo
+  /** Posição no canvas. Ausente em templates montados antes do canvas. */
+  x?: number
+  y?: number
+  /** Só em nós de cobrança. */
+  valorCentavos?: number
+  /** Identificador do meio de pagamento configurado para a conta. */
+  gateway?: string
 }
 
 /** Item oferecido na paleta da tela, com o status de envio que ele produz. */
 export type ItemPaleta = {
   codigo: string
+  tipo: TipoNo
   rotulo: string
   descricaoPadrao: string
   statusResultante: StatusShipment
@@ -56,6 +76,7 @@ export const PALETA: readonly ItemPaleta[] = [
     codigo: 'ETIQUETA_EMITIDA',
     rotulo: 'Aguardando postagem pelo remetente',
     descricaoPadrao: 'Aguardando postagem pelo remetente',
+    tipo: 'ETAPA',
     statusResultante: 'GENERATED',
     diasSugeridos: 0,
     terminal: false,
@@ -64,6 +85,7 @@ export const PALETA: readonly ItemPaleta[] = [
     codigo: 'POSTADO',
     rotulo: 'Postado',
     descricaoPadrao: 'Objeto postado',
+    tipo: 'ETAPA',
     statusResultante: 'POSTED',
     diasSugeridos: 1,
     terminal: false,
@@ -72,6 +94,7 @@ export const PALETA: readonly ItemPaleta[] = [
     codigo: 'TRANSFERENCIA',
     rotulo: 'Em trânsito',
     descricaoPadrao: 'Objeto em trânsito - por favor aguarde',
+    tipo: 'ETAPA',
     statusResultante: 'POSTED',
     diasSugeridos: 2,
     terminal: false,
@@ -80,6 +103,7 @@ export const PALETA: readonly ItemPaleta[] = [
     codigo: 'SAIU_PARA_ENTREGA',
     rotulo: 'Saiu para entrega',
     descricaoPadrao: 'É preciso ter alguém no endereço para receber',
+    tipo: 'ETAPA',
     statusResultante: 'POSTED',
     diasSugeridos: 4,
     terminal: false,
@@ -88,6 +112,7 @@ export const PALETA: readonly ItemPaleta[] = [
     codigo: 'TENTATIVA_FRUSTRADA',
     rotulo: 'Tentativa sem sucesso',
     descricaoPadrao: 'Entregador não atendido, será realizada nova tentativa',
+    tipo: 'ETAPA',
     statusResultante: 'POSTED',
     diasSugeridos: 5,
     terminal: false,
@@ -98,15 +123,35 @@ export const PALETA: readonly ItemPaleta[] = [
       codigo: `TENTATIVA_ENTREGA_${numero}`,
       rotulo: `${numero}ª tentativa de entrega`,
       descricaoPadrao: `${numero}ª tentativa de entrega ao destinatário`,
+      tipo: 'ETAPA',
       statusResultante: 'POSTED',
       diasSugeridos: 4 + numero,
       terminal: false,
     }
   }),
   {
+    codigo: 'AGUARDANDO_TRIBUTO',
+    tipo: 'COBRANCA',
+    rotulo: 'Aguardando pagamento de tributo',
+    descricaoPadrao: 'Objeto retido para pagamento de tributos de importação',
+    statusResultante: 'POSTED',
+    diasSugeridos: 3,
+    terminal: false,
+  },
+  {
+    codigo: 'TAXA_ALFANDEGA',
+    tipo: 'COBRANCA',
+    rotulo: 'Taxa alfandegária',
+    descricaoPadrao: 'Aguardando pagamento da taxa alfandegária',
+    statusResultante: 'POSTED',
+    diasSugeridos: 3,
+    terminal: false,
+  },
+  {
     codigo: 'ENTREGUE',
     rotulo: 'Entregue',
     descricaoPadrao: 'Objeto entregue ao destinatário',
+    tipo: 'ETAPA',
     statusResultante: 'DELIVERED',
     diasSugeridos: 6,
     terminal: true,
@@ -115,6 +160,7 @@ export const PALETA: readonly ItemPaleta[] = [
     codigo: 'DEVOLVIDO',
     rotulo: 'Devolvido ao remetente',
     descricaoPadrao: 'Objeto entregue ao remetente',
+    tipo: 'ETAPA',
     statusResultante: 'DELIVERED',
     diasSugeridos: 10,
     terminal: true,
@@ -123,6 +169,7 @@ export const PALETA: readonly ItemPaleta[] = [
     codigo: 'EXTRAVIADO',
     rotulo: 'Extraviado',
     descricaoPadrao: 'Objeto não localizado no fluxo de transporte',
+    tipo: 'ETAPA',
     statusResultante: 'LOST',
     diasSugeridos: 12,
     terminal: true,

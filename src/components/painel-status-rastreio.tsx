@@ -14,7 +14,7 @@ import { ConstrutorTemplateRastreio } from './construtor-template-rastreio'
  */
 export function PainelStatusRastreio() {
   return (
-    <div className="mx-auto flex max-w-conteudo flex-col gap-6 py-8">
+    <div className="mx-auto flex w-full flex-col gap-6 py-8">
       <header>
         <h1 className="text-2xl font-bold text-texto-principal">Rastreio</h1>
         <p className="mt-1 text-sm text-texto-secundario">
