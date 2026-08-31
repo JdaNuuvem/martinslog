@@ -8,17 +8,21 @@ import {
 } from '@/domain/shipment/estados'
 import { statusDoEvento } from '@/domain/simulacao/roteiro'
 import type { CodigoEvento } from '@/domain/simulacao/tipos'
-import { creditarCarteira } from './wallet-service'
 
 /**
  * Sincronização do status do envio com o relógio da simulação.
  *
  * A timeline nasce inteira na emissão, com cada evento já datado
  * (`emitir-etiqueta-service.ts`). Nada roda em segundo plano: é a leitura que
- * percebe que o tempo passou. Esta função é o ponto onde essa percepção
- * vira estado persistido — e é por isso que ela existe apesar de
- * `rastreio-service.ts` já derivar o status na consulta pública: derivar
- * mostra ao cliente, persistir é o que dispara o estorno do extravio.
+ * percebe que o tempo passou. Esta função é o ponto onde essa percepção vira
+ * estado persistido — derivar na consulta mostra ao cliente, persistir é o
+ * que faz listagens, filtros e webhooks de transição verem a mesma verdade.
+ *
+ * **Nenhum caminho daqui move dinheiro.** Por decisão do produto em
+ * 31/08/2026, nem extravio nem cancelamento estornam: a única origem de
+ * crédito em carteira é a recarga confirmada por administrador. Isso elimina
+ * a classe inteira de defeitos de crédito duplicado — retentativa, corrida,
+ * ordem de chamada — porque não há crédito algum a duplicar aqui.
  *
  * O status é sempre **derivado do último evento visível** (spec seção 5),
  * nunca escrito à mão em paralelo à timeline.
@@ -53,14 +57,8 @@ function datasDoStatus(
 }
 
 /**
- * Avança o status do envio até o do último evento já ocorrido, **sem tocar
- * em dinheiro**, e devolve o status resultante.
- *
- * A separação existe para que a consulta pública de rastreio possa manter o
- * status em dia: ela é anônima e só protegida por rate limit, então não pode
- * ser o gatilho de um crédito em carteira. Quem precisa do efeito financeiro
- * chama `sincronizarEnvio`.
- *
+ * Avança o status do envio até o do último evento já ocorrido e devolve o
+ * status resultante.
  *
  * Percorre os eventos visíveis em ordem, aplicando uma transição por vez:
  * um salto de relógio que cobra a timeline inteira ainda passa por `POSTED`
@@ -71,7 +69,7 @@ function datasDoStatus(
  * pode ter passado por cima de toda a timeline, mas o cancelamento é
  * definitivo. Devolve o status atual sem tocar em nada.
  */
-export async function sincronizarStatus(
+export async function sincronizarEnvio(
   shipmentId: string,
   agora: Date = new Date(),
 ): Promise<StatusShipment> {
@@ -137,44 +135,6 @@ export async function sincronizarStatus(
   return status
 }
 
-/**
- * Sincroniza o envio **e aplica o efeito financeiro** do desfecho: um envio
- * que terminou extraviado devolve à carteira o que foi cobrado.
- *
- * O estorno é decidido pelo **status final**, não por ter sido esta chamada
- * a fazer a transição. A diferença importa: a consulta pública usa
- * `sincronizarStatus` e pode levar o envio a `LOST` primeiro; se o crédito
- * dependesse de quem transicionou, a chamada autenticada chegaria depois,
- * encontraria o envio já terminal e o dinheiro nunca voltaria ao cliente.
- *
- * Chamar mais de uma vez é seguro: `creditarCarteira` usa a referência
- * `SHIPMENT`/id do envio e o índice único `(refTipo, refId, tipo)` do
- * `LedgerEntry` garante crédito único — a invariante fica no banco, não num
- * `if` que duas execuções simultâneas atravessariam juntas.
- */
-export async function sincronizarEnvio(
-  shipmentId: string,
-  agora: Date = new Date(),
-): Promise<StatusShipment> {
-  const status = await sincronizarStatus(shipmentId, agora)
-
-  if (status === 'LOST') {
-    const envio = await prisma.shipment.findUniqueOrThrow({
-      where: { id: shipmentId },
-      select: { id: true, userId: true, precoCobradoCentavos: true },
-    })
-
-    await creditarCarteira(
-      envio.userId,
-      envio.precoCobradoCentavos,
-      { tipo: 'SHIPMENT', id: envio.id },
-      `Estorno do envio ${envio.id}`,
-    )
-  }
-
-  return status
-}
-
 /** Status que não avançam mais — usados para excluir envios da seleção. */
 const STATUS_TERMINAIS: StatusShipment[] = (
   ['PENDING', 'RELEASED', 'GENERATED', 'POSTED', 'DELIVERED', 'CANCELLED', 'LOST'] as const
@@ -184,10 +144,9 @@ const STATUS_TERMINAIS: StatusShipment[] = (
  * Sincroniza, de uma vez, os envios do usuário que o relógio já deixou
  * atrasados, e devolve quantos foram efetivamente atualizados.
  *
- * Existe para ser chamada de um caminho autenticado do próprio dono — a
- * carteira, por exemplo — porque é a única forma de o estorno de extravio
- * chegar ao cliente sem intervenção administrativa. A consulta pública de
- * rastreio usa `sincronizarStatus` e deliberadamente não move dinheiro.
+ * Existe para os caminhos que mostram vários envios de uma vez e precisam do
+ * status persistido em dia — a consulta pública de rastreio só alcança um
+ * envio por vez, o que ela consultou.
  *
  * O filtro está aqui, e não em quem chama, para que a disciplina contra o
  * N+1 exista num lugar só: **uma** consulta traz os candidatos com o último

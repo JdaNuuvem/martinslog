@@ -3,7 +3,7 @@ import { EnvioNaoEncontradoError } from '@/domain/errors'
 import { statusDoEvento } from '@/domain/simulacao/roteiro'
 import type { CodigoEvento } from '@/domain/simulacao/tipos'
 import type { RastreioResposta } from '@/lib/rastreio-schema'
-import { sincronizarStatus } from './sincronizar-envio-service'
+import { sincronizarEnvio } from './sincronizar-envio-service'
 
 /**
  * Consulta pública de um envio pelo código de rastreio
@@ -29,17 +29,15 @@ export async function rastrearEnvio(
   // filtros e relatórios que leem o campo mostram um envio entregue como
   // recém-emitido.
   //
-  // Usa `sincronizarStatus`, e não `sincronizarEnvio`: esta rota é anônima
-  // e protegida apenas por rate limit, então não pode ser o gatilho do
-  // estorno de extravio. Mover status é idempotente e barato; mover dinheiro
-  // fica com os caminhos autenticados.
+  // Seguro numa rota anônima: a sincronização move status e datas, e nada
+  // mais — nenhum caminho dela toca em carteira.
   const envioParaSincronizar = await prisma.shipment.findFirst({
     where: { codigoRastreio },
     select: { id: true },
   })
 
   if (envioParaSincronizar) {
-    await sincronizarStatus(envioParaSincronizar.id, agora)
+    await sincronizarEnvio(envioParaSincronizar.id, agora)
   }
 
   const envio = await prisma.shipment.findFirst({

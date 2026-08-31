@@ -7,7 +7,6 @@ import { ID_CONFIG_SIMULACAO } from './simulacao-config'
 import {
   sincronizarEnvio,
   sincronizarEnviosPendentesDoUsuario,
-  sincronizarStatus,
 } from './sincronizar-envio-service'
 
 const usuariosCriados: string[] = []
@@ -121,7 +120,7 @@ async function saldo(userId: string): Promise<number> {
   return wallet.saldoCentavos
 }
 
-async function creditosDeEstorno(userId: string, shipmentId: string): Promise<number> {
+async function creditosDoEnvio(userId: string, shipmentId: string): Promise<number> {
   const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId } })
   return prisma.ledgerEntry.count({
     where: { walletId: wallet.id, tipo: 'CREDITO', refTipo: 'SHIPMENT', refId: shipmentId },
@@ -177,10 +176,10 @@ describe('sincronizarEnvio', () => {
     expect(status).toBe('DELIVERED')
     const segundo = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })
     expect(segundo.entregueEm?.getTime()).toBe(primeiro.entregueEm?.getTime())
-    expect(await creditosDeEstorno(userId, shipmentId)).toBe(0)
+    expect(await creditosDoEnvio(userId, shipmentId)).toBe(0)
   })
 
-  it('EXTRAVIADO leva a LOST e credita a carteira exatamente uma vez', async () => {
+  it('EXTRAVIADO leva a LOST sem mover um centavo', async () => {
     const { userId, shipmentId } = await emitirNoCenario('EXTRAVIO')
     const agora = await depoisDoEvento(shipmentId, 'EXTRAVIADO')
     const saldoAntes = await saldo(userId)
@@ -188,13 +187,14 @@ describe('sincronizarEnvio', () => {
     const status = await sincronizarEnvio(shipmentId, agora)
 
     expect(status).toBe('LOST')
-    expect(await saldo(userId)).toBe(saldoAntes + PRECO_CENTAVOS)
-    expect(await creditosDeEstorno(userId, shipmentId)).toBe(1)
+    // Por decisão do produto em 31/08/2026, extravio não estorna. Este teste
+    // é a trava contra a regra voltar por descuido: se alguém reintroduzir um
+    // crédito aqui, ele falha.
+    expect(await saldo(userId)).toBe(saldoAntes)
+    expect(await creditosDoEnvio(userId, shipmentId)).toBe(0)
 
-    // Segunda sincronização: nem crédito novo, nem saldo alterado.
     await sincronizarEnvio(shipmentId, agora)
-    expect(await saldo(userId)).toBe(saldoAntes + PRECO_CENTAVOS)
-    expect(await creditosDeEstorno(userId, shipmentId)).toBe(1)
+    expect(await saldo(userId)).toBe(saldoAntes)
   })
 
   it('DEVOLVIDO não credita a carteira', async () => {
@@ -206,7 +206,7 @@ describe('sincronizarEnvio', () => {
 
     expect(status).toBe('DELIVERED')
     expect(await saldo(userId)).toBe(saldoAntes)
-    expect(await creditosDeEstorno(userId, shipmentId)).toBe(0)
+    expect(await creditosDoEnvio(userId, shipmentId)).toBe(0)
   })
 
   it('envio cancelado não avança, nem com o relógio muito à frente', async () => {
@@ -225,7 +225,7 @@ describe('sincronizarEnvio', () => {
     expect(envio.entregueEm).toBeNull()
   })
 
-  it('duas sincronizações simultâneas não duplicam o estorno do extravio', async () => {
+  it('duas sincronizações simultâneas não deixam o envio fora de LOST', async () => {
     const { userId, shipmentId } = await emitirNoCenario('EXTRAVIO')
     const agora = await depoisDoEvento(shipmentId, 'EXTRAVIADO')
     const saldoAntes = await saldo(userId)
@@ -235,45 +235,13 @@ describe('sincronizarEnvio', () => {
       sincronizarEnvio(shipmentId, agora),
     ])
 
-    // Uma das duas pode perder a corrida e falhar; o que não se admite é
-    // creditar duas vezes ou deixar o envio fora de LOST.
+    // Uma das duas pode perder a corrida do `update` condicionado ao status
+    // esperado; o que não se admite é o envio ficar fora de LOST.
     expect(resultados.some((r) => r.status === 'fulfilled')).toBe(true)
-    expect(await creditosDeEstorno(userId, shipmentId)).toBe(1)
-    expect(await saldo(userId)).toBe(saldoAntes + PRECO_CENTAVOS)
+    expect(await saldo(userId)).toBe(saldoAntes)
 
     const envio = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })
     expect(envio.status).toBe('LOST')
-  })
-
-  it('sincronizarStatus avança o status sem tocar em dinheiro', async () => {
-    const { userId, shipmentId } = await emitirNoCenario('EXTRAVIO')
-    const agora = await depoisDoEvento(shipmentId, 'EXTRAVIADO')
-    const saldoAntes = await saldo(userId)
-
-    const status = await sincronizarStatus(shipmentId, agora)
-
-    expect(status).toBe('LOST')
-    // O status andou, mas a carteira não foi tocada: é esta separação que
-    // permite a consulta pública progredir sem mover dinheiro.
-    expect(await saldo(userId)).toBe(saldoAntes)
-    expect(await creditosDeEstorno(userId, shipmentId)).toBe(0)
-  })
-
-  it('estorna mesmo quando outra chamada já levou o envio a LOST', async () => {
-    const { userId, shipmentId } = await emitirNoCenario('EXTRAVIO')
-    const agora = await depoisDoEvento(shipmentId, 'EXTRAVIADO')
-    const saldoAntes = await saldo(userId)
-
-    // Simula o que a consulta pública faz: leva a LOST sem estornar.
-    await sincronizarStatus(shipmentId, agora)
-
-    // A sincronização completa chega depois e encontra o envio já terminal.
-    // O estorno não pode depender de ter sido ela a fazer a transição.
-    const status = await sincronizarEnvio(shipmentId, agora)
-
-    expect(status).toBe('LOST')
-    expect(await saldo(userId)).toBe(saldoAntes + PRECO_CENTAVOS)
-    expect(await creditosDeEstorno(userId, shipmentId)).toBe(1)
   })
 
   it('lança EnvioNaoEncontradoError para envio inexistente', async () => {
@@ -307,7 +275,7 @@ describe('sincronizarEnvio', () => {
 })
 
 describe('sincronizarEnviosPendentesDoUsuario', () => {
-  it('sincroniza os envios vencidos do usuário e estorna o extravio uma vez', async () => {
+  it('sincroniza os envios vencidos do usuário sem mover dinheiro', async () => {
     const { userId, shipmentId } = await emitirNoCenario('EXTRAVIO')
     const agora = await depoisDoEvento(shipmentId, 'EXTRAVIADO')
     const saldoAntes = await saldo(userId)
@@ -317,8 +285,8 @@ describe('sincronizarEnviosPendentesDoUsuario', () => {
     expect(sincronizados).toBe(1)
     const envio = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })
     expect(envio.status).toBe('LOST')
-    expect(await saldo(userId)).toBe(saldoAntes + PRECO_CENTAVOS)
-    expect(await creditosDeEstorno(userId, shipmentId)).toBe(1)
+    expect(await saldo(userId)).toBe(saldoAntes)
+    expect(await creditosDoEnvio(userId, shipmentId)).toBe(0)
   })
 
   it('não faz trabalho quando nenhum envio tem evento vencido', async () => {
@@ -329,17 +297,15 @@ describe('sincronizarEnviosPendentesDoUsuario', () => {
     expect(await sincronizarEnviosPendentesDoUsuario(userId, simulacaoIniciadaEm)).toBe(0)
   })
 
-  it('ignora envio já terminal e não credita de novo', async () => {
+  it('ignora envio já terminal numa segunda passada', async () => {
     const { userId, shipmentId } = await emitirNoCenario('EXTRAVIO')
     const agora = await depoisDoEvento(shipmentId, 'EXTRAVIADO')
 
     await sincronizarEnviosPendentesDoUsuario(userId, agora)
-    const saldoDepoisDaPrimeira = await saldo(userId)
 
-    // Segunda passada: o envio já está em LOST, então nem entra na seleção.
+    // O envio já está em LOST, então nem entra na seleção.
     expect(await sincronizarEnviosPendentesDoUsuario(userId, agora)).toBe(0)
-    expect(await saldo(userId)).toBe(saldoDepoisDaPrimeira)
-    expect(await creditosDeEstorno(userId, shipmentId)).toBe(1)
+    expect(await creditosDoEnvio(userId, shipmentId)).toBe(0)
   })
 
   it('não toca em envio de outro usuário', async () => {
@@ -353,6 +319,5 @@ describe('sincronizarEnviosPendentesDoUsuario', () => {
       where: { id: alheio.shipmentId },
     })
     expect(envioAlheio.status).toBe('GENERATED')
-    expect(await creditosDeEstorno(alheio.userId, alheio.shipmentId)).toBe(0)
   })
 })
