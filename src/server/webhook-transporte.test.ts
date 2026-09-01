@@ -183,3 +183,66 @@ describe('webhooks do transporte', () => {
   })
 })
 
+
+describe('payload do webhook', () => {
+  it('manda o FRETE em price, não a taxa por etiqueta', async () => {
+    const usuario = await criarUsuarioComSaldo(50_000)
+    usuariosCriados.push(usuario.id)
+
+    await cadastrarWebhook(usuario.id, 'https://exemplo.com.br/webhook', ['order.generated'])
+
+    // Frete deliberadamente diferente da taxa (R$ 1,00), para que trocar um
+    // pelo outro não passe despercebido.
+    const cotacao = await criarCotacaoValida(usuario.id, { precoCentavos: 2800 })
+    const envio = await criarEnvio(usuario.id, {
+      quoteId: cotacao.id,
+      servicoId: (cotacao.opcoes as { servicoId: string }[])[0]!.servicoId,
+      remetente,
+      destinatario,
+      produtos: [{ nome: 'Produto', quantidade: 1, valorUnitarioCentavos: 9790 }],
+    })
+    await pagarEnvio(usuario.id, envio.id)
+
+    const entrega = await prisma.webhookDelivery.findFirstOrThrow({
+      where: { webhookApp: { userId: usuario.id }, evento: 'order.generated' },
+    })
+    const payload = entrega.payload as { data: { price: string; status: string; tracking: string } }
+
+    expect(payload.data.price).toBe('28.00')
+    // A taxa da plataforma não pode aparecer aqui.
+    expect(payload.data.price).not.toBe('1.00')
+  })
+
+  it('order.generated anuncia GENERATED, e não o estado anterior', async () => {
+    const usuario = await criarUsuarioComSaldo(50_000)
+    usuariosCriados.push(usuario.id)
+
+    await cadastrarWebhook(usuario.id, 'https://exemplo.com.br/webhook', ['order.generated'])
+
+    const cotacao = await criarCotacaoValida(usuario.id)
+    const envio = await criarEnvio(usuario.id, {
+      quoteId: cotacao.id,
+      servicoId: (cotacao.opcoes as { servicoId: string }[])[0]!.servicoId,
+      remetente,
+      destinatario,
+      produtos: [{ nome: 'Produto', quantidade: 1, valorUnitarioCentavos: 9790 }],
+    })
+    await pagarEnvio(usuario.id, envio.id)
+
+    const entrega = await prisma.webhookDelivery.findFirstOrThrow({
+      where: { webhookApp: { userId: usuario.id }, evento: 'order.generated' },
+    })
+    const payload = entrega.payload as { data: { status: string; tracking: string | null } }
+
+    /*
+      O evento era enfileirado antes do UPDATE de status, e o payload congela
+      a linha na leitura: saía anunciando RELEASED. Quem programasse pelo
+      campo `status` nunca veria GENERATED chegar.
+    */
+    expect(payload.data.status).toBe('GENERATED')
+
+    // E o código continua presente — era o motivo de o enfileiramento vir
+    // depois da criação da etiqueta.
+    expect(payload.data.tracking).toMatch(/^[A-Z]{2}\d{9}BR$/)
+  })
+})

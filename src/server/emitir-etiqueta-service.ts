@@ -143,13 +143,6 @@ export async function emitirEtiqueta(
       })),
     });
 
-    // Depois do código e dos eventos, para que o payload saia com `tracking`
-    // preenchido — é o campo que o cliente espera justamente neste evento.
-    // Só grava linhas em WebhookDelivery: nenhuma requisição de rede acontece
-    // aqui, para que o tempo de resposta de um servidor de terceiro não possa
-    // derrubar esta transação.
-    await enfileirarEvento(envio.id, "order.generated", tx);
-
     await tx.shipment.update({
       where: { id: envio.id },
       data: {
@@ -161,6 +154,20 @@ export async function emitirEtiqueta(
         fatorSimulacao: fatorVelocidade,
       },
     });
+
+    // Depois do código, dos eventos E do novo status.
+    //
+    // O payload é congelado na leitura da linha, então enfileirar antes do
+    // `update` fazia `order.generated` sair anunciando `status: "RELEASED"` —
+    // o estado anterior. Quem programasse pelo campo `status` nunca veria
+    // GENERATED chegar, e trataria a emissão da etiqueta como se ela não
+    // tivesse acontecido.
+    //
+    // Continua sendo a última coisa da transação, e continua só gravando
+    // linhas em WebhookDelivery: nenhuma requisição de rede acontece aqui,
+    // para que o tempo de resposta de um servidor de terceiro não possa
+    // derrubar a emissão.
+    await enfileirarEvento(envio.id, "order.generated", tx);
 
     return { codigoRastreio };
   });
