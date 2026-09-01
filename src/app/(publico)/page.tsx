@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { AppShell } from '@/components/layout/app-shell'
 import { ShellPublico } from '@/components/layout/shell-publico'
 import { CalculadoraForm } from '@/components/calculadora-form'
+import { ModalAtivarFluxo } from '@/components/modal-ativar-fluxo'
 import { lerSessaoDoServidor } from '@/server/auth/sessao-servidor'
 
 /**
@@ -28,6 +29,8 @@ export default async function PaginaCalculadora() {
   if (sessao) {
     return (
       <AppShell nomeUsuario={sessao.nome} autenticado>
+        {/* Só para quem entrou: o aviso trata de um percurso salvo na conta. */}
+        <ModalAtivarFluxo />
         <CalculadoraForm autenticado />
       </AppShell>
     )
