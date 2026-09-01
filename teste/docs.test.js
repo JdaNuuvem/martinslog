@@ -82,11 +82,19 @@ if (ld) {
 
 /* Elementos de bloco balanceados. Não é um parser, mas um <pre> ou um <table>
    sem fechar despenca o resto da página — e é o erro mais provável num
-   documento montado por composição. */
+   documento montado por composição.
+
+   O conteúdo de <style> e <script> sai antes da contagem: ali dentro não há
+   marcação nenhuma, e um `<pre>` citado num comentário de CSS contaria como
+   tag aberta e reprovaria um documento correto. */
 console.log('\n— estrutura —');
+const marcacao = html
+  .replace(/<style[\s\S]*?<\/style>/gi, '')
+  .replace(/<script[\s\S]*?<\/script>/gi, '');
+
 ['section', 'table', 'pre', 'nav', 'main', 'div'].forEach((tag) => {
-  const abre = (html.match(new RegExp('<' + tag + '(?=[\\s>])', 'g')) || []).length;
-  const fecha = (html.match(new RegExp('</' + tag + '>', 'g')) || []).length;
+  const abre = (marcacao.match(new RegExp('<' + tag + '(?=[\\s>])', 'g')) || []).length;
+  const fecha = (marcacao.match(new RegExp('</' + tag + '>', 'g')) || []).length;
   conferir(`<${tag}> balanceado (${abre}/${fecha})`, abre === fecha);
 });
 
@@ -157,6 +165,50 @@ conferir(
 conferir('documenta o limite de 60/min', /60 requisições por minuto/.test(html));
 conferir('documenta a janela de 5 minutos da assinatura', html.includes('300'));
 conferir('documenta a taxa fixa de etiqueta', html.includes('R$ 1,00'));
+
+/* ============================================================
+   5. Levar a página para outro lugar
+   ============================================================ */
+console.log('\n— copiar e integrar com IA —');
+
+conferir('tem o botão Copiar tudo', /id="btn-copiar"/.test(html) && /Copiar tudo/.test(html));
+conferir('tem o botão Integrar com IA', /id="btn-ia"/.test(html) && /Integrar com IA/.test(html));
+conferir('tem a área de recado', /id="recado"/.test(html));
+
+// O pedido que acompanha a documentação quando o destino é um assistente.
+conferir(
+  'o prompt da IA está escrito',
+  html.includes('quero integrar o meu sistema na Martins Log segue a documentacao deles aqui'),
+);
+
+const script = (html.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
+conferir('o script inline existe', script.length > 500);
+
+// Erro de sintaxe no script deixa a página inteira sem os dois botões, e o
+// HTML continua servindo 200 — nada denuncia a falha sem esta conferência.
+let compila = true;
+try {
+  new Function(script);
+} catch (e) {
+  compila = false;
+  console.log('        ' + e.message);
+}
+conferir('o script compila', compila);
+
+/*
+ * O texto copiado é gerado percorrendo o DOM, e não guardado numa segunda
+ * cópia da documentação. É o que garante que corrigir a página corrige também
+ * o que o integrador cola no assistente. Se alguém trocar isso por um texto
+ * fixo, as duas versões passam a divergir em silêncio.
+ */
+conferir('o texto copiado é gerado da própria página', /function gerarMarkdown/.test(script));
+conferir('percorre as seções do documento', /querySelectorAll\('main section'\)/.test(script));
+
+// `navigator.clipboard` não existe fora de contexto seguro nem em navegador
+// antigo; sem o caminho alternativo o botão simplesmente não faz nada.
+conferir('tem alternativa de cópia', /execCommand/.test(script));
+
+conferir('cada bloco de código ganha botão de copiar', /copiar-cod/.test(html));
 
 console.log(falhas === 0 ? '\nTUDO PASSOU\n' : '\n' + falhas + ' FALHA(S)\n');
 process.exit(falhas === 0 ? 0 : 1);

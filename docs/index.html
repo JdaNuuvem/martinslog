@@ -261,7 +261,9 @@
   }
   .indice a:hover { color: var(--tinta); border-left-color: var(--acao); }
 
-  section { padding-top: 44px; scroll-margin-top: 20px; }
+  /* A barra de ações é fixa no topo: sem esta folga, clicar no índice
+     posiciona o título exatamente atrás dela. */
+  section { padding-top: 44px; scroll-margin-top: 76px; }
   section > h2 {
     font-size: 1.62rem; font-weight: 800; letter-spacing: -0.015em;
     padding-bottom: 10px; border-bottom: 2px solid var(--tinta);
@@ -369,9 +371,92 @@
     font-size: 0.84rem; color: var(--texto-2);
   }
 
+  /* ============================================================
+     Barra de ações — levar a página inteira para outro lugar
+     ============================================================ */
+  .acoes {
+    position: sticky; top: 0; z-index: 50;
+    background: var(--papel);
+    border-bottom: 1px solid var(--linha);
+    box-shadow: 0 1px 0 var(--linha), 0 6px 20px -14px rgba(14,30,60,.5);
+  }
+  .acoes__interno {
+    max-width: 1180px; margin: 0 auto; padding: 10px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 14px; flex-wrap: wrap;
+  }
+  .acoes__texto { font-size: 0.84rem; color: var(--texto-2); }
+  .acoes__texto strong { color: var(--tinta); font-weight: 600; }
+  .acoes__botoes { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .botao {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-family: var(--corpo); font-size: 0.82rem; font-weight: 600;
+    padding: 8px 15px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--linha-forte); background: var(--papel-2); color: var(--tinta);
+    transition: background .15s, border-color .15s;
+  }
+  .botao:hover { background: var(--papel-3); border-color: var(--tinta-2); }
+  .botao svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .botao--ia { background: var(--acao); border-color: var(--acao); color: #fff; }
+  .botao--ia:hover { background: var(--acao); border-color: var(--acao); filter: brightness(.92); }
+  .botao[data-feito="1"] { background: var(--ok-fundo); border-color: var(--ok); color: var(--ok); }
+
+  /* Aviso momentâneo do que acabou de acontecer. Um botão que copia sem dizer
+     nada deixa a pessoa clicando de novo por não ter certeza. */
+  .recado {
+    position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 14px);
+    background: var(--tinta); color: var(--papel);
+    padding: 11px 18px; border-radius: 8px;
+    font-size: 0.86rem; font-weight: 500; max-width: min(92vw, 460px);
+    box-shadow: 0 14px 40px -12px rgba(0,0,0,.5);
+    opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+    z-index: 100; text-align: center;
+  }
+  .recado[data-visivel="1"] { opacity: 1; transform: translate(-50%, 0); }
+
+  /* ===== Copiar por bloco de código ===== */
+  /* O <pre> perde a margem para a caixa que passa a envolvê-lo — mantê-la nos
+     dois empilharia dois espaçamentos entre blocos vizinhos. */
+  .bloco-cod { position: relative; margin: 0 0 16px; }
+  .bloco-cod > pre { margin: 0; }
+  .copiar-cod {
+    position: absolute; top: 8px; right: 8px;
+    font-family: var(--corpo); font-size: 0.7rem; font-weight: 600;
+    padding: 4px 9px; border-radius: 5px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,.18);
+    background: rgba(255,255,255,.08); color: #DCE4F2;
+    opacity: 0; transition: opacity .15s, background .15s;
+  }
+  .bloco-cod:hover .copiar-cod,
+  .copiar-cod:focus-visible { opacity: 1; }
+  .copiar-cod:hover { background: rgba(255,255,255,.18); }
+  .copiar-cod[data-feito="1"] { opacity: 1; background: var(--ok); border-color: var(--ok); color: #fff; }
+  @media (hover: none) { .copiar-cod { opacity: 1; } }
+
+  /* ===== Índice que acompanha a leitura ===== */
+  .indice a[aria-current="true"] {
+    color: var(--tinta); font-weight: 600;
+    border-left-color: var(--acao);
+    background: var(--papel-2);
+  }
+
+  /* ===== Âncora permanente no título da seção ===== */
+  .ancora {
+    margin-left: 8px; font-size: 0.72em; font-weight: 600;
+    color: var(--linha-forte); text-decoration: none;
+    opacity: 0; transition: opacity .15s;
+  }
+  section > h2:hover .ancora,
+  .ancora:focus-visible { opacity: 1; }
+  .ancora:hover { color: var(--acao); }
+
   @media (prefers-reduced-motion: reduce) {
     * { animation: none !important; transition: none !important; }
+    html { scroll-behavior: auto !important; }
   }
+
+  html { scroll-behavior: smooth; }
 </style>
 
 <header class="capa">
@@ -391,6 +476,25 @@
     <div><dt>Limite</dt><dd>60 req/min por token</dd></div>
   </dl>
 </header>
+
+<div class="acoes">
+  <div class="acoes__interno">
+    <p class="acoes__texto">
+      <strong>Vai integrar?</strong> Leve esta página inteira — ela sai em texto,
+      pronta para colar em qualquer lugar.
+    </p>
+    <div class="acoes__botoes">
+      <button type="button" class="botao" id="btn-copiar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copiar tudo
+      </button>
+      <button type="button" class="botao botao--ia" id="btn-ia">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 13.9 8.6 19.5 10.5 13.9 12.4 12 18 10.1 12.4 4.5 10.5 10.1 8.6 12 3Z"/><path d="M18.5 16.5 19.2 18.4 21 19l-1.8.6-.7 1.9-.7-1.9L16 19l1.8-.6.7-1.9Z"/></svg>
+        Integrar com IA
+      </button>
+    </div>
+  </div>
+</div>
 
 <div class="corpo" id="conteudo">
 <div class="colunas">
@@ -1267,6 +1371,370 @@ $corpoCru = file_get_contents(<span class="s">'php://input'</span>);</pre>
   </main>
 </div>
 </div>
+
+<div class="recado" id="recado" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================================
+     O texto copiado é gerado a partir do que está na tela, e não de uma
+     segunda cópia da documentação guardada em algum lugar.
+
+     Uma cópia paralela seria mais simples de escrever e erraria calada: a
+     página corrigida, o texto copiado ainda com o valor antigo, e o
+     integrador implementando contra uma versão que já não existe. Percorrer
+     o DOM custa este arquivo e elimina a possibilidade.
+     ========================================================================= */
+
+  var PROMPT_IA =
+    'quero integrar o meu sistema na Martins Log segue a documentacao deles aqui : ';
+
+  function texto(no) {
+    return (no.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+
+  /** Conteúdo de linha: preserva `código`, **ênfase** e o destino dos links. */
+  function inline(no) {
+    var saida = '';
+    for (var i = 0; i < no.childNodes.length; i++) {
+      var f = no.childNodes[i];
+
+      if (f.nodeType === 3) {
+        saida += f.nodeValue.replace(/\s+/g, ' ');
+        continue;
+      }
+      if (f.nodeType !== 1) continue;
+
+      var tag = f.tagName.toLowerCase();
+
+      if (tag === 'code') {
+        saida += '`' + texto(f) + '`';
+      } else if (tag === 'strong' || tag === 'b') {
+        saida += '**' + inline(f).trim() + '**';
+      } else if (tag === 'em' || tag === 'i') {
+        saida += '_' + inline(f).trim() + '_';
+      } else if (tag === 'a') {
+        /* Âncora interna vira só o texto: um "#webhooks" solto no meio de uma
+           frase colada noutro lugar não leva a lugar nenhum. */
+        var href = f.getAttribute('href') || '';
+        saida += href.charAt(0) === '#' ? inline(f) : '[' + inline(f).trim() + '](' + href + ')';
+      } else if (tag === 'br') {
+        saida += ' ';
+      } else {
+        saida += inline(f);
+      }
+    }
+    return saida;
+  }
+
+  function paragrafo(no) {
+    return inline(no).replace(/\s+/g, ' ').trim();
+  }
+
+  /** Tabela em Markdown, com o alinhamento padrão. */
+  function tabela(tab) {
+    var linhas = [];
+    var cabecalho = tab.querySelectorAll('thead tr');
+    var corpo = tab.querySelectorAll('tbody tr');
+    var colunas = 0;
+
+    if (cabecalho.length) {
+      var th = cabecalho[0].querySelectorAll('th');
+      colunas = th.length;
+      var titulos = [];
+      for (var i = 0; i < th.length; i++) titulos.push(paragrafo(th[i]) || ' ');
+      linhas.push('| ' + titulos.join(' | ') + ' |');
+      linhas.push('|' + new Array(colunas + 1).join(' --- |'));
+    }
+
+    for (var j = 0; j < corpo.length; j++) {
+      var td = corpo[j].querySelectorAll('td');
+      var celulas = [];
+      for (var k = 0; k < td.length; k++) {
+        /* A barra vertical dentro de uma célula quebraria a tabela inteira. */
+        celulas.push((paragrafo(td[k]) || ' ').replace(/\|/g, '\\|'));
+      }
+      linhas.push('| ' + celulas.join(' | ') + ' |');
+    }
+
+    return linhas.join('\n');
+  }
+
+  function bloco(el) {
+    var tag = el.tagName.toLowerCase();
+    var classe = el.className || '';
+
+    if (tag === 'h2') return '## ' + paragrafo(el).replace(/\s*#$/, '');
+    if (tag === 'h3') return '### ' + paragrafo(el);
+    if (tag === 'h4') return '#### ' + paragrafo(el);
+    if (tag === 'p') return paragrafo(el);
+
+    if (tag === 'pre') {
+      /* `textContent` e não `inline`: dentro do bloco de código o que vale é o
+         texto literal, com as quebras de linha que ele já tem. */
+      return '```\n' + (el.textContent || '').replace(/\s+$/, '') + '\n```';
+    }
+
+    if (tag === 'ul' || tag === 'ol') {
+      var itens = el.children;
+      var marcador = tag === 'ol' ? 0 : null;
+      var linhas = [];
+      for (var i = 0; i < itens.length; i++) {
+        if (itens[i].tagName.toLowerCase() !== 'li') continue;
+        var prefixo = marcador === null ? '- ' : ++marcador + '. ';
+        linhas.push(prefixo + paragrafo(itens[i]));
+      }
+      return linhas.join('\n');
+    }
+
+    if (tag === 'table') return tabela(el);
+
+    if (classe.indexOf('rolagem') >= 0) {
+      var t = el.querySelector('table');
+      return t ? tabela(t) : '';
+    }
+
+    if (classe.indexOf('bloco-cod') >= 0) {
+      var pre = el.querySelector('pre');
+      return pre ? bloco(pre) : '';
+    }
+
+    /* Endereço do endpoint: vira uma linha de código, que é como ele é usado. */
+    if (classe.indexOf('rota') >= 0) {
+      var verbo = el.querySelector('.verbo');
+      var caminho = el.querySelector('.caminho');
+      if (!verbo || !caminho) return '';
+      return '`' + texto(verbo) + ' ' + texto(caminho) + '`';
+    }
+
+    /* Aviso vira citação, que é o que um assistente entende como ressalva. */
+    if (classe.indexOf('aviso') >= 0) {
+      var partes = [];
+      var rotulo = el.querySelector('.rotulo');
+      if (rotulo) partes.push('> **' + texto(rotulo) + '**');
+      var ps = el.querySelectorAll('p');
+      for (var m = 0; m < ps.length; m++) {
+        if (ps[m].className.indexOf('rotulo') >= 0) continue;
+        partes.push('> ' + paragrafo(ps[m]));
+      }
+      return partes.join('\n>\n');
+    }
+
+    /* O trilho é uma sequência de verdade, então sai numerado. */
+    if (classe.indexOf('trilho') >= 0) {
+      var etapas = el.querySelectorAll('.etapa');
+      var saida = [];
+      for (var n = 0; n < etapas.length; n++) {
+        var nome = etapas[n].querySelector('.nome');
+        var quando = etapas[n].querySelector('.quando');
+        saida.push(
+          n + 1 + '. `' + (nome ? texto(nome) : '') + '` — ' + (quando ? texto(quando) : ''),
+        );
+      }
+      return saida.join('\n');
+    }
+
+    return '';
+  }
+
+  function gerarMarkdown() {
+    var partes = [];
+
+    partes.push('# API Martins Log — documentação de integração (v0)');
+    partes.push('Fonte: https://martinslog.net/docs/');
+
+    var manifesto = document.querySelectorAll('.manifesto div');
+    var campos = [];
+    for (var i = 0; i < manifesto.length; i++) {
+      var dt = manifesto[i].querySelector('dt');
+      var dd = manifesto[i].querySelector('dd');
+      if (dt && dd) campos.push('- ' + texto(dt) + ': ' + texto(dd));
+    }
+    if (campos.length) partes.push(campos.join('\n'));
+
+    var resumo = document.querySelector('.capa .resumo');
+    if (resumo) partes.push(paragrafo(resumo));
+
+    var secoes = document.querySelectorAll('main section');
+    for (var s = 0; s < secoes.length; s++) {
+      var filhos = secoes[s].children;
+      for (var f = 0; f < filhos.length; f++) {
+        var pedaco = bloco(filhos[f]);
+        if (pedaco) partes.push(pedaco);
+      }
+    }
+
+    return partes.join('\n\n').replace(/\n{3,}/g, '\n\n') + '\n';
+  }
+
+  /* ===== Área de transferência ===== */
+
+  var recado = document.getElementById('recado');
+  var timerRecado = null;
+
+  function avisar(mensagem) {
+    if (!recado) return;
+    recado.textContent = mensagem;
+    recado.setAttribute('data-visivel', '1');
+    if (timerRecado) clearTimeout(timerRecado);
+    timerRecado = setTimeout(function () {
+      recado.removeAttribute('data-visivel');
+    }, 4000);
+  }
+
+  /**
+   * `navigator.clipboard` só existe em contexto seguro e pode ser recusada
+   * pela permissão do navegador. O caminho antigo continua aqui porque a
+   * alternativa a ele é o botão não fazer nada — sem erro visível.
+   */
+  function copiar(texto) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(texto);
+    }
+    return new Promise(function (resolve, reject) {
+      var campo = document.createElement('textarea');
+      campo.value = texto;
+      campo.setAttribute('readonly', '');
+      campo.style.position = 'fixed';
+      campo.style.top = '-1000px';
+      document.body.appendChild(campo);
+      campo.select();
+      var deu = false;
+      try {
+        deu = document.execCommand('copy');
+      } catch (e) {
+        deu = false;
+      }
+      document.body.removeChild(campo);
+      deu ? resolve() : reject(new Error('cópia recusada'));
+    });
+  }
+
+  function confirmarNoBotao(botao, rotuloOriginal) {
+    botao.setAttribute('data-feito', '1');
+    setTimeout(function () {
+      botao.removeAttribute('data-feito');
+      botao.lastChild.nodeValue = rotuloOriginal;
+    }, 2200);
+  }
+
+  function ligarBotao(id, transformar, mensagem) {
+    var botao = document.getElementById(id);
+    if (!botao) return;
+    var rotulo = botao.lastChild.nodeValue;
+
+    botao.addEventListener('click', function () {
+      copiar(transformar(gerarMarkdown())).then(
+        function () {
+          botao.lastChild.nodeValue = ' Copiado';
+          confirmarNoBotao(botao, rotulo);
+          avisar(mensagem);
+        },
+        function () {
+          avisar('Não consegui copiar. Use Ctrl+A e Ctrl+C nesta página.');
+        },
+      );
+    });
+  }
+
+  ligarBotao(
+    'btn-copiar',
+    function (md) { return md; },
+    'Documentação copiada em texto. Cole onde precisar.',
+  );
+
+  ligarBotao(
+    'btn-ia',
+    function (md) { return PROMPT_IA + '\n\n' + md; },
+    'Copiado com o pedido pronto. Cole no ChatGPT, Claude ou no assistente do seu editor.',
+  );
+
+  /* ===== Copiar um bloco de código ===== */
+  var blocos = document.querySelectorAll('main pre');
+  for (var b = 0; b < blocos.length; b++) {
+    (function (pre) {
+      var caixa = document.createElement('div');
+      caixa.className = 'bloco-cod';
+      pre.parentNode.insertBefore(caixa, pre);
+      caixa.appendChild(pre);
+
+      var botao = document.createElement('button');
+      botao.type = 'button';
+      botao.className = 'copiar-cod';
+      botao.textContent = 'Copiar';
+      botao.setAttribute('aria-label', 'Copiar este bloco de código');
+      caixa.appendChild(botao);
+
+      botao.addEventListener('click', function () {
+        copiar(pre.textContent || '').then(
+          function () {
+            botao.textContent = 'Copiado';
+            botao.setAttribute('data-feito', '1');
+            setTimeout(function () {
+              botao.textContent = 'Copiar';
+              botao.removeAttribute('data-feito');
+            }, 1800);
+          },
+          function () {
+            botao.textContent = 'Falhou';
+            setTimeout(function () { botao.textContent = 'Copiar'; }, 1800);
+          },
+        );
+      });
+    })(blocos[b]);
+  }
+
+  /* ===== Âncora permanente nos títulos ===== */
+  var titulos = document.querySelectorAll('main section > h2');
+  for (var t = 0; t < titulos.length; t++) {
+    var secao = titulos[t].parentNode;
+    if (!secao.id) continue;
+    var link = document.createElement('a');
+    link.className = 'ancora';
+    link.href = '#' + secao.id;
+    link.textContent = '#';
+    link.setAttribute('aria-label', 'Link para esta seção');
+    titulos[t].appendChild(link);
+  }
+
+  /* ===== Índice acompanha a leitura =====
+     Sem isto, quem rola dez seções perde a referência de onde está numa
+     página que é toda navegação lateral. */
+  var links = {};
+  var itens = document.querySelectorAll('.indice a[href^="#"]');
+  for (var l = 0; l < itens.length; l++) {
+    links[itens[l].getAttribute('href').slice(1)] = itens[l];
+  }
+
+  if (window.IntersectionObserver) {
+    var visiveis = {};
+    var observador = new IntersectionObserver(
+      function (entradas) {
+        for (var i = 0; i < entradas.length; i++) {
+          visiveis[entradas[i].target.id] = entradas[i].isIntersecting;
+        }
+        var atual = null;
+        var todas = document.querySelectorAll('main section');
+        for (var j = 0; j < todas.length; j++) {
+          if (visiveis[todas[j].id]) { atual = todas[j].id; break; }
+        }
+        for (var id in links) {
+          if (Object.prototype.hasOwnProperty.call(links, id)) {
+            if (id === atual) links[id].setAttribute('aria-current', 'true');
+            else links[id].removeAttribute('aria-current');
+          }
+        }
+      },
+      { rootMargin: '-80px 0px -70% 0px' },
+    );
+
+    var secoesObservadas = document.querySelectorAll('main section');
+    for (var o = 0; o < secoesObservadas.length; o++) observador.observe(secoesObservadas[o]);
+  }
+})();
+</script>
 
 <script type="application/ld+json">
 {
