@@ -43,9 +43,7 @@
 
   /* Pontos de integração, fáceis de trocar. */
   window.MARTINS_CONFIG = {
-    rastreioEndpoint: '/api/rastreio',    // GET  {base}/{codigo}
-    contatoEndpoint:  '/api/contato',     // POST
-    whatsapp:         '5500000000000'     // TODO: número real
+    rastreioEndpoint: '/api/rastreio'   // GET {base}/{codigo}
   };
 </script>
 
@@ -58,7 +56,7 @@
   "name": "Martins Log",
   "description": "Transportadora rodoviária de cargas com frota própria, seguro total e rastreamento 24h.",
   "image": "https://martinslog.net/assets/img/logo-martins-log-640.png",
-  "telephone": "+55 00 0000-0000",
+  "telephone": "+551198376392",
   "email": "contato@martinslog.net",
   "address": {
     "@type": "PostalAddress",
@@ -75,7 +73,6 @@
 </head>
 
 <body>
-<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
 
 <!-- ===== HEADER ===== -->
 <header class="cabecalho" id="cabecalho">
@@ -119,19 +116,13 @@
       </ul>
 
       <div class="menu__acoes">
-        <!-- TODO: telefone real -->
-        <a class="menu__fone" href="tel:+550000000000">
+        <a class="menu__fone" href="tel:+551198376392">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2Z"/></svg>
           <span>
             <small>Fale agora</small>
-            (00) 0000-0000
+            (11) 9837-6392
           </span>
         </a>
-        <a class="botao botao--primario botao--bloco" href="#" data-whatsapp target="_blank" rel="noopener">
-          <svg class="botao__icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-12.6 7.3L3 20.5l1.8-5.3A8.5 8.5 0 1 1 21 11.5Z"/></svg>
-          Falar no WhatsApp
-        </a>
-        <a class="botao botao--contorno botao--bloco" href="#contato">Solicitar cotação</a>
       </div>
 
       <span class="menu__estrada" aria-hidden="true">
@@ -143,12 +134,10 @@
     </nav>
 
     <div class="cabecalho__acoes">
-      <!-- TODO: telefone real -->
-      <a class="cabecalho__fone" href="tel:+550000000000">
+      <a class="cabecalho__fone" href="tel:+551198376392">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2Z"/></svg>
-        <span>(00) 0000-0000</span>
+        <span>(11) 9837-6392</span>
       </a>
-      <a class="botao botao--primario botao--pill cabecalho__cta" href="#contato">Solicitar cotação</a>
       <button class="hamburguer" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="menu">
         <span></span><span></span><span></span>
       </button>
@@ -180,13 +169,10 @@
           Frota própria, motoristas da casa e rastreamento em tempo real do
           embarque à entrega. Você acompanha cada quilômetro sem precisar ligar.
         </p>
-        <div class="hero__botoes">
-          <a class="botao botao--primario botao--grande" href="#contato">Solicitar cotação</a>
-          <a class="botao botao--contorno botao--grande" href="#" data-whatsapp target="_blank" rel="noopener">
-            <svg class="botao__icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-12.6 7.3L3 20.5l1.8-5.3A8.5 8.5 0 1 1 21 11.5Z"/></svg>
-            Falar no WhatsApp
-          </a>
-        </div>
+        <a class="botao botao--primario botao--grande" href="tel:+551198376392">
+          <svg class="botao__icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2Z"/></svg>
+          (11) 9837-6392
+        </a>
       </div>
 
       <!-- ===== CARD DE RASTREIO ===== -->
@@ -427,105 +413,10 @@
     </div>
   </section>
 
-  <!-- ===== CONTATO ===== -->
-  <section class="secao" id="contato">
-    <div class="container">
-      <header class="secao__cabecalho revelar">
-        <p class="eyebrow">Fale com a gente</p>
-        <h2 class="secao__titulo">Solicite sua cotação</h2>
-        <span class="secao__linha" aria-hidden="true"></span>
-        <p class="secao__apoio">Conte a rota e o tipo de carga. Respondemos com valor e prazo em até 1 dia útil.</p>
-      </header>
-
-      <div class="contato__grade">
-        <form class="formulario revelar" id="form-contato" novalidate>
-          <div class="campo">
-            <label for="nome">Nome <span aria-hidden="true">*</span></label>
-            <input id="nome" name="nome" type="text" autocomplete="name" required aria-describedby="erro-nome">
-            <p class="campo__erro" id="erro-nome" role="status" hidden></p>
-          </div>
-
-          <div class="campo">
-            <label for="email">E-mail <span aria-hidden="true">*</span></label>
-            <input id="email" name="email" type="email" autocomplete="email" required aria-describedby="erro-email">
-            <p class="campo__erro" id="erro-email" role="status" hidden></p>
-          </div>
-
-          <div class="campo">
-            <label for="telefone">Telefone / WhatsApp <span aria-hidden="true">*</span></label>
-            <input id="telefone" name="telefone" type="tel" inputmode="tel" autocomplete="tel"
-                   placeholder="(00) 00000-0000" maxlength="15" required aria-describedby="erro-telefone">
-            <p class="campo__erro" id="erro-telefone" role="status" hidden></p>
-          </div>
-
-          <div class="campo">
-            <label for="tipoCarga">Tipo de carga</label>
-            <select id="tipoCarga" name="tipoCarga">
-              <option value="">Selecione</option>
-              <option>Carga fracionada</option>
-              <option>Carga dedicada / lotação</option>
-              <option>Entrega expressa</option>
-              <option>Armazenagem</option>
-              <option>Logística para e-commerce</option>
-              <option>Mudanças e transferências</option>
-            </select>
-          </div>
-
-          <div class="campo">
-            <label for="origem">Origem (cidade/UF) <span aria-hidden="true">*</span></label>
-            <input id="origem" name="origem" type="text" placeholder="São Paulo/SP" required aria-describedby="erro-origem">
-            <p class="campo__erro" id="erro-origem" role="status" hidden></p>
-          </div>
-
-          <div class="campo">
-            <label for="destino">Destino (cidade/UF) <span aria-hidden="true">*</span></label>
-            <input id="destino" name="destino" type="text" placeholder="Curitiba/PR" required aria-describedby="erro-destino">
-            <p class="campo__erro" id="erro-destino" role="status" hidden></p>
-          </div>
-
-          <div class="campo campo--largo">
-            <label for="mensagem">Mensagem</label>
-            <textarea id="mensagem" name="mensagem" rows="4" placeholder="Peso aproximado, quantidade de volumes, prazo desejado..."></textarea>
-          </div>
-
-          <div class="campo campo--largo">
-            <button class="botao botao--primario botao--bloco" type="submit" id="btn-contato">
-              <span class="btn__texto">Solicitar cotação</span>
-              <span class="spinner" hidden aria-hidden="true"></span>
-            </button>
-          </div>
-        </form>
-
-        <aside class="contato__blocos revelar">
-          <!-- TODO: dados reais -->
-          <a class="contato__item" href="tel:+550000000000">
-            <span class="contato__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2Z"/></svg></span>
-            <span><strong>Telefone</strong>(00) 0000-0000</span>
-          </a>
-          <a class="contato__item" href="#" data-whatsapp target="_blank" rel="noopener">
-            <span class="contato__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-12.6 7.3L3 20.5l1.8-5.3A8.5 8.5 0 1 1 21 11.5Z"/></svg></span>
-            <span><strong>WhatsApp</strong>(00) 00000-0000</span>
-          </a>
-          <a class="contato__item" href="mailto:contato@martinslog.net">
-            <span class="contato__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6h18v12H3z"/><path d="m3 7 9 6 9-6"/></svg></span>
-            <span><strong>E-mail</strong>contato@martinslog.net</span>
-          </a>
-          <div class="contato__item contato__item--estatico">
-            <span class="contato__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
-            <span><strong>Endereço</strong>Rua Exemplo, 000 — Centro, Cidade/UF</span>
-          </div>
-          <div class="contato__item contato__item--estatico">
-            <span class="contato__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
-            <span><strong>Atendimento</strong>Segunda a sexta, 8h às 18h</span>
-          </div>
-        </aside>
-      </div>
-    </div>
-  </section>
 </main>
 
 <!-- ===== FOOTER ===== -->
-<footer class="rodape">
+<footer class="rodape" id="contato">
   <div class="rodape__estrada" aria-hidden="true">
     <svg viewBox="0 0 1440 400" preserveAspectRatio="none">
       <path d="M-60 400C240 300 380 180 720 140s520-70 800-40" fill="none" stroke="#fff" stroke-width="90" opacity=".03"/>
@@ -543,7 +434,6 @@
       <ul class="redes">
         <li><a href="#" aria-label="Instagram da Martins Log"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".8" fill="currentColor"/></svg></a></li>
         <li><a href="#" aria-label="Facebook da Martins Log"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 9h3V6h-3a4 4 0 0 0-4 4v2H8v3h2v7h3v-7h2.5l.5-3H13v-2a1 1 0 0 1 1-1Z"/></svg></a></li>
-        <li><a href="#" data-whatsapp target="_blank" rel="noopener" aria-label="WhatsApp da Martins Log"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-12.6 7.3L3 20.5l1.8-5.3A8.5 8.5 0 1 1 21 11.5Z"/></svg></a></li>
       </ul>
     </div>
 
@@ -564,7 +454,6 @@
         <li><a href="#sobre">Sobre a empresa</a></li>
         <li><a href="#cobertura">Área de cobertura</a></li>
         <li><a href="#rastreio">Rastrear encomenda</a></li>
-        <li><a href="#contato">Solicitar cotação</a></li>
       </ul>
     </div>
 
@@ -572,7 +461,7 @@
       <h3>Contato</h3>
       <!-- TODO: dados reais -->
       <ul>
-        <li><a href="tel:+550000000000">(00) 0000-0000</a></li>
+        <li><a href="tel:+551198376392">(11) 9837-6392</a></li>
         <li><a href="mailto:contato@martinslog.net">contato@martinslog.net</a></li>
         <li>Rua Exemplo, 000 — Centro</li>
         <li>Cidade/UF — CEP 00000-000</li>
@@ -588,13 +477,6 @@
     </div>
   </div>
 </footer>
-
-<a class="whatsapp-flutuante" href="#" data-whatsapp target="_blank" rel="noopener" aria-label="Falar com a Martins Log no WhatsApp">
-  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.04 2A9.9 9.9 0 0 0 2.1 11.9c0 1.75.46 3.46 1.34 4.97L2 22l5.28-1.38a9.9 9.9 0 0 0 4.76 1.21h.01a9.9 9.9 0 0 0 9.9-9.9A9.9 9.9 0 0 0 12.04 2Zm5.8 14.05c-.24.68-1.42 1.32-1.96 1.36-.5.04-.99.22-3.35-.7-2.82-1.1-4.6-3.98-4.74-4.17-.14-.19-1.13-1.5-1.13-2.87s.72-2.03.97-2.31c.25-.28.55-.35.73-.35l.52.01c.17 0 .4-.06.62.48l.85 2.06c.07.14.12.31.02.5-.1.19-.14.3-.28.47l-.42.49c-.14.14-.28.29-.12.57.16.28.72 1.18 1.54 1.91 1.06.94 1.95 1.23 2.23 1.37.28.14.44.12.6-.07l.86-1c.2-.24.36-.19.6-.1l1.72.81c.25.12.42.18.48.28.06.1.06.6-.18 1.28Z"/></svg>
-  <span class="whatsapp-flutuante__anel" aria-hidden="true"></span>
-</a>
-
-<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
 
 <script src="assets/js/main.js" defer></script>
 </body>

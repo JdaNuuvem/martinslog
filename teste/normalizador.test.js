@@ -1,6 +1,7 @@
 /**
  * Testa a leitura da resposta de rastreio contra o contrato real da
- * plataforma (repositório JdaNuuvem/martinslog).
+ * plataforma (repositório JdaNuuvem/martinslog), e a sanidade dos scripts
+ * embutidos na página.
  *
  * As funções são extraídas do `main.js` publicado em vez de reescritas aqui:
  * um teste que duplica a lógica não prova nada sobre o que vai ao ar.
@@ -32,8 +33,8 @@ function extrairFuncao(nome) {
 function extrairBlocoStatus() {
   const inicio = fonte.indexOf('var MAPA_STATUS');
   if (inicio < 0) throw new Error('MAPA_STATUS não encontrado');
-  return fonte.slice(inicio, fonte.indexOf('{', fonte.indexOf('function classificarStatus'))) +
-    extrairFuncao('classificarStatus').slice(extrairFuncao('classificarStatus').indexOf('{'));
+  const corpo = extrairFuncao('classificarStatus');
+  return fonte.slice(inicio, fonte.indexOf('function classificarStatus')) + corpo;
 }
 
 const normalizarResposta = new Function(extrairFuncao('normalizarResposta') + '; return normalizarResposta;')();
@@ -50,7 +51,7 @@ const conferir = (nome, ok) => {
    ============================================================ */
 console.log('\n— resposta da plataforma —');
 
-const daPlataforma = {
+const r = normalizarResposta({
   rastreio: {
     codigoRastreio: 'EC000000014BR',
     status: 'GENERATED',
@@ -78,9 +79,7 @@ const daPlataforma = {
       },
     ],
   },
-};
-
-const r = normalizarResposta(daPlataforma);
+});
 
 conferir('desembrulhou { rastreio }', r !== null);
 conferir('leu codigoRastreio', r.codigo === 'EC000000014BR');
@@ -135,6 +134,55 @@ for (const [token, rotulo, etapa] of esperados) {
 
 const vazando = esperados.filter(([t]) => /^[A-Z_]+$/.test(classificarStatus(t).rotulo));
 conferir('nenhum token de máquina chega à tela', vazando.length === 0);
+
+/* ============================================================
+   4. Sanidade dos scripts da página
+
+   Um erro de sintaxe no bloco embutido não aparece em lugar nenhum: o
+   navegador desiste daquele script em silêncio, e com ele vão o rastreio
+   e o menu. Já aconteceu uma vez ao editar a configuração à mão.
+   ============================================================ */
+console.log('\n— scripts da página —');
+
+const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const blocos = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
+
+const embutidos = blocos.filter(
+  ([, attrs]) => !/\bsrc=/.test(attrs) && !/application\/ld\+json/.test(attrs),
+);
+
+conferir('achou ao menos um script embutido', embutidos.length > 0);
+
+embutidos.forEach(([, , corpo], i) => {
+  let erro = null;
+  try {
+    new Function(corpo);
+  } catch (e) {
+    erro = e.message;
+  }
+  conferir('script embutido #' + (i + 1) + ' compila' + (erro ? ' — ' + erro : ''), erro === null);
+});
+
+// O JSON-LD é dado, não código: precisa ser JSON válido, senão o Google o ignora.
+const ld = blocos.find(([, attrs]) => /application\/ld\+json/.test(attrs));
+let erroLd = ld ? null : 'bloco não encontrado';
+if (ld) {
+  try {
+    JSON.parse(ld[2]);
+  } catch (e) {
+    erroLd = e.message;
+  }
+}
+conferir('JSON-LD é JSON válido' + (erroLd ? ' — ' + erroLd : ''), erroLd === null);
+
+// O arquivo externo também precisa compilar.
+let erroMain = null;
+try {
+  new Function(fonte);
+} catch (e) {
+  erroMain = e.message;
+}
+conferir('main.js compila' + (erroMain ? ' — ' + erroMain : ''), erroMain === null);
 
 console.log(falhas === 0 ? '\nTUDO PASSOU\n' : '\n' + falhas + ' FALHA(S)\n');
 process.exit(falhas === 0 ? 0 : 1);

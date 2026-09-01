@@ -1,7 +1,7 @@
 /* =========================================================================
    MARTINS LOG — comportamento da página
    Módulos: config → utilitários → cabeçalho → revelações → contadores →
-            cobertura → rastreio → contato → toasts
+            cobertura → rastreio
    JavaScript puro, sem dependências.
    ========================================================================= */
 
@@ -45,14 +45,6 @@
     if (isNaN(d.getTime())) return null;
     return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(d);
   }
-
-  /* ===== LINKS DE WHATSAPP ===== */
-  (function ligarWhatsapp() {
-    var numero = cfg.whatsapp || '';
-    var texto = encodeURIComponent('Olá! Vim pelo site da Martins Log e gostaria de um orçamento.');
-    var url = 'https://wa.me/' + numero + '?text=' + texto;
-    $$('[data-whatsapp]').forEach(function (a) { a.href = url; });
-  })();
 
   /* ===== CABEÇALHO: sombra, menu mobile e link ativo ===== */
   (function cabecalho() {
@@ -624,153 +616,5 @@
         form.dispatchEvent(new Event('submit', { cancelable: true }));
       });
     }
-  })();
-
-  /* =======================================================================
-     CONTATO
-     ======================================================================= */
-  (function contato() {
-    var form = $('#form-contato');
-    if (!form) return;
-
-    var botao = $('#btn-contato');
-    var textoBotao = $('.btn__texto', botao);
-    var spinner = $('.spinner', botao);
-    var telefone = $('#telefone');
-
-    /* Máscara (00) 00000-0000 — reescreve a partir dos dígitos, o que
-       mantém o campo coerente também quando o usuário apaga no meio. */
-    telefone.addEventListener('input', function () {
-      var d = telefone.value.replace(/\D/g, '').slice(0, 11);
-      var saida = '';
-      if (d.length) saida = '(' + d.slice(0, 2);
-      if (d.length >= 3) saida += ') ' + d.slice(2, d.length > 10 ? 7 : 6);
-      if (d.length > 6) saida += '-' + (d.length > 10 ? d.slice(7) : d.slice(6));
-      telefone.value = saida;
-    });
-
-    var EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-    var regras = {
-      nome: function (v) { return v.trim().length >= 2 ? null : 'Informe seu nome.'; },
-      email: function (v) { return EMAIL.test(v.trim()) ? null : 'Informe um e-mail válido.'; },
-      telefone: function (v) { return v.replace(/\D/g, '').length >= 10 ? null : 'Informe um telefone com DDD.'; },
-      origem: function (v) { return v.trim() ? null : 'Informe a cidade de origem.'; },
-      destino: function (v) { return v.trim() ? null : 'Informe a cidade de destino.'; }
-    };
-
-    function marcarErro(campo, msg) {
-      var alvo = form.elements[campo];
-      var caixa = $('#erro-' + campo);
-      alvo.classList.toggle('invalido', !!msg);
-      if (msg) alvo.setAttribute('aria-invalid', 'true'); else alvo.removeAttribute('aria-invalid');
-      if (caixa) {
-        caixa.textContent = msg || '';
-        caixa.hidden = !msg;
-      }
-    }
-
-    Object.keys(regras).forEach(function (campo) {
-      var alvo = form.elements[campo];
-      alvo.addEventListener('blur', function () { marcarErro(campo, regras[campo](alvo.value)); });
-      alvo.addEventListener('input', function () {
-        if (alvo.classList.contains('invalido')) marcarErro(campo, regras[campo](alvo.value));
-      });
-    });
-
-    function carregando(ativo) {
-      botao.disabled = ativo;
-      textoBotao.hidden = ativo;
-      spinner.hidden = !ativo;
-    }
-
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
-
-      var primeiroErro = null;
-      Object.keys(regras).forEach(function (campo) {
-        var msg = regras[campo](form.elements[campo].value);
-        marcarErro(campo, msg);
-        if (msg && !primeiroErro) primeiroErro = campo;
-      });
-      if (primeiroErro) {
-        form.elements[primeiroErro].focus();
-        return;
-      }
-
-      var dados = {
-        nome: form.elements.nome.value.trim(),
-        email: form.elements.email.value.trim(),
-        telefone: form.elements.telefone.value.trim(),
-        tipoCarga: form.elements.tipoCarga.value || null,
-        origem: form.elements.origem.value.trim(),
-        destino: form.elements.destino.value.trim(),
-        mensagem: form.elements.mensagem.value.trim() || null
-      };
-
-      carregando(true);
-
-      if (!cfg.contatoEndpoint) {
-        setTimeout(function () {
-          carregando(false);
-          form.reset();
-          toast('sucesso', 'Pedido enviado! (modo demonstração) Nossa equipe retorna em até 1 dia útil.');
-        }, 700);
-        return;
-      }
-
-      var controle = new AbortController();
-      var relogio = setTimeout(function () { controle.abort(); }, TIMEOUT_MS);
-
-      fetch(cfg.contatoEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(dados),
-        signal: controle.signal
-      })
-        .then(function (resp) {
-          clearTimeout(relogio);
-          if (!resp.ok) throw new Error('falha');
-          carregando(false);
-          form.reset();
-          Object.keys(regras).forEach(function (c) { marcarErro(c, null); });
-          toast('sucesso', 'Pedido enviado! Nossa equipe retorna em até 1 dia útil.');
-        })
-        .catch(function () {
-          clearTimeout(relogio);
-          carregando(false);
-          toast('erro', 'Não conseguimos enviar agora. Tente de novo ou fale com a gente no WhatsApp.');
-        });
-    });
-  })();
-
-  /* ===== TOASTS ===== */
-  function toast(tipo, mensagem) {
-    var caixa = $('#toasts');
-    if (!caixa) return;
-
-    var el = criar('div', 'toast toast--' + tipo);
-    el.setAttribute('role', tipo === 'erro' ? 'alert' : 'status');
-    el.innerHTML = tipo === 'sucesso'
-      ? '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/></svg>'
-      : '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg>';
-    el.appendChild(criar('span', null, mensagem));
-    caixa.appendChild(el);
-
-    setTimeout(function () {
-      el.classList.add('toast--saindo');
-      setTimeout(function () { el.remove(); }, 300);
-    }, 5200);
-  }
-
-  /* ===== BOTÃO FLUTUANTE DO WHATSAPP ===== */
-  (function whatsappFlutuante() {
-    var botao = $('.whatsapp-flutuante');
-    if (!botao) return;
-    function avaliar() {
-      botao.classList.toggle('whatsapp-flutuante--visivel', window.scrollY > 400);
-    }
-    window.addEventListener('scroll', avaliar, { passive: true });
-    avaliar();
   })();
 })();
