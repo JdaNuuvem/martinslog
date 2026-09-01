@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   SEQUENCIAL_MAXIMO,
   calcularDigitoVerificador,
+  ehCodigoSandbox,
   montarCodigoRastreio,
   prefixoDoServico,
   validarCodigoRastreio,
@@ -147,5 +148,28 @@ describe('prefixoDoServico', () => {
   it('ignora acentos e separadores ao derivar o prefixo', () => {
     expect(prefixoDoServico('ÉCONOMICO')).toBe('EC')
     expect(prefixoDoServico('e-conomico')).toBe('EC')
+  })
+})
+
+describe('ehCodigoSandbox', () => {
+  it('reconhece um código gerado pelo ambiente de teste', () => {
+    expect(ehCodigoSandbox('SANDBOXACC716356112')).toBe(true)
+  })
+
+  it('reconhece mesmo com espaços, hífens e minúsculas', () => {
+    // É o que chega quando alguém copia o código de um e-mail.
+    expect(ehCodigoSandbox('  sandbox-acc716356112 ')).toBe(true)
+  })
+
+  it('não confunde com um código real', () => {
+    expect(ehCodigoSandbox('EC000000014BR')).toBe(false)
+    expect(ehCodigoSandbox('RA000000028BR')).toBe(false)
+  })
+
+  it('aguenta vazio e lixo sem estourar', () => {
+    expect(ehCodigoSandbox('')).toBe(false)
+    expect(ehCodigoSandbox('   ')).toBe(false)
+    // A consulta pública é anônima: o que chega aqui é texto de estranho.
+    expect(ehCodigoSandbox(undefined as unknown as string)).toBe(false)
   })
 })

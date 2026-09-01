@@ -6,6 +6,7 @@ import {
   type EventoRastreio,
   type RastreioResposta,
 } from '@/lib/rastreio-schema'
+import { ehCodigoSandbox } from '@/domain/shipment/codigo-rastreio'
 import { FluxoRastreio } from './fluxo-rastreio'
 
 /**
@@ -166,7 +167,18 @@ export function RastreioForm({ codigoInicial = '' }: { codigoInicial?: string })
     const analise = codigoRastreioSchema.safeParse(valor)
     if (!analise.success) {
       setRastreio(null)
-      setErro('Código inválido. Confira os 13 caracteres, no formato AA000000000BR.')
+      /*
+        Código de teste não é código errado, e chamá-lo de inválido joga a
+        culpa em quem digitou. Quem chega aqui veio de um botão no e-mail de
+        uma loja: ler "código inválido" faz ele concluir que a loja errou o
+        pedido dele, quando o que falta é o lojista trocar a credencial de
+        teste pela de produção.
+      */
+      setErro(
+        ehCodigoSandbox(valor)
+          ? 'Este é um código de teste e não tem rastreio público. Se você comprou em uma loja, avise que a integração de frete ainda está em modo de teste.'
+          : 'Código inválido. Confira os 13 caracteres, no formato AA000000000BR.',
+      )
       return
     }
 
