@@ -30,6 +30,26 @@ const config: Config = {
           // sobre `superficie.pagina`.
           texto: '#1D3A72',
         },
+        /**
+         * Superfície escura da navegação e das telas de entrada — o mesmo
+         * azul do cabeçalho de martinslog.net.
+         *
+         * Os valores de `ativo`, `texto` e `borda` são hexadecimais
+         * resolvidos, não branco com opacidade: opacidade empilhada sobre
+         * fundo escuro muda de resultado conforme o que estiver atrás, e o
+         * contraste deixa de ser verificável.
+         */
+        sidebar: {
+          DEFAULT: '#0E1E3C',
+          // Fundo do item selecionado. Branco em cima — 12,79:1.
+          ativo: '#24324E',
+          // Item não selecionado — 7,07:1 sobre `sidebar.DEFAULT`.
+          texto: '#A3AAB5',
+          // Marcador do item selecionado — 3,90:1 sobre o fundo escuro,
+          // acima do mínimo de 3:1 para elemento gráfico.
+          marcador: '#E8323C',
+          borda: '#1C2B4A',
+        },
         alerta: {
           DEFAULT: '#F59E0B',
         },

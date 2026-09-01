@@ -82,7 +82,12 @@ export function Topbar({ nomeUsuario, menuAberto, onAlternarMenu, botaoMenuRef, 
   const saldoCentavos = useSaldo(autenticado)
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 flex h-topbar items-center justify-between border-b border-superficie-bloco bg-superficie-card px-4">
+    /*
+      No desktop a lateral escura vai do topo ao rodapé, então o cabeçalho
+      começa depois dela (`lg:left-sidebar`). Sem isso os dois se sobrepõem
+      e a marca da lateral fica coberta.
+    */
+    <header className="fixed inset-x-0 top-0 z-50 flex h-topbar items-center justify-between border-b border-superficie-bloco bg-superficie-card px-4 lg:left-sidebar">
       <div className="flex items-center gap-3">
         <button
           type="button"
