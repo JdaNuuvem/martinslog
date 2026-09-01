@@ -644,7 +644,11 @@ curl https://app.martinslog.net/api/v0/order/info/shp_abc \
           <tbody>
             <tr><td>Débito na carteira</td><td>Nenhum lançamento é criado</td><td>Debita ao pagar</td></tr>
             <tr><td>Código de rastreio</td><td><code>SANDBOX</code> + 12 hex</td><td><code>EC000000014BR</code></td></tr>
-            <tr><td>Página pública de rastreio</td><td>Não abre</td><td>Abre</td></tr>
+            <tr>
+              <td>Página pública de rastreio</td>
+              <td>Responde <strong>200</strong> e mostra erro</td>
+              <td>Abre o rastreio</td>
+            </tr>
             <tr><td>Webhook</td><td>Sai com <code>"sandbox": true</code></td><td>Sem esse campo</td></tr>
             <tr><td>Campo <code>charged</code></td><td>Sempre <code>false</code></td><td><code>true</code> após o pagamento</td></tr>
           </tbody>
@@ -1093,6 +1097,10 @@ curl https://app.martinslog.net/api/v0/order/info/shp_abc \
         <table>
           <thead><tr><th>Parâmetro</th><th>Valor</th></tr></thead>
           <tbody>
+            <tr>
+              <td>Atraso até a primeira tentativa</td>
+              <td class="num">até 1 minuto</td>
+            </tr>
             <tr><td>Tempo limite por tentativa</td><td class="num">5 segundos</td></tr>
             <tr><td>Tentativas totais</td><td class="num">6 (1 imediata + 5 reagendadas)</td></tr>
             <tr><td>Intervalos</td><td class="num">1 min · 5 min · 30 min · 2 h · 12 h</td></tr>
@@ -1102,6 +1110,12 @@ curl https://app.martinslog.net/api/v0/order/info/shp_abc \
           </tbody>
         </table>
       </div>
+      <p>
+        A fila é processada por um agendador que roda <strong>a cada minuto</strong>. Um
+        evento não sai no mesmo instante em que acontece: espere até um minuto entre a
+        mudança de status e a chegada da entrega. Não é fila travada.
+      </p>
+
       <p>
         <strong>Responda rápido e com 2xx.</strong> Grave o evento numa fila sua e
         processe depois; passar de 5 segundos conta como falha e gera reentrega.
@@ -1214,6 +1228,22 @@ $corpoCru = file_get_contents(<span class="s">'php://input'</span>);</pre>
         barras e planilhas já existentes o aceitem; o código em si é nosso.
       </p>
       <p>Em sandbox o formato é outro: <code>SANDBOX</code> seguido de 12 caracteres hexadecimais.</p>
+
+      <div class="aviso grave">
+        <span class="rotulo">Código de sandbox não rastreia</span>
+        <p>
+          Ele não passa na validação de formato: a consulta responde
+          <span class="chip at">422 CODIGO_INVALIDO</span> e a página mostra erro.
+          <strong>A página em si devolve HTTP 200</strong> — ela é montada no navegador,
+          e o erro aparece depois da consulta. Não use o código de status da página
+          como verificação de saúde: 200 ali não significa que o rastreio existe.
+        </p>
+        <p>
+          Enquanto o token for <code>frete_test_</code>, todo link de rastreio que a sua
+          loja mandar ao comprador vai parecer quebrado. É esperado, não é falha da
+          integração.
+        </p>
+      </div>
 
       <h4>Página para o seu cliente</h4>
 <pre>https://app.martinslog.net/r/EC000000014BR</pre>
