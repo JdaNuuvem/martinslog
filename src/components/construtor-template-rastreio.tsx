@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { CanvasFluxoRastreio } from './canvas-fluxo-rastreio'
+import { CanvasFluxoRastreio, posicaoPadrao } from './canvas-fluxo-rastreio'
 
 type ItemPaleta = {
   codigo: string
@@ -26,9 +26,6 @@ type Passo = {
 }
 
 type StatusPadrao = { codigo: string; titulo: string; descricao: string }
-
-const CAMPO =
-  'w-full rounded-lg border border-borda-campo bg-superficie-card px-3 py-2 text-sm text-texto-principal focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand'
 
 
 /**
@@ -137,6 +134,46 @@ export function ConstrutorTemplateRastreio() {
 
   function remover(indice: number) {
     setPassos((atuais) => atuais.filter((_, i) => i !== indice))
+  }
+
+  function removerVarios(indices: number[]) {
+    const alvos = new Set(indices)
+    setPassos((atuais) => atuais.filter((_, i) => !alvos.has(i)))
+  }
+
+  /**
+   * Duplica os nós selecionados logo depois do último deles, deslocados no
+   * canvas para não ficarem exatamente por cima do original.
+   *
+   * O dia é o mesmo da origem, mas o título ganha um sufixo: dois nós do
+   * mesmo tipo, no mesmo dia e com o mesmo texto são recusados na validação
+   * justamente por serem indistinguíveis na timeline. Duplicar e já cair num
+   * erro seria uma armadilha, então a cópia nasce diferenciada.
+   */
+  function duplicar(indices: number[]) {
+    if (indices.length === 0) return
+    setErro(null)
+
+    setPassos((atuais) => {
+      const ordenados = [...indices].sort((a, b) => a - b)
+      const copias = ordenados.map((i, ordem) => {
+        const original = atuais[i]!
+        // A posição do original pode ser implícita (o arranjo inicial do
+        // canvas). Resolver aqui evita que várias cópias caiam todas no
+        // mesmo canto, empilhadas.
+        const base = posicaoPadrao(i)
+        return {
+          ...original,
+          id: novoId(),
+          titulo: `${original.titulo} (cópia)`,
+          x: (original.x ?? base.x) + 40,
+          y: (original.y ?? base.y) + 40 + ordem * 8,
+        }
+      })
+
+      const posicaoFinal = ordenados[ordenados.length - 1]! + 1
+      return [...atuais.slice(0, posicaoFinal), ...copias, ...atuais.slice(posicaoFinal)]
+    })
   }
 
   function mover(indice: number, direcao: -1 | 1) {
@@ -305,6 +342,8 @@ export function ConstrutorTemplateRastreio() {
           onMover={moverNoCanvas}
           onEditar={usaTemplate ? editar : editarTextoPadraoLocal}
           onRemover={remover}
+          onRemoverVarios={removerVarios}
+          onDuplicar={duplicar}
           onReordenar={mover}
         />
       ) : null}
