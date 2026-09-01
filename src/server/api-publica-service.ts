@@ -104,11 +104,16 @@ export type EntradaCarrinho = {
  * comprador dele. `label_fee` é o que a plataforma cobra do lojista por
  * etiqueta gerada — número diferente, com dono diferente, e misturar os dois
  * num campo só fez a API responder R$ 1,00 onde deveria estar o transporte.
+ *
+ * `charged` diz se a taxa **foi cobrada de fato**. Sem ele, `label_fee`
+ * responde 1.00 tanto para um envio pago quanto para um de sandbox ou ainda
+ * pendente, e quem somasse o campo contaria dinheiro que nunca saiu.
  */
 export type ItemCarrinho = {
   id: string
   price: string
   label_fee: string
+  charged: boolean
   status: string
 }
 
@@ -181,6 +186,7 @@ export async function criarCarrinho(
     id: envio.id,
     price: (envio.precoFreteCentavos / 100).toFixed(2),
     label_fee: (envio.precoCobradoCentavos / 100).toFixed(2),
+    charged: await houveCobranca(envio.id),
     status: envio.status,
   }
 }
@@ -273,8 +279,10 @@ export type InfoEnvio = {
   tracking_url: string | null
   /** Frete do envio: o valor do transporte, que o comprador do lojista vê. */
   price: string
-  /** Taxa por etiqueta gerada, debitada da carteira do lojista. */
+  /** Taxa por etiqueta gerada. É o preço; `charged` diz se foi cobrado. */
   label_fee: string
+  /** Se a taxa saiu da carteira de fato. Falso em sandbox e antes do pagamento. */
+  charged: boolean
   sandbox: boolean
   created_at: string
 }
@@ -298,9 +306,27 @@ export async function obterInfoEnvio(contexto: ContextoApi, shipmentId: string):
     tracking_url: envio.codigoRastreio ? `/r/${envio.codigoRastreio}` : null,
     price: (envio.precoFreteCentavos / 100).toFixed(2),
     label_fee: (envio.precoCobradoCentavos / 100).toFixed(2),
+    charged: await houveCobranca(envio.id),
     sandbox: envio.sandbox,
     created_at: envio.criadoEm.toISOString(),
   }
+}
+
+/**
+ * Se a taxa deste envio saiu da carteira de fato.
+ *
+ * Consulta o `LedgerEntry`, e não a flag de sandbox nem o status: o livro-caixa
+ * é a fonte de verdade sobre dinheiro, e derivar de qualquer outra coisa
+ * criaria uma segunda versão da verdade que pode divergir dele. Sandbox não
+ * gera lançamento, e um envio ainda `PENDING` também não — os dois respondem
+ * falso pelo mesmo motivo, sem precisar de caso especial.
+ */
+async function houveCobranca(shipmentId: string): Promise<boolean> {
+  const lancamentos = await prisma.ledgerEntry.count({
+    where: { refTipo: 'SHIPMENT', refId: shipmentId, tipo: 'DEBITO' },
+  })
+
+  return lancamentos > 0
 }
 
 export type { AmbienteApiToken }

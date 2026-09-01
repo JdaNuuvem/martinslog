@@ -132,8 +132,14 @@ describe('API pública /api/v0', () => {
       id: string
       price: string
       label_fee: string
+      charged: boolean
       status: string
     }
+
+    // Recém-criado e ainda não pago: o preço já é conhecido, a cobrança não
+    // aconteceu. É a distinção que `charged` existe para carregar.
+    expect(carrinho.label_fee).toBe('1.00')
+    expect(carrinho.charged).toBe(false)
 
     // O que sai da carteira é a taxa por etiqueta, não o frete. São dois
     // números com donos diferentes: o frete é o que o comprador do lojista
@@ -163,12 +169,15 @@ describe('API pública /api/v0', () => {
       tracking: string | null
       price: string
       label_fee: string
+      charged: boolean
     }
 
     // O detalhe do envio precisa carregar os dois: sem o frete, quem integra
     // não tem o valor do transporte para mostrar ao comprador dele.
     expect(corpoInfo.price).toBe(carrinho.price)
     expect(corpoInfo.label_fee).toBe('1.00')
+    // Pago em produção: a taxa saiu da carteira e o campo diz isso.
+    expect(corpoInfo.charged).toBe(true)
     expect(['RELEASED', 'GENERATED']).toContain(corpoInfo.status)
   })
 
@@ -189,6 +198,23 @@ describe('API pública /api/v0', () => {
 
     const walletDepois = await prisma.wallet.findUniqueOrThrow({ where: { userId: user.id } })
     expect(walletDepois.saldoCentavos).toBe(walletAntes.saldoCentavos)
+
+    // Sandbox paga sem debitar: o `label_fee` continua dizendo quanto
+    // custaria em produção — que é o motivo de o ambiente de teste existir —
+    // e `charged` deixa explícito que nada saiu. Sem ele, quem somasse o
+    // campo para conciliar contaria dinheiro que nunca existiu.
+    const infoSandbox = await ORDER_INFO(
+      reqGet(`/api/v0/order/info/${carrinho.id}`, tokenClaro),
+      { params: Promise.resolve({ id: carrinho.id }) },
+    )
+    const corpoSandbox = (await infoSandbox.json()) as {
+      label_fee: string
+      charged: boolean
+      sandbox: boolean
+    }
+    expect(corpoSandbox.label_fee).toBe('1.00')
+    expect(corpoSandbox.charged).toBe(false)
+    expect(corpoSandbox.sandbox).toBe(true)
 
     const shipment = await prisma.shipment.findUniqueOrThrow({ where: { id: carrinho.id } })
     expect(shipment.sandbox).toBe(true)
