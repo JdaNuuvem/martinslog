@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { PRECO_ETIQUETA_CENTAVOS } from '../src/domain/pricing/etiqueta'
 
 /**
  * Jornada completa do cliente, ponta a ponta: cotar sem login, cadastrar
@@ -298,7 +299,10 @@ test('jornada completa: cotar, cadastrar, recarregar, enviar, pagar e rastrear',
   // 5. Pagar — saldo debitado, GENERATED, código de rastreio, timeline ----
   const saldoAposEnvio = await page.request.get('/api/carteira')
   const { saldoCentavos: saldoFinal } = (await saldoAposEnvio.json()) as { saldoCentavos: number }
-  expect(saldoFinal).toBe(saldoAposRecarga - opcaoComDesconto!.precoFinalCentavos)
+  // O que sai da carteira é o preço por etiqueta gerada, não o frete: o frete
+  // da cotação (`opcaoComDesconto.precoFinalCentavos`) é o valor do
+  // transporte, que aparece na etiqueta e no rastreio.
+  expect(saldoFinal).toBe(saldoAposRecarga - PRECO_ETIQUETA_CENTAVOS)
 
   const meusEnvios = await page.request.get('/api/envios/meus')
   expect(meusEnvios.ok(), await meusEnvios.text()).toBe(true)
@@ -362,6 +366,16 @@ test('página pública logo após a emissão: um único evento, faixa de aguarda
   const paginaAdmin = await contextoAdmin.newPage()
   await logarComoAdmin(paginaAdmin)
 
+  // `SimulacaoConfig` é um registro único e global: o teste do fator de
+  // velocidade deixa 1440x gravado, e a esta altura a emissão nasceria com
+  // seis eventos já no passado — a timeline inteira cabe em um minuto de
+  // relógio. Fixar o tempo real aqui torna este teste independente da ordem
+  // em que a suíte roda, em vez de depender de quem correu antes.
+  const respostaFator = await paginaAdmin.request.post('/api/admin/simulacao', {
+    data: { fatorVelocidade: 1 },
+  })
+  expect(respostaFator.ok(), await respostaFator.text()).toBe(true)
+
   const { quoteId, opcao } = await prepararClienteComCotacaoESaldo(request, paginaAdmin.request, 'emissao')
   const shipmentId = await criarEEmitirEnvio(request, quoteId, opcao.servicoId)
 
@@ -384,7 +398,11 @@ test('página pública logo após a emissão: um único evento, faixa de aguarda
   await expect(page.getByRole('term').filter({ hasText: 'Código de rastreio' })).toBeVisible()
   await expect(page.getByRole('term').filter({ hasText: 'Prazo' })).toBeVisible()
 
-  const itensTimeline = page.locator('ol > li')
+  // Mira a lista de movimentações pelo nome acessível: o diagrama do caminho
+  // do envio, acrescentado à página pública depois que este teste foi
+  // escrito, também é um `<ol>` — e um `ol > li` solto passou a contar os
+  // passos do desenho em vez dos eventos ocorridos.
+  const itensTimeline = page.getByRole('list', { name: 'Movimentações do envio' }).locator('> li')
   await expect(itensTimeline).toHaveCount(1)
 
   const jsonResposta = (await (await page.request.get(`/api/rastreio/${codigo}`)).json()) as {
@@ -441,6 +459,11 @@ test('fator de velocidade acelera a simulação: eventos separados por minutos, 
   // minutos, nunca de dias inteiros.
   expect(diferencaMinutos).toBeGreaterThan(0)
   expect(diferencaMinutos).toBeLessThan(60 * 24)
+
+  // Devolve o relógio ao tempo real. O fator é global e sobrevive ao teste;
+  // deixá-lo em 1440x fazia a emissão de qualquer teste seguinte nascer com
+  // a timeline inteira no passado.
+  await paginaAdmin.request.post('/api/admin/simulacao', { data: { fatorVelocidade: 1 } })
 
   await paginaAdmin.close()
   await contextoAdmin.close()

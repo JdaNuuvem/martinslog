@@ -136,7 +136,11 @@ function Resultado({ rastreio }: { rastreio: RastreioResposta }) {
           Ainda não há movimentações registradas para este envio.
         </p>
       ) : (
-        <ol className="flex flex-col px-6">
+        // A lista é nomeada porque não é a única da página: o diagrama do
+        // caminho do envio também é um `<ol>`. Sem nome, leitor de tela
+        // anuncia duas listas indistinguíveis, e teste automatizado não tem
+        // como mirar uma das duas sem depender de classe de estilo.
+        <ol aria-label="Movimentações do envio" className="flex flex-col px-6">
           {rastreio.eventos.map((evento, indice) => (
             <ItemTimeline
               key={evento.sequencia}
