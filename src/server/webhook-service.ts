@@ -111,6 +111,7 @@ export async function enfileirarEvento(
       userId: true,
       status: true,
       codigoRastreio: true,
+      precoFreteCentavos: true,
       precoCobradoCentavos: true,
       criadoEm: true,
     },
@@ -152,6 +153,9 @@ type EnvioPayload = {
   id: string
   status: string
   codigoRastreio: string | null
+  /** O transporte. É o que o integrador mostra ao comprador dele. */
+  precoFreteCentavos: number
+  /** A taxa por etiqueta. Fica fora do payload — ver `montarPayload`. */
   precoCobradoCentavos: number
   criadoEm: Date
 }
@@ -169,7 +173,20 @@ function montarPayload(evento: Evento, envio: EnvioPayload) {
       status: envio.status,
       tracking: envio.codigoRastreio,
       tracking_url: envio.codigoRastreio ? `/r/${envio.codigoRastreio}` : null,
-      price: (envio.precoCobradoCentavos / 100).toFixed(2),
+      /*
+        O FRETE, não a taxa por etiqueta.
+
+        Vinha de `precoCobradoCentavos` — o R$ 1,00 que a plataforma cobra
+        do lojista — onde o integrador espera o valor do transporte. O
+        mesmo erro já tinha sido corrigido no /cart e no /order/info; aqui
+        ficou para trás, e uma loja que gravasse este campo como custo de
+        envio registraria 1,00 no lugar de 28,00.
+
+        A taxa não entra no payload de propósito: ela é assunto entre a
+        plataforma e o lojista, e quem consome o webhook nada tem a ver com
+        ela. Quem precisar dela lê `label_fee` em /order/info.
+      */
+      price: (envio.precoFreteCentavos / 100).toFixed(2),
       created_at: envio.criadoEm.toISOString(),
     },
     sent_at: new Date().toISOString(),
