@@ -86,11 +86,22 @@ async function tratar(request: NextRequest): Promise<NextResponse> {
   }
 
   if (situacao === ENTREGUE) {
+    /*
+      `entregueEm` é o que este aviso vem trazer, e é a única informação que
+      ele acrescenta. Gravar só o status repetiria o estado que a mensagem já
+      tinha — foi o que este código fazia antes, e tornava o recurso inteiro
+      invisível: para saber se chegou era preciso consultar o provedor à mão.
+    */
     await prisma.mensagemEnvio.update({
       where: { id: mensagem.id },
-      data: { status: 'ENVIADA', enviadaEm: mensagem.enviadaEm ?? new Date(), erro: null },
+      data: {
+        status: 'ENVIADA',
+        enviadaEm: mensagem.enviadaEm ?? new Date(),
+        entregueEm: mensagem.entregueEm ?? new Date(),
+        erro: null,
+      },
     })
-    return NextResponse.json({ recebido: true, conciliado: true, situacao })
+    return NextResponse.json({ recebido: true, conciliado: true, situacao, entregue: true })
   }
 
   if (FALHAS.has(situacao)) {

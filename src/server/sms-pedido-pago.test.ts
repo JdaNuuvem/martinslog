@@ -190,3 +190,39 @@ describe('SMS de pagamento confirmado', () => {
     expect(enviada.idExterno).toBeTruthy()
   })
 })
+
+describe('nome de exibição', () => {
+  it('o comprador vê o nome de exibição, não o interno do painel', async () => {
+    const usuario = await criarUsuarioComSaldo(50_000)
+    usuariosCriados.push(usuario.id)
+
+    /*
+      É a diferença que o teste protege: o painel precisa distinguir as lojas
+      entre si, e o comprador precisa reconhecer onde comprou. Sem o campo
+      separado, o SMS sairia assinado com um remetente que ele nunca viu.
+    */
+    const perfil = await prisma.perfil.create({
+      data: { userId: usuario.id, nome: 'Best Buy Tech', nomeExibicao: 'Tiktok shop' },
+    })
+
+    await venderPara(usuario.id, perfil.id, destinatarioCom('11988887777'))
+    await dispararSmsPendentes()
+
+    const texto = fake.enviados[0]!.texto
+    expect(texto).toContain('Tiktok shop')
+    expect(texto).not.toContain('Best Buy Tech')
+  })
+
+  it('sem nome de exibição, cai no nome interno em vez de ficar sem remetente', async () => {
+    const usuario = await criarUsuarioComSaldo(50_000)
+    usuariosCriados.push(usuario.id)
+    const perfil = await prisma.perfil.create({
+      data: { userId: usuario.id, nome: 'Loja Sem Exibicao' },
+    })
+
+    await venderPara(usuario.id, perfil.id, destinatarioCom('11988887777'))
+    await dispararSmsPendentes()
+
+    expect(fake.enviados[0]!.texto).toContain('Loja Sem Exibicao')
+  })
+})

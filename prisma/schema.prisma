@@ -851,7 +851,25 @@ model MensagemEnvio {
   idExterno          String?
   erro               String?
   proximaTentativaEm DateTime?
+  /// Quando o provedor ACEITOU a mensagem. Não é o mesmo que entregue.
   enviadaEm          DateTime?
+  /**
+   * Quando a mensagem chegou ao APARELHO, segundo a operadora.
+   *
+   * Existe porque `enviadaEm` só diz que o provedor aceitou, e os dois estados
+   * se separam na prática: num teste real, duas mensagens quase idênticas
+   * saíram com minutos de diferença — uma foi confirmada no aparelho, a outra
+   * ficou sete minutos em "aceita" e nunca chegou.
+   *
+   * Sem este campo o aviso de situação do provedor não tinha onde escrever, e
+   * gravava o mesmo estado que a mensagem já tinha. O recurso existia e não
+   * produzia informação nenhuma: para saber se chegou era preciso consultar o
+   * provedor à mão, uma mensagem por vez.
+   *
+   * Nulo não significa "não chegou" — significa "ninguém confirmou". Nem toda
+   * operadora devolve a confirmação.
+   */
+  entregueEm         DateTime?
   criadoEm           DateTime       @default(now())
 
   perfil   Perfil            @relation(fields: [perfilId], references: [id], onDelete: Cascade)
