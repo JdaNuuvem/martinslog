@@ -27,18 +27,7 @@ export type EventoRastreio = {
   ocorridoEm: string
 }
 
-/**
- * Forma do percurso configurado pela conta, para o rastreio público desenhar
- * o fluxo. Carrega o que a encomenda percorre, **nunca quando** — a data de
- * uma etapa futura é justamente o que a seção 7 da spec proíbe mostrar.
- */
-export type FluxoPublico = {
-  nos: { id: string; codigo: string; titulo: string; x: number | null; y: number | null }[]
-  conexoes: { de: string; para: string }[]
-}
-
 export type RastreioResposta = {
-  fluxo: FluxoPublico
   codigoRastreio: string
   /** Derivado do último evento já ocorrido — nunca do campo escrito à mão. */
   status: string

@@ -6,7 +6,6 @@ import {
   type EventoRastreio,
   type RastreioResposta,
 } from '@/lib/rastreio-schema'
-import { FluxoRastreio } from './fluxo-rastreio'
 
 /**
  * Cor da faixa e do título de cada evento, conforme a referência visual
@@ -245,16 +244,11 @@ export function RastreioForm({ codigoInicial = '' }: { codigoInicial?: string })
         </p>
       ) : null}
 
-      {rastreio ? (
-        <>
-          <Resultado rastreio={rastreio} />
-          {/* Depois da timeline: o que já aconteceu vem primeiro, e o mapa do
-              percurso serve para situar quem quer saber o que vem pela
-              frente. Mostra etapas genéricas, nunca os eventos futuros deste
-              envio — ver o comentário em `FluxoRastreio`. */}
-          <FluxoRastreio fluxo={rastreio.fluxo} eventos={rastreio.eventos} />
-        </>
-      ) : null}
+      {/* Só o que já aconteceu. O mapa do percurso completo saiu daqui: as
+          etapas futuras descrevem a operação da conta e insinuam ao cliente
+          um caminho que a simulação ainda pode mudar. Quem consulta vê o
+          status atual e o histórico, nada além. */}
+      {rastreio ? <Resultado rastreio={rastreio} /> : null}
     </div>
   )
 }
