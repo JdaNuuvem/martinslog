@@ -105,6 +105,8 @@ export function ListaEtiquetas() {
   const [erro, setErro] = useState<string | null>(null)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [cancelandoId, setCancelandoId] = useState<string | null>(null)
+  const [avancandoId, setAvancandoId] = useState<string | null>(null)
+  const [avancoRecente, setAvancoRecente] = useState<{ id: string; titulo: string } | null>(null)
 
   const carregar = useCallback(async () => {
     setErro(null)
@@ -154,6 +156,37 @@ export function ListaEtiquetas() {
       setErro('Não foi possível conectar ao servidor.')
     } finally {
       setCancelandoId(null)
+    }
+  }
+
+  /*
+    Avança o envio para a próxima etapa do percurso: a linha do tempo já
+    existe inteira, datada no futuro, e isto puxa o próximo evento para agora
+    — os seguintes andam junto, mantendo os intervalos do fluxo.
+  */
+  async function avancarEtapa(id: string) {
+    setAvancandoId(id)
+    setErro(null)
+    setAvancoRecente(null)
+
+    try {
+      const resposta = await fetch(`/api/etiquetas/${id}/avancar`, { method: 'POST' })
+      const corpo = (await resposta.json().catch(() => ({}))) as {
+        mensagem?: string
+        etapa?: { titulo: string }
+      }
+
+      if (!resposta.ok) {
+        setErro(corpo.mensagem ?? 'Não foi possível avançar a etapa deste envio.')
+        return
+      }
+
+      if (corpo.etapa) setAvancoRecente({ id, titulo: corpo.etapa.titulo })
+      await carregar()
+    } catch {
+      setErro('Não foi possível conectar ao servidor.')
+    } finally {
+      setAvancandoId(null)
     }
   }
 
@@ -274,6 +307,23 @@ export function ListaEtiquetas() {
                     >
                       Rastrear
                     </Link>
+                  ) : null}
+
+                  {etiqueta.podeAvancarEtapa ? (
+                    <button
+                      type="button"
+                      onClick={() => void avancarEtapa(etiqueta.id)}
+                      disabled={avancandoId === etiqueta.id}
+                      className="rounded-lg border border-brand px-4 py-2 text-sm font-medium text-brand-texto focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {avancandoId === etiqueta.id ? 'Avançando…' : 'Avançar etapa'}
+                    </button>
+                  ) : null}
+
+                  {avancoRecente?.id === etiqueta.id ? (
+                    <p role="status" className="self-center text-sm text-texto-secundario">
+                      Avançou para “{avancoRecente.titulo}”.
+                    </p>
                   ) : null}
 
                   {etiqueta.podeCancelar ? (

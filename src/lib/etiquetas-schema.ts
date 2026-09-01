@@ -57,6 +57,11 @@ export type EtiquetaResumo = {
   criadoEm: string
   /** Se o cliente ainda pode cancelar este envio. */
   podeCancelar: boolean
+  /**
+   * Se ainda há etapa futura na linha do tempo para antecipar. Falso quando o
+   * envio percorreu tudo, foi cancelado ou nem tem etiqueta emitida.
+   */
+  podeAvancarEtapa: boolean
 }
 
 export type ListaEtiquetasResposta = {

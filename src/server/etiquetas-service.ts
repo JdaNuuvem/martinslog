@@ -129,6 +129,9 @@ export async function listarEtiquetas(
         orderBy: [{ ocorridoEm: 'desc' }, { sequencia: 'desc' }],
         take: 1,
       },
+      // Só a contagem: a tela precisa saber se ainda há etapa pela frente,
+      // não quais são — os eventos futuros continuam fora da resposta.
+      _count: { select: { trackingEvents: { where: { ocorridoEm: { gt: agora } } } } },
     },
     orderBy: { criadoEm: 'desc' },
   })
@@ -152,6 +155,10 @@ export async function listarEtiquetas(
       valorCentavos: envio.precoCobradoCentavos,
       criadoEm: envio.criadoEm.toISOString(),
       podeCancelar: podeCancelar(status),
+      podeAvancarEtapa:
+        envio.status !== 'CANCELLED' &&
+        envio.codigoRastreio !== null &&
+        envio._count.trackingEvents > 0,
     }
   })
 
@@ -192,6 +199,9 @@ export async function obterEtiqueta(
         where: { ocorridoEm: { lte: agora } },
         orderBy: [{ ocorridoEm: 'desc' }, { sequencia: 'desc' }],
       },
+      // Só a contagem do que ainda está por vir: a tela precisa saber se há
+      // próxima etapa, e os eventos futuros continuam fora da resposta.
+      _count: { select: { trackingEvents: { where: { ocorridoEm: { gt: agora } } } } },
     },
   })
 
@@ -218,6 +228,10 @@ export async function obterEtiqueta(
     valorCentavos: envio.precoCobradoCentavos,
     criadoEm: envio.criadoEm.toISOString(),
     podeCancelar: podeCancelar(status),
+    podeAvancarEtapa:
+      envio.status !== 'CANCELLED' &&
+      envio.codigoRastreio !== null &&
+      envio._count.trackingEvents > 0,
     remetente: (envio.remetente as EnderecoGravado | null) ?? {},
     destinatario,
     produtos: (envio.produtos as ProdutoGravado[] | null) ?? [],

@@ -9,6 +9,7 @@ import {
 } from '@/domain/simulacao/roteiro'
 import type { EventoRoteiro, LocalidadeSimulacao } from '@/domain/simulacao/tipos'
 import { garantirTransicao, transicoesValidas, type StatusShipment } from '@/domain/shipment/estados'
+import { anteciparProximoEvento } from '@/server/antecipar-evento'
 import { ID_CONFIG_SIMULACAO, obterConfigSimulacao } from '@/server/simulacao-config'
 import { catalogoDoUsuario, obterStatusPorCodigo } from '@/server/status-rastreio-service'
 
@@ -240,59 +241,9 @@ export async function forcarProximoEvento(
       throw new EnvioNaoEncontradoError(`Envio não encontrado: ${shipmentId}`)
     }
 
-    const proximo = await tx.trackingEvent.findFirst({
-      where: { shipmentId, ocorridoEm: { gt: agora } },
-      orderBy: { sequencia: 'asc' },
-    })
-
-    if (!proximo) {
-      throw new ValorInvalidoError(
-        `Envio ${shipmentId} não tem evento pendente para forçar.`,
-      )
-    }
-
-    const deslocamentoMs = proximo.ocorridoEm.getTime() - agora.getTime()
-
-    await tx.trackingEvent.update({
-      where: { id: proximo.id },
-      data: { ocorridoEm: agora, forcado: true },
-    })
-
-    const seguintes = await tx.trackingEvent.findMany({
-      where: { shipmentId, sequencia: { gt: proximo.sequencia } },
-      select: { id: true, ocorridoEm: true },
-    })
-
-    for (const seguinte of seguintes) {
-      await tx.trackingEvent.update({
-        where: { id: seguinte.id },
-        data: { ocorridoEm: new Date(seguinte.ocorridoEm.getTime() - deslocamentoMs) },
-      })
-    }
-
-    // Um status criado pela conta pode não ter tradução conhecida aqui. Nesse
-    // caso o evento é antecipado do mesmo jeito — é a ação que o administrador
-    // pediu — e o status do envio fica como está, em vez de o painel gravar um
-    // valor inventado ou recusar a operação inteira.
-    let alvo: StatusShipment | null
-    try {
-      alvo = statusDoEvento(proximo.codigo)
-    } catch {
-      alvo = null
-    }
-
-    const dados: Prisma.ShipmentUpdateInput = {}
-
-    if (alvo !== null && alvo !== envio.status) {
-      dados.status = alvo
-      if (alvo === 'POSTED') dados.postadoEm = agora
-      if (alvo === 'DELIVERED') dados.entregueEm = agora
-      if (proximo.codigo === 'DEVOLVIDO') dados.devolvidoEm = agora
-    }
-
-    if (Object.keys(dados).length > 0) {
-      await tx.shipment.update({ where: { id: envio.id }, data: dados })
-    }
+    // Mesma mecânica que o dono do envio dispara pela aba Etiquetas; o que
+    // muda é o rastro deixado — aqui, uma intervenção administrativa.
+    const antecipado = await anteciparProximoEvento(tx, envio.id, envio.status, agora)
 
     await registrarAuditoria(
       tx,
@@ -300,8 +251,16 @@ export async function forcarProximoEvento(
       'SIMULACAO_FORCAR_EVENTO',
       'Shipment',
       envio.id,
-      { status: envio.status, proximoEvento: proximo.codigo, ocorridoEm: proximo.ocorridoEm },
-      { status: alvo, ocorridoEm: agora, eventosDeslocados: seguintes.length },
+      {
+        status: envio.status,
+        proximoEvento: antecipado.codigo,
+        ocorridoEm: antecipado.ocorridoEmAnterior,
+      },
+      {
+        status: antecipado.statusNovo,
+        ocorridoEm: agora,
+        eventosDeslocados: antecipado.eventosDeslocados,
+      },
     )
   })
 }
