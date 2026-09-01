@@ -246,8 +246,9 @@
   function normalizarResposta(json) {
     if (!json || typeof json !== 'object') return null;
 
-    // Alguns backends embrulham a carga útil em data/result/objeto.
-    var raiz = json.data || json.result || json.objeto || json;
+    // Alguns backends embrulham a carga útil. A plataforma da Martins Log
+    // usa `rastreio`; outros usam data/result/objeto.
+    var raiz = json.rastreio || json.data || json.result || json.objeto || json;
 
     var eventosBrutos =
       raiz.eventos || raiz.events || raiz.history || raiz.historico ||
@@ -266,7 +267,10 @@
     var eventos = eventosBrutos.map(function (ev) {
       return {
         data: ev.data || ev.date || ev.datetime || ev.dataHora || ev.ocorridoEm || ev.timestamp || null,
-        status: ev.status || ev.situacao || ev.evento || ev.title || ev.tipo || null,
+        // `titulo` vem primeiro: é a linha que a plataforma escreve para o
+        // cliente ler. `codigo` fica por último, porque costuma ser o token
+        // de máquina — só serve se não houver texto melhor.
+        status: ev.titulo || ev.status || ev.situacao || ev.evento || ev.title || ev.tipo || ev.codigo || null,
         local: local(ev),
         descricao: ev.descricao || ev.description || ev.detalhe || ev.mensagem || null
       };
@@ -290,8 +294,19 @@
       return null;
     }
 
+    // Só texto serve como código: em respostas embrulhadas, um campo com o
+    // mesmo nome pode ser o objeto inteiro, e viraria "[object Object]".
+    function texto(v) {
+      return typeof v === 'string' && v.trim() ? v.trim() : null;
+    }
+
     return {
-      codigo: raiz.codigo || raiz.code || raiz.rastreio || raiz.trackingCode || null,
+      codigo:
+        texto(raiz.codigoRastreio) ||
+        texto(raiz.codigo) ||
+        texto(raiz.code) ||
+        texto(raiz.rastreio) ||
+        texto(raiz.trackingCode),
       status: raiz.status || raiz.situacao || (eventos[0] && eventos[0].status) || null,
       origem: rota('origem', ['origem', 'origin', 'remetente', 'from']),
       destino: rota('destino', ['destino', 'destination', 'destinatario', 'to']),
@@ -502,6 +517,17 @@
           if (resp.status === 404) {
             var e404 = new Error('nao-encontrado'); e404.tipo = 'nao-encontrado'; throw e404;
           }
+          // 422: o código passou no comprimento mínimo daqui, mas falhou na
+          // validação do servidor (formato ou dígito verificador). É erro de
+          // digitação, não indisponibilidade — dizer "tente mais tarde" faria
+          // a pessoa esperar em vez de conferir o que digitou.
+          if (resp.status === 422) {
+            var e422 = new Error('invalido'); e422.tipo = 'invalido'; throw e422;
+          }
+          // 429: limite de consultas do servidor.
+          if (resp.status === 429) {
+            var e429 = new Error('limite'); e429.tipo = 'limite'; throw e429;
+          }
           if (resp.status >= 500) {
             var e5 = new Error('servidor'); e5.tipo = 'servidor'; throw e5;
           }
@@ -524,6 +550,10 @@
           carregando(false);
           if (err.tipo === 'nao-encontrado') {
             estadoErro('Código não encontrado. ', 'Não encontramos nenhuma encomenda com esse código. Confira e tente novamente.');
+          } else if (err.tipo === 'invalido') {
+            estadoErro('Código inválido. ', 'Esse código não tem o formato de um código de rastreio. Confira os caracteres e tente de novo.');
+          } else if (err.tipo === 'limite') {
+            estadoErro('Muitas consultas. ', 'Você fez consultas demais em pouco tempo. Aguarde alguns minutos e tente novamente.');
           } else if (err.tipo === 'servidor') {
             estadoErro('Consulta indisponível. ', 'Nossa consulta está indisponível no momento. Tente em instantes.');
           } else {
