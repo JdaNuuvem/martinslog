@@ -59,8 +59,39 @@ function paraNumero(valor: string): number | undefined {
   return Number.isFinite(numero) ? numero : undefined
 }
 
+/**
+ * Campo com caixa, e não com risco embaixo.
+ *
+ * O sublinhado sozinho funciona em formulário sobre fundo branco, onde a
+ * linha é a única coisa na região. Aqui os blocos são cinza sobre um cartão
+ * branco, e o risco desaparecia: sobrava um texto de exemplo flutuando no
+ * nada, sem nada dizendo onde clicar nem onde o campo termina.
+ *
+ * `aria-[invalid=true]` pinta a borda de erro a partir do atributo que já é
+ * definido para o leitor de tela. Uma classe condicional em paralelo criaria
+ * duas fontes para o mesmo estado, e elas divergem no primeiro descuido.
+ */
 const classeCampo =
-  'w-full border-0 border-b border-borda-campo bg-transparent px-1 py-2 text-sm text-texto-principal focus:border-brand focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand'
+  'w-full rounded-campo border border-borda-campo bg-superficie-card px-3 py-2.5 text-dado text-texto-principal transition placeholder:text-texto-riscado focus:border-brand focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand aria-[invalid=true]:border-erro'
+
+/**
+ * Largura de campo curto.
+ *
+ * CEP tem nove caracteres. Num cartão de mil pixels, deixá-lo ocupar a linha
+ * inteira faz o formulário parecer quebrado antes mesmo de alguém digitar —
+ * o olho lê o tamanho da caixa como promessa do tamanho da resposta.
+ */
+const classeCampoCurto = 'w-full max-w-[15rem]'
+
+/**
+ * Salvar e Limpar são ações de apoio, e vazadas dizem isso.
+ *
+ * Preenchidas de azul, com o mesmo peso do botão que calcula o frete, elas
+ * disputavam o olho com a única ação que importa na tela — e quem chega para
+ * cotar um frete não veio salvar preferência nenhuma.
+ */
+const classeBotaoSecundario =
+  'flex items-center gap-1.5 rounded-campo border border-borda-campo bg-superficie-card px-3.5 py-2.5 text-dado font-semibold text-brand-texto transition hover:border-brand hover:bg-brand-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand'
 
 /**
  * `autenticado` vem do servidor (a home lê a sessão sem redirecionar) só
@@ -240,9 +271,15 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
           <fieldset className="rounded-cartao bg-superficie-pagina p-4">
             <legend className="sr-only">Informe a origem</legend>
 
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex flex-1 flex-col gap-1">
-                <label htmlFor={`${idBase}-cepOrigem`} className="text-xs font-medium text-texto-secundario">
+            {/*
+              `flex-wrap` em vez de `justify-between`: entre 640 e 768px o CEP
+              e os dois botões não cabem lado a lado, e separá-los pelas pontas
+              deixava um vão no meio da linha. Envolvendo, os botões descem
+              inteiros para a linha de baixo.
+            */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+              <div className={`flex flex-col gap-1.5 ${classeCampoCurto}`}>
+                <label htmlFor={`${idBase}-cepOrigem`} className="text-rotulo font-semibold uppercase text-texto-secundario">
                   CEP de origem
                 </label>
                 <input
@@ -258,7 +295,7 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
                   className={classeCampo}
                 />
                 {erros.cepOrigem ? (
-                  <p id={`${idBase}-cepOrigem-erro`} role="alert" className="text-sm text-erro">
+                  <p id={`${idBase}-cepOrigem-erro`} role="alert" className="text-dado text-erro">
                     {erros.cepOrigem}
                   </p>
                 ) : null}
@@ -268,7 +305,7 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
                 <button
                   type="button"
                   onClick={aoSalvarOrigem}
-                  className="flex items-center gap-1 rounded-pilula bg-brand px-4 py-2 text-xs font-bold uppercase text-white hover:bg-brand-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                  className={classeBotaoSecundario}
                 >
                   <IconeSalvar width={16} height={16} />
                   Salvar
@@ -276,7 +313,7 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
                 <button
                   type="button"
                   onClick={aoLimparOrigem}
-                  className="flex items-center gap-1 rounded-pilula bg-brand px-4 py-2 text-xs font-bold uppercase text-white hover:bg-brand-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                  className={classeBotaoSecundario}
                 >
                   <IconeLimpar width={16} height={16} />
                   Limpar
@@ -285,7 +322,7 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
             </div>
 
             {mensagemSalvar ? (
-              <p role="status" className="mt-2 text-sm text-brand-texto">
+              <p role="status" className="mt-2 text-dado text-brand-texto">
                 {mensagemSalvar}
               </p>
             ) : null}
@@ -306,7 +343,7 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1">
-                <label htmlFor={`${idBase}-formato`} className="text-xs font-medium text-texto-secundario">
+                <label htmlFor={`${idBase}-formato`} className="text-rotulo font-semibold uppercase text-texto-secundario">
                   Formato
                 </label>
                 <select
@@ -325,7 +362,7 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
               </div>
 
               <div className="flex flex-col gap-1">
-                <label htmlFor={`${idBase}-pesoFaixa`} className="text-xs font-medium text-texto-secundario">
+                <label htmlFor={`${idBase}-pesoFaixa`} className="text-rotulo font-semibold uppercase text-texto-secundario">
                   Peso
                 </label>
                 <select
@@ -345,7 +382,7 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
 
               {pesoEhDigitado ? (
                 <div className="flex flex-col gap-1 sm:col-span-2">
-                  <label htmlFor={`${idBase}-pesoDigitado`} className="text-xs font-medium text-texto-secundario">
+                  <label htmlFor={`${idBase}-pesoDigitado`} className="text-rotulo font-semibold uppercase text-texto-secundario">
                     Peso (gramas)
                   </label>
                   <input
@@ -361,7 +398,7 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
                     className={classeCampo}
                   />
                   {erros.pesoDigitadoG ? (
-                    <p id={`${idBase}-pesoDigitado-erro`} role="alert" className="text-sm text-erro">
+                    <p id={`${idBase}-pesoDigitado-erro`} role="alert" className="text-dado text-erro">
                       {erros.pesoDigitadoG}
                     </p>
                   ) : null}
@@ -371,93 +408,92 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
 
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="flex flex-col gap-1">
-                <label htmlFor={`${idBase}-altura`} className="text-xs font-medium text-texto-secundario">
+                <label htmlFor={`${idBase}-altura`} className="text-rotulo font-semibold uppercase text-texto-secundario">
                   Altura (cm)
                 </label>
-                <div className="flex items-center border-b border-borda-campo focus-within:border-brand">
-                  <input
-                    id={`${idBase}-altura`}
-                    name="alturaCm"
-                    type="number"
-                    min={0.1}
-                    step="0.1"
-                    placeholder="00"
-                    value={form.alturaCm}
-                    onChange={(e) => atualizarCampo('alturaCm', e.target.value)}
-                    aria-invalid={erros.alturaCm ? true : undefined}
-                    aria-describedby={erros.alturaCm ? `${idBase}-altura-erro` : undefined}
-                    className="w-full border-0 bg-transparent px-1 py-2 text-sm text-texto-principal focus:outline-none"
+                <input
+                  id={`${idBase}-altura`}
+                  name="alturaCm"
+                  type="number"
+                  min={0.1}
+                  step="0.1"
+                  placeholder="00"
+                  value={form.alturaCm}
+                  onChange={(e) => atualizarCampo('alturaCm', e.target.value)}
+                  aria-invalid={erros.alturaCm ? true : undefined}
+                  aria-describedby={erros.alturaCm ? `${idBase}-altura-erro` : undefined}
+                  className={classeCampo}
                   />
-                  <span className="pr-1 text-xs text-texto-secundario">cm</span>
-                </div>
                 {erros.alturaCm ? (
-                  <p id={`${idBase}-altura-erro`} role="alert" className="text-sm text-erro">
-                    {erros.alturaCm}
+                  <p id={`${idBase}-altura-erro`} role="alert" className="text-dado text-erro">
+                  {erros.alturaCm}
                   </p>
                 ) : null}
               </div>
 
               <div className="flex flex-col gap-1">
-                <label htmlFor={`${idBase}-largura`} className="text-xs font-medium text-texto-secundario">
+                <label htmlFor={`${idBase}-largura`} className="text-rotulo font-semibold uppercase text-texto-secundario">
                   Largura (cm)
                 </label>
-                <div className="flex items-center border-b border-borda-campo focus-within:border-brand">
-                  <input
-                    id={`${idBase}-largura`}
-                    name="larguraCm"
-                    type="number"
-                    min={0.1}
-                    step="0.1"
-                    placeholder="00"
-                    value={form.larguraCm}
-                    onChange={(e) => atualizarCampo('larguraCm', e.target.value)}
-                    aria-invalid={erros.larguraCm ? true : undefined}
-                    aria-describedby={erros.larguraCm ? `${idBase}-largura-erro` : undefined}
-                    className="w-full border-0 bg-transparent px-1 py-2 text-sm text-texto-principal focus:outline-none"
+                <input
+                  id={`${idBase}-largura`}
+                  name="larguraCm"
+                  type="number"
+                  min={0.1}
+                  step="0.1"
+                  placeholder="00"
+                  value={form.larguraCm}
+                  onChange={(e) => atualizarCampo('larguraCm', e.target.value)}
+                  aria-invalid={erros.larguraCm ? true : undefined}
+                  aria-describedby={erros.larguraCm ? `${idBase}-largura-erro` : undefined}
+                  className={classeCampo}
                   />
-                  <span className="pr-1 text-xs text-texto-secundario">cm</span>
-                </div>
                 {erros.larguraCm ? (
-                  <p id={`${idBase}-largura-erro`} role="alert" className="text-sm text-erro">
-                    {erros.larguraCm}
+                  <p id={`${idBase}-largura-erro`} role="alert" className="text-dado text-erro">
+                  {erros.larguraCm}
                   </p>
                 ) : null}
               </div>
 
               <div className="flex flex-col gap-1">
-                <label htmlFor={`${idBase}-comprimento`} className="text-xs font-medium text-texto-secundario">
+                <label htmlFor={`${idBase}-comprimento`} className="text-rotulo font-semibold uppercase text-texto-secundario">
                   Comprimento (cm)
                 </label>
-                <div className="flex items-center border-b border-borda-campo focus-within:border-brand">
-                  <input
-                    id={`${idBase}-comprimento`}
-                    name="comprimentoCm"
-                    type="number"
-                    min={0.1}
-                    step="0.1"
-                    placeholder="00"
-                    value={form.comprimentoCm}
-                    onChange={(e) => atualizarCampo('comprimentoCm', e.target.value)}
-                    aria-invalid={erros.comprimentoCm ? true : undefined}
-                    aria-describedby={erros.comprimentoCm ? `${idBase}-comprimento-erro` : undefined}
-                    className="w-full border-0 bg-transparent px-1 py-2 text-sm text-texto-principal focus:outline-none"
+                <input
+                  id={`${idBase}-comprimento`}
+                  name="comprimentoCm"
+                  type="number"
+                  min={0.1}
+                  step="0.1"
+                  placeholder="00"
+                  value={form.comprimentoCm}
+                  onChange={(e) => atualizarCampo('comprimentoCm', e.target.value)}
+                  aria-invalid={erros.comprimentoCm ? true : undefined}
+                  aria-describedby={erros.comprimentoCm ? `${idBase}-comprimento-erro` : undefined}
+                  className={classeCampo}
                   />
-                  <span className="pr-1 text-xs text-texto-secundario">cm</span>
-                </div>
                 {erros.comprimentoCm ? (
-                  <p id={`${idBase}-comprimento-erro`} role="alert" className="text-sm text-erro">
-                    {erros.comprimentoCm}
+                  <p id={`${idBase}-comprimento-erro`} role="alert" className="text-dado text-erro">
+                  {erros.comprimentoCm}
                   </p>
                 ) : null}
               </div>
             </div>
 
-            <details className="mt-4 rounded-lg bg-white px-4 py-2">
-              <summary className="flex cursor-pointer list-none items-center justify-center gap-2 text-center text-sm font-medium text-texto-principal">
+            {/*
+              Alinhado à esquerda, com a seta na ponta. Centralizado e ocupando
+              a linha inteira, o bloco lia como botão — e quem clicava esperava
+              outra coisa que não abrir um texto.
+            */}
+            <details className="mt-4 rounded-campo border border-borda-campo bg-superficie-card px-4">
+              {/* `list-none` some com o triângulo padrão; o seletor do webkit
+                  cobre o Safari, que ignora o primeiro. Sem os dois, aparecem
+                  duas setas: a do navegador e a nossa. */}
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-3 text-dado font-medium text-texto-principal [&::-webkit-details-marker]:hidden">
                 Seguro, aviso e mão própria
                 <IconeChevron width={16} height={16} />
               </summary>
-              <p className="mt-2 text-xs text-texto-secundario">
+              <p className="pb-3 text-dado text-texto-secundario">
                 Esses opcionais chegam em uma fase futura.
               </p>
             </details>
@@ -470,9 +506,9 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
           <fieldset className="rounded-cartao bg-superficie-pagina p-4">
             <legend className="sr-only">Para onde vai</legend>
 
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex flex-1 flex-col gap-1">
-                <label htmlFor={`${idBase}-cepDestino`} className="text-xs font-medium text-texto-secundario">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+              <div className={`flex flex-col gap-1.5 ${classeCampoCurto}`}>
+                <label htmlFor={`${idBase}-cepDestino`} className="text-rotulo font-semibold uppercase text-texto-secundario">
                   CEP de destino
                 </label>
                 <input
@@ -488,8 +524,8 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
                   className={classeCampo}
                 />
                 {erros.cepDestino ? (
-                  <p id={`${idBase}-cepDestino-erro`} role="alert" className="text-sm text-erro">
-                    {erros.cepDestino}
+                  <p id={`${idBase}-cepDestino-erro`} role="alert" className="text-dado text-erro">
+                  {erros.cepDestino}
                   </p>
                 ) : null}
               </div>
@@ -498,7 +534,9 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
                 href="https://buscacepinter.correios.com.br/app/endereco/index.php"
                 target="_blank"
                 rel="noreferrer"
-                className="shrink-0 text-sm font-medium text-brand-texto underline underline-offset-2 hover:text-brand-light"
+                /* `sm:pb-3` alinha o link com a base do campo ao lado; sem
+                   isso ele flutua na altura do rótulo. */
+                className="shrink-0 text-dado font-medium text-brand-texto underline underline-offset-2 hover:text-brand-light sm:pb-3"
               >
                 Pesquisar CEP
               </a>
@@ -514,7 +552,13 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
         <button
           type="submit"
           disabled={carregando}
-          className={`w-full rounded-pilula px-6 py-4 text-base font-bold tracking-wide text-white transition focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${
+          /*
+            Largura travada no desktop. Um botão de mil pixels não parece
+            importante, parece um erro de layout — e o alvo de clique já era
+            suficiente na metade disso. No celular ele volta a ocupar a linha,
+            onde largura cheia é o que se espera do botão principal.
+          */
+          className={`w-full rounded-pilula px-6 py-4 text-base font-bold tracking-wide text-white transition focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:mx-auto sm:w-auto sm:min-w-[18rem] ${
             autenticado
               ? 'bg-brand hover:bg-brand-light focus-visible:outline-brand'
               : 'bg-destaque shadow-elevado hover:bg-destaque-escuro focus-visible:outline-destaque'
@@ -532,7 +576,7 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
 
       <div aria-live="polite" aria-atomic="true" className="flex flex-col gap-4">
         {erroGeral ? (
-          <p role="alert" className="rounded-lg bg-erro-fundo p-3 text-sm text-erro">
+          <p role="alert" className="rounded-lg bg-erro-fundo p-3 text-dado text-erro">
             {erroGeral}
           </p>
         ) : null}
@@ -551,7 +595,7 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-texto-secundario">Nenhuma opção de frete encontrada para essa rota.</p>
+            <p className="text-dado text-texto-secundario">Nenhuma opção de frete encontrada para essa rota.</p>
           )
         ) : null}
 

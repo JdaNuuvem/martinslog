@@ -73,6 +73,20 @@ model User {
   telefone          String?
   emailVerificadoEm DateTime?
   cepOrigemPadrao   String?
+  /**
+   * Conta isenta da taxa por etiqueta.
+   *
+   * Emite etiqueta sem saldo e **sem lançamento no livro-caixa** — não é
+   * saldo infinito. A diferença importa: dar crédito de mentira à carteira
+   * criaria receita que nunca existiu no extrato, e o financeiro passaria a
+   * somar dinheiro que ninguém pagou. Sem lançamento, `charged` responde
+   * falso na API e o número continua verdadeiro.
+   *
+   * Existe para as contas de parceiro e de teste da própria plataforma. Não
+   * é plano comercial: é exceção nominal, ligada uma a uma, e por isso o
+   * padrão é `false` e nada na interface a concede.
+   */
+  isentoCobranca    Boolean   @default(false)
   criadoEm          DateTime  @default(now())
 
   sessions         Session[]
@@ -87,6 +101,7 @@ model User {
   apiTokens        ApiToken[]
   emailConfig      EmailConfig?
   emailDeliveries  EmailDelivery[]
+  perfis           Perfil[]
 
   @@map("users")
 }
@@ -272,12 +287,22 @@ model Shipment {
   devolvidoEm            DateTime?
   canceladoEm            DateTime?
 
+  /// Perfil que originou o envio.
+  ///
+  /// É o que permite avisar o comprador pelo WhatsApp da loja certa quando o
+  /// envio muda de status. Opcional: envio criado pelo painel, antes de
+  /// existirem perfis, ou por conta que só tem um, não tem dono de marca — e
+  /// sem perfil simplesmente não há mensagem a enviar.
+  perfilId               String?
+
   user           User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  perfil         Perfil?         @relation(fields: [perfilId], references: [id], onDelete: SetNull)
   quote          Quote?          @relation(fields: [quoteId], references: [id], onDelete: SetNull)
   service        Service         @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   trackingEvents TrackingEvent[]
 
   @@index([userId, status])
+  @@index([perfilId, status])
   @@map("shipments")
 }
 
@@ -385,6 +410,12 @@ model AuditLog {
 model WebhookApp {
   id       String   @id @default(cuid())
   userId   String
+  /// Perfil dono do webhook.
+  ///
+  /// Opcional porque os webhooks que já existiam nasceram antes dos perfis e
+  /// continuam valendo para a conta inteira. Preenchido, o destino passa a
+  /// receber só os eventos daquela loja — que é o motivo de existir perfil.
+  perfilId String?
   url      String
   eventos  Json
   segredo  String
@@ -392,9 +423,11 @@ model WebhookApp {
   criadoEm DateTime @default(now())
 
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  perfil     Perfil?           @relation(fields: [perfilId], references: [id], onDelete: Cascade)
   deliveries WebhookDelivery[]
 
   @@index([userId, ativo])
+  @@index([perfilId, ativo])
   @@map("webhook_apps")
 }
 
@@ -482,6 +515,17 @@ model RastreioTemplate {
 model ApiToken {
   id          String           @id @default(cuid())
   userId      String
+  /// Perfil ao qual o token pertence.
+  ///
+  /// Amarrar o token a uma loja é o que dispensa o integrador de dizer, em
+  /// toda requisição, de qual loja ele está falando — e dizer isso a cada
+  /// chamada é justamente onde se erra: um `perfil_id` trocado no corpo
+  /// mandaria o pedido para o WhatsApp da marca errada, sem erro nenhum.
+  ///
+  /// Anulável porque os tokens que já existem valem para a conta inteira e
+  /// continuam valendo. Sem perfil, o envio criado não tem por qual WhatsApp
+  /// avisar, e simplesmente não há mensagem — nunca a mensagem errada.
+  perfilId    String?
   nome        String
   tokenHash   String           @unique
   ambiente    AmbienteApiToken
@@ -489,9 +533,11 @@ model ApiToken {
   revogadoEm  DateTime?
   criadoEm    DateTime         @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  perfil Perfil? @relation(fields: [perfilId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([perfilId])
   @@map("api_tokens")
 }
 
@@ -531,4 +577,225 @@ model EmailDelivery {
 
   @@index([userId, criadoEm])
   @@map("email_deliveries")
+}
+
+/// Perfil de envio: uma loja dentro da conta.
+///
+/// Existe porque uma conta raramente é uma loja só. Quem opera três marcas
+/// precisa de três números de WhatsApp, três textos de mensagem e três
+/// destinos de webhook — e, antes disto, tudo era por `userId`, o que
+/// obrigava a criar três contas separadas e perder a visão do conjunto.
+///
+/// O que é do perfil é o que fala com o comprador (WhatsApp, texto da
+/// mensagem, webhook). O que é da conta continua na conta: carteira, tokens
+/// de API e endereços — dinheiro e credencial não se multiplicam por marca.
+model Perfil {
+  id       String   @id @default(cuid())
+  userId   String
+  nome     String
+  ativo    Boolean  @default(true)
+  criadoEm DateTime @default(now())
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  whatsappConfig    WhatsappConfig?
+  templates         MensagemTemplate[]
+  pedidos           Pedido[]
+  mensagens         MensagemEnvio[]
+  regrasRecuperacao RegraRecuperacao[]
+  webhookApps       WebhookApp[]
+  shipments         Shipment[]
+  apiTokens         ApiToken[]
+
+  /// Dois perfis com o mesmo nome na mesma conta tornam a lista inútil — é
+  /// por ele que a pessoa escolhe no seletor do topo.
+  @@unique([userId, nome])
+  @@index([userId, ativo])
+  @@map("perfis")
+}
+
+/// Credenciais da Cloud API do WhatsApp, por perfil.
+///
+/// O caminho escolhido é "o lojista traz as próprias credenciais": ele cria a
+/// conta na Meta, gera um token permanente e cola aqui. A alternativa seria a
+/// plataforma enviar pelo próprio número, o que exigiria ser Tech Provider
+/// aprovado pela Meta — e faria o comprador receber a mensagem da
+/// transportadora em vez da marca onde ele comprou.
+///
+/// `tokenCifrado` nunca volta em leitura: a tela mostra `dicaToken`, os
+/// últimos caracteres, que bastam para a pessoa reconhecer qual credencial
+/// está ali sem que a credencial inteira passe a viajar em toda resposta.
+model WhatsappConfig {
+  id             String    @id @default(cuid())
+  perfilId       String    @unique
+  /// Identificador do número emissor na Meta (`phone_number_id`).
+  phoneNumberId  String
+  /// Conta comercial dona do número (`waba_id`). Só para exibição e suporte.
+  wabaId         String?
+  tokenCifrado   String
+  dicaToken      String
+  /// Número em formato legível, como o comprador o vê. Não entra no envio.
+  numeroExibicao String?
+  ativo          Boolean   @default(true)
+  /// Quando a credencial foi conferida contra a Meta pela última vez. Nulo
+  /// significa "nunca testada", que é diferente de "quebrada".
+  verificadaEm   DateTime?
+  ultimoErro     String?
+  criadoEm       DateTime  @default(now())
+  atualizadoEm   DateTime  @updatedAt
+
+  perfil Perfil @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+
+  @@map("whatsapp_configs")
+}
+
+/// Amarração entre um evento nosso e um template aprovado pela Meta.
+///
+/// Na API oficial o texto da mensagem NÃO é livre: fora da janela de 24
+/// horas, só sai o que a Meta aprovou previamente, referenciado pelo nome.
+/// Por isso este modelo guarda o `nome` do template lá, e não o texto — o que
+/// fica em `previa` serve para a tela mostrar ao lojista o que será enviado, e
+/// nunca é o que viaja na requisição.
+///
+/// `variaveis` é a ordem em que os campos do pedido entram nos `{{1}}`,
+/// `{{2}}` do template. A ordem importa e é do template, não nossa: trocá-la
+/// manda o código de rastreio no lugar do nome do cliente sem erro nenhum.
+model MensagemTemplate {
+  id           String   @id @default(cuid())
+  perfilId     String
+  /// Evento que dispara: `PEDIDO_PENDENTE`, `PEDIDO_PAGO` ou um código de
+  /// rastreio do catálogo (`POSTADO`, `ENTREGUE`…). É String, e não enum,
+  /// porque o catálogo de status já é personalizável por conta — um enum
+  /// aqui proibiria disparar mensagem nos status que o próprio cliente criou.
+  evento       String
+  nome         String
+  idioma       String   @default("pt_BR")
+  previa       String
+  variaveis    Json     @default("[]")
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  perfil    Perfil             @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+  mensagens MensagemEnvio[]
+  regras    RegraRecuperacao[]
+
+  /// Um evento, uma mensagem. Dois templates para o mesmo evento fariam o
+  /// comprador receber a notificação em dobro.
+  @@unique([perfilId, evento])
+  @@index([perfilId, ativo])
+  @@map("mensagem_templates")
+}
+
+enum StatusPedido {
+  PENDENTE
+  PAGO
+  CANCELADO
+}
+
+/// Pedido da loja, empurrado por ela via `POST /api/v0/pedidos`.
+///
+/// A plataforma só conhecia envios, e envio só nasce depois do pagamento — o
+/// que torna impossível recuperar a venda que NÃO foi paga, justamente a que
+/// vale dinheiro. Este modelo é o pedido antes disso.
+///
+/// `externalId` é o identificador do pedido na loja, e o par com o perfil é
+/// único: é ele que impede o mesmo pedido de virar dois. A API pública de
+/// envios não tem essa trava e a deduplicação fica com o integrador; aqui o
+/// erro não se repete.
+model Pedido {
+  id            String       @id @default(cuid())
+  perfilId      String
+  externalId    String
+  status        StatusPedido @default(PENDENTE)
+  clienteNome   String
+  /// E.164 sem sinais, como a Cloud API exige: 5511999999999.
+  clienteFone   String
+  clienteEmail  String?
+  valorCentavos Int          @default(0)
+  produtos      Json         @default("[]")
+  /// Para onde mandar o comprador que quer terminar a compra.
+  checkoutUrl   String?
+  shipmentId    String?
+  criadoEm      DateTime     @default(now())
+  atualizadoEm  DateTime     @updatedAt
+  pagoEm        DateTime?
+  canceladoEm   DateTime?
+
+  perfil    Perfil          @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+  mensagens MensagemEnvio[]
+
+  @@unique([perfilId, externalId])
+  @@index([perfilId, status, criadoEm])
+  @@map("pedidos")
+}
+
+/// Quando cutucar um pedido que ficou pendente.
+///
+/// `atrasoMinutos` conta a partir da criação do pedido, não do último envio:
+/// contar do envio faria a régua andar sozinha a cada tentativa, e o comprador
+/// receberia a quarta mensagem dias depois de já ter desistido.
+model RegraRecuperacao {
+  id            String   @id @default(cuid())
+  perfilId      String
+  templateId    String
+  atrasoMinutos Int
+  ativo         Boolean  @default(true)
+  criadoEm      DateTime @default(now())
+
+  perfil   Perfil           @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+  template MensagemTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  /// Duas regras com o mesmo atraso disparariam duas mensagens no mesmo
+  /// minuto.
+  @@unique([perfilId, atrasoMinutos])
+  @@index([perfilId, ativo])
+  @@map("regras_recuperacao")
+}
+
+enum StatusMensagem {
+  PENDENTE
+  ENVIADA
+  FALHA
+  DESISTIU
+}
+
+/// Toda mensagem que saiu ou tentou sair, com o motivo da falha.
+///
+/// Mesmo papel do `EmailDelivery`: sem histórico, "a mensagem não chegou" não
+/// tem como ser investigado — e no WhatsApp é pior, porque a recusa vem da
+/// Meta com um código que só faz sentido guardado ao lado do destinatário e do
+/// template usados.
+///
+/// A chave única impede que a mesma notificação saia duas vezes quando um
+/// evento for reprocessado. No Postgres, nulo nunca é igual a nulo, então a
+/// restrição vale de fato para as linhas que têm pedido ou envio — que são as
+/// que podem repetir.
+model MensagemEnvio {
+  id                 String         @id @default(cuid())
+  perfilId           String
+  templateId         String?
+  pedidoId           String?
+  shipmentId         String?
+  evento             String
+  /// Destinatário congelado no disparo: o pedido pode ter o telefone
+  /// corrigido depois, e o histórico precisa dizer para onde a mensagem foi
+  /// de fato.
+  para               String
+  status             StatusMensagem @default(PENDENTE)
+  tentativas         Int            @default(0)
+  /// Identificador da mensagem na Meta (`wamid`), quando aceita.
+  idExterno          String?
+  erro               String?
+  proximaTentativaEm DateTime?
+  enviadaEm          DateTime?
+  criadoEm           DateTime       @default(now())
+
+  perfil   Perfil            @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+  template MensagemTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  pedido   Pedido?           @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  @@unique([perfilId, evento, pedidoId, shipmentId])
+  @@index([proximaTentativaEm, status])
+  @@index([perfilId, criadoEm])
+  @@map("mensagem_envios")
 }

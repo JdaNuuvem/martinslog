@@ -39,6 +39,17 @@ export type TokenAutenticado = {
   tokenId: string
   userId: string
   ambiente: AmbienteApiToken
+  /**
+   * Loja dona do token, quando ele foi criado dentro de um perfil.
+   *
+   * É o que faz o envio e o pedido nascerem sabendo por qual WhatsApp avisar o
+   * comprador, sem o integrador repetir a loja em toda requisição — e um campo
+   * repetido a cada chamada é um campo que uma hora vem trocado.
+   *
+   * Nulo nos tokens antigos, que valem para a conta inteira. Sem perfil não há
+   * mensagem, que é melhor do que mensagem pelo número de outra loja.
+   */
+  perfilId: string | null
 }
 
 function hashToken(tokenClaro: string): string {
@@ -165,5 +176,10 @@ export async function autenticarToken(tokenClaro: string): Promise<TokenAutentic
     data: { ultimoUsoEm: new Date() },
   })
 
-  return { tokenId: encontrado.id, userId: encontrado.userId, ambiente: encontrado.ambiente }
+  return {
+    tokenId: encontrado.id,
+    userId: encontrado.userId,
+    ambiente: encontrado.ambiente,
+    perfilId: encontrado.perfilId,
+  }
 }

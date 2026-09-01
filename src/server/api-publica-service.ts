@@ -176,6 +176,10 @@ export async function criarCarrinho(
     destinatario: entrada.destinatario,
     produtos: entrada.produtos,
     sandbox,
+    // Vem do token, não do corpo: um perfil informado a cada requisição é um
+    // perfil que uma hora vai vir trocado, e o comprador receberia a mensagem
+    // pelo WhatsApp de outra loja sem que nada acusasse o erro.
+    perfilId: contexto.perfilId,
   })
 
   if (sandbox) {
@@ -284,6 +288,14 @@ export type InfoEnvio = {
   /** Se a taxa saiu da carteira de fato. Falso em sandbox e antes do pagamento. */
   charged: boolean
   sandbox: boolean
+  /**
+   * Quando a carga voltou ao remetente, em vez de chegar ao comprador.
+   *
+   * Existe porque devolução também vira `DELIVERED` e também dispara
+   * `order.delivered`: sem este campo, a loja marcaria como entregue ao
+   * cliente um pacote que está de volta no estoque dela.
+   */
+  returned_at: string | null
   created_at: string
 }
 
@@ -308,6 +320,7 @@ export async function obterInfoEnvio(contexto: ContextoApi, shipmentId: string):
     label_fee: (envio.precoCobradoCentavos / 100).toFixed(2),
     charged: await houveCobranca(envio.id),
     sandbox: envio.sandbox,
+    returned_at: envio.devolvidoEm?.toISOString() ?? null,
     created_at: envio.criadoEm.toISOString(),
   }
 }

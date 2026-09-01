@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { EnvioNaoEncontradoError } from '@/domain/errors'
+import { ehCodigoSandbox } from '@/domain/shipment/codigo-rastreio'
 import { codigoRastreioSchema } from '@/lib/rastreio-schema'
 import { obterIp } from '@/server/http/ip'
 import { consumirCota, type PoliticaCota } from '@/server/rate-limit'
@@ -43,8 +44,26 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
   }
 
   const { codigo } = await params
-  const analise = codigoRastreioSchema.safeParse(decodeURIComponent(codigo))
+  const bruto = decodeURIComponent(codigo)
+  const analise = codigoRastreioSchema.safeParse(bruto)
   if (!analise.success) {
+    /*
+      Código de teste ganha resposta própria. Ele é nosso, foi gerado pelo
+      ambiente sandbox e simplesmente não tem rastreio público — devolver
+      `CODIGO_INVALIDO` fazia o integrador procurar erro de digitação onde só
+      faltava trocar a credencial de teste pela de produção.
+    */
+    if (ehCodigoSandbox(bruto)) {
+      return NextResponse.json(
+        {
+          codigo: 'CODIGO_SANDBOX',
+          mensagem:
+            'Este é um código do ambiente de teste e não tem rastreio público. Use um token de produção para gerar códigos rastreáveis.',
+        },
+        { status: 422 },
+      )
+    }
+
     return NextResponse.json(
       { codigo: 'CODIGO_INVALIDO', mensagem: 'Código de rastreio inválido.' },
       { status: 422 },
