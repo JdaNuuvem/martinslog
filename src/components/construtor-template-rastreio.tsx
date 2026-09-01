@@ -53,6 +53,7 @@ export function ConstrutorTemplateRastreio() {
   const [erro, setErro] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const [textosPendentes, setTextosPendentes] = useState(false)
+  const [conexoes, setConexoes] = useState<{ de: string; para: string }[]>([])
 
   const carregar = useCallback(async () => {
     try {
@@ -67,7 +68,7 @@ export function ConstrutorTemplateRastreio() {
       }
 
       const corpo = (await respTemplate.json()) as {
-        template: { passos: Passo[]; ativo: boolean } | null
+        template: { passos: Passo[]; conexoes?: { de: string; para: string }[]; ativo: boolean } | null
         paleta: ItemPaleta[]
         padrao: Passo[]
       }
@@ -81,6 +82,7 @@ export function ConstrutorTemplateRastreio() {
         id: passo.id ?? `no-legado-${indice}`,
       }))
       setPassos(comId)
+      setConexoes(corpo.template?.conexoes ?? [])
 
       if (respCatalogo.ok) {
         const cat = (await respCatalogo.json()) as {
@@ -133,7 +135,11 @@ export function ConstrutorTemplateRastreio() {
   }
 
   function remover(indice: number) {
+    const id = passos[indice]?.id
     setPassos((atuais) => atuais.filter((_, i) => i !== indice))
+    // Ligações órfãs apontariam para um nó que não existe mais e sumiriam do
+    // desenho sem explicação; melhor removê-las junto.
+    if (id) setConexoes((atuais) => atuais.filter((c) => c.de !== id && c.para !== id))
   }
 
   function removerVarios(indices: number[]) {
@@ -205,7 +211,7 @@ export function ConstrutorTemplateRastreio() {
       const resposta = await fetch('/api/rastreio-template', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ passos }),
+        body: JSON.stringify({ passos, conexoes }),
       })
       if (!resposta.ok) {
         const corpo = (await resposta.json().catch(() => ({}))) as { mensagem?: string }
@@ -345,6 +351,17 @@ export function ConstrutorTemplateRastreio() {
           onRemoverVarios={removerVarios}
           onDuplicar={duplicar}
           onReordenar={mover}
+          conexoes={conexoes}
+          onConectar={(de, para) =>
+            setConexoes((atuais) =>
+              atuais.some((c) => c.de === de && c.para === para)
+                ? atuais
+                : [...atuais, { de, para }],
+            )
+          }
+          onDesconectar={(de, para) =>
+            setConexoes((atuais) => atuais.filter((c) => !(c.de === de && c.para === para)))
+          }
         />
       ) : null}
 

@@ -20,6 +20,8 @@ export type ItemPaleta = {
   terminal: boolean
 }
 
+export type Conexao = { de: string; para: string }
+
 export type No = {
   id?: string
   codigo: string
@@ -30,6 +32,16 @@ export type No = {
   x?: number
   y?: number
   valorCentavos?: number
+}
+
+/** Passo da grade de encaixe. Vale também para o desenho do fundo. */
+const GRADE = 20
+const ZOOM_MIN = 0.4
+const ZOOM_MAX = 1.6
+
+/** Arredonda para o ponto de grade mais próximo. */
+function encaixar(valor: number, ligado: boolean): number {
+  return ligado ? Math.round(valor / GRADE) * GRADE : Math.round(valor)
 }
 
 const LARGURA_NO = 220
@@ -88,6 +100,9 @@ export function CanvasFluxoRastreio({
   onRemoverVarios,
   onDuplicar,
   onReordenar,
+  conexoes,
+  onConectar,
+  onDesconectar,
 }: {
   nos: No[]
   paleta: ItemPaleta[]
@@ -98,12 +113,24 @@ export function CanvasFluxoRastreio({
   onRemoverVarios: (indices: number[]) => void
   onDuplicar: (indices: number[]) => void
   onReordenar: (indice: number, direcao: -1 | 1) => void
+  conexoes: Conexao[]
+  onConectar: (de: string, para: string) => void
+  onDesconectar: (de: string, para: string) => void
 }) {
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
   const [arrastandoNo, setArrastandoNo] = useState<number | null>(null)
   const [deslocamento, setDeslocamento] = useState({ x: 0, y: 0 })
   const [marquee, setMarquee] = useState<Retangulo | null>(null)
   const [panning, setPanning] = useState(false)
+  const [zoom, setZoom] = useState(1)
+  const [encaixeLigado, setEncaixeLigado] = useState(true)
+  const [ligando, setLigando] = useState<{
+    de: string
+    origemX: number
+    origemY: number
+    x: number
+    y: number
+  } | null>(null)
 
   const areaRef = useRef<HTMLDivElement>(null)
   const inicioArrasto = useRef({ x: 0, y: 0 })
@@ -125,12 +152,14 @@ export function CanvasFluxoRastreio({
     (clientX: number, clientY: number) => {
       const caixa = areaRef.current?.getBoundingClientRect()
       if (!caixa) return { x: 0, y: 0 }
+      // Divide pelo zoom: o ponteiro chega em pixels de tela e as posições
+      // dos nós vivem no espaço do canvas, antes da escala.
       return {
-        x: clientX - caixa.left - deslocamento.x,
-        y: clientY - caixa.top - deslocamento.y,
+        x: (clientX - caixa.left - deslocamento.x) / zoom,
+        y: (clientY - caixa.top - deslocamento.y) / zoom,
       }
     },
-    [deslocamento],
+    [deslocamento, zoom],
   )
 
   // Arrasto de nó: move todos os selecionados juntos, preservando as
@@ -146,8 +175,8 @@ export function CanvasFluxoRastreio({
       for (const [indice, inicial] of posicoesIniciais.current) {
         onMover(
           indice,
-          Math.max(0, Math.round(inicial.x + dx)),
-          Math.max(0, Math.round(inicial.y + dy)),
+          Math.max(0, encaixar(inicial.x + dx, encaixeLigado)),
+          Math.max(0, encaixar(inicial.y + dy, encaixeLigado)),
         )
       }
     }
@@ -163,7 +192,7 @@ export function CanvasFluxoRastreio({
       window.removeEventListener('pointermove', aoMover)
       window.removeEventListener('pointerup', aoSoltar)
     }
-  }, [arrastandoNo, onMover, paraCanvas])
+  }, [arrastandoNo, onMover, paraCanvas, encaixeLigado])
 
   // Pan da vista e seleção em massa compartilham o arrasto no fundo; o Shift
   // decide qual dos dois.
@@ -203,6 +232,27 @@ export function CanvasFluxoRastreio({
       window.removeEventListener('pointerup', aoSoltar)
     }
   }, [panning, marquee, paraCanvas])
+
+  // Ligação em curso: acompanha o ponteiro até soltar sobre um nó.
+  useEffect(() => {
+    if (!ligando) return
+
+    function aoMover(evento: PointerEvent) {
+      const atual = paraCanvas(evento.clientX, evento.clientY)
+      setLigando((anterior) => (anterior ? { ...anterior, x: atual.x, y: atual.y } : anterior))
+    }
+
+    function aoSoltar() {
+      setLigando(null)
+    }
+
+    window.addEventListener('pointermove', aoMover)
+    window.addEventListener('pointerup', aoSoltar)
+    return () => {
+      window.removeEventListener('pointermove', aoMover)
+      window.removeEventListener('pointerup', aoSoltar)
+    }
+  }, [ligando, paraCanvas])
 
   function aoApertarNoFundo(evento: ReactPointerEvent) {
     if (evento.target !== evento.currentTarget) return
@@ -264,6 +314,23 @@ export function CanvasFluxoRastreio({
     return () => window.removeEventListener('keydown', aoTeclar)
   }, [editavel, selecionados, onRemoverVarios, onDuplicar])
 
+  // Enquanto ninguém desenhou nada, as setas mostram a cadeia linear que o
+  // percurso já tem — o canvas não pode nascer sem ligação nenhuma e dar a
+  // impressão de que a ordem se perdeu.
+  const manuais = conexoes.length > 0
+  const indicePorId = new Map(nos.map((no, i) => [no.id ?? `sem-id-${i}`, i]))
+  const arestas = manuais
+    ? conexoes
+        .map((conexao) => ({
+          de: indicePorId.get(conexao.de),
+          para: indicePorId.get(conexao.para),
+          chave: `${conexao.de}->${conexao.para}`,
+        }))
+        .filter((a): a is { de: number; para: number; chave: string } =>
+          a.de !== undefined && a.para !== undefined,
+        )
+    : nos.slice(0, -1).map((_, i) => ({ de: i, para: i + 1, chave: `linear-${i}` }))
+
   const alturaConteudo = Math.max(460, ...posicoes.map((p) => p.y + ALTURA_NO + 80))
   const larguraConteudo = Math.max(1000, ...posicoes.map((p) => p.x + LARGURA_NO + 80))
 
@@ -300,7 +367,39 @@ export function CanvasFluxoRastreio({
                 </button>
               </>
             ) : null}
-            <button type="button" onClick={() => setDeslocamento({ x: 0, y: 0 })} className={botaoBarra}>
+            <label className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={encaixeLigado}
+                onChange={(e) => setEncaixeLigado(e.target.checked)}
+              />
+              Encaixar na grade
+            </label>
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.max(ZOOM_MIN, Number((z - 0.1).toFixed(2))))}
+              aria-label="Diminuir zoom"
+              className={botaoBarra}
+            >
+              −
+            </button>
+            <span className="tabular-nums">{Math.round(zoom * 100)}%</span>
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.min(ZOOM_MAX, Number((z + 0.1).toFixed(2))))}
+              aria-label="Aumentar zoom"
+              className={botaoBarra}
+            >
+              +
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDeslocamento({ x: 0, y: 0 })
+                setZoom(1)
+              }}
+              className={botaoBarra}
+            >
               Centralizar
             </button>
           </span>
@@ -313,18 +412,31 @@ export function CanvasFluxoRastreio({
           <div
             ref={areaRef}
             onPointerDown={aoApertarNoFundo}
+            onWheel={(e) => {
+              // Só com Ctrl/Cmd: sem isso, rolar a página sobre o canvas
+              // mudaria o zoom sem querer.
+              if (!e.ctrlKey && !e.metaKey) return
+              e.preventDefault()
+              setZoom((z) =>
+                Math.min(
+                  ZOOM_MAX,
+                  Math.max(ZOOM_MIN, Number((z - Math.sign(e.deltaY) * 0.1).toFixed(2))),
+                ),
+              )
+            }}
             className={`absolute inset-0 ${panning ? 'cursor-grabbing' : 'cursor-grab'}`}
             style={{
               backgroundImage:
                 'radial-gradient(circle, rgba(120,120,120,0.28) 1px, transparent 1px)',
-              backgroundSize: '20px 20px',
+              backgroundSize: `${GRADE * zoom}px ${GRADE * zoom}px`,
               backgroundPosition: `${deslocamento.x}px ${deslocamento.y}px`,
             }}
           >
             <div
               className="pointer-events-none absolute"
               style={{
-                transform: `translate(${deslocamento.x}px, ${deslocamento.y}px)`,
+                transform: `translate(${deslocamento.x}px, ${deslocamento.y}px) scale(${zoom})`,
+                transformOrigin: '0 0',
                 width: larguraConteudo,
                 height: alturaConteudo,
               }}
@@ -335,24 +447,55 @@ export function CanvasFluxoRastreio({
                 height={alturaConteudo}
                 aria-hidden="true"
               >
-                {posicoes.slice(0, -1).map((origem, indice) => {
-                  const destino = posicoes[indice + 1]!
+                {arestas.map(({ de, para, chave }) => {
+                  const origem = posicoes[de]!
+                  const destino = posicoes[para]!
                   const x1 = origem.x + LARGURA_NO
                   const y1 = origem.y + ALTURA_NO / 2
                   const x2 = destino.x
                   const y2 = destino.y + ALTURA_NO / 2
                   const meio = (x1 + x2) / 2
                   return (
-                    <path
-                      key={indice}
-                      d={`M ${x1} ${y1} C ${meio} ${y1}, ${meio} ${y2}, ${x2} ${y2}`}
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                      className="text-borda-campo"
-                    />
+                    <g key={chave}>
+                      <path
+                        d={`M ${x1} ${y1} C ${meio} ${y1}, ${meio} ${y2}, ${x2} ${y2}`}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        className={manuais ? 'text-brand' : 'text-borda-campo'}
+                      />
+                      {manuais && editavel ? (
+                        // Alvo clicável sobre a curva, para remover a ligação.
+                        <path
+                          d={`M ${x1} ${y1} C ${meio} ${y1}, ${meio} ${y2}, ${x2} ${y2}`}
+                          fill="none"
+                          stroke="transparent"
+                          strokeWidth={14}
+                          className="pointer-events-auto cursor-pointer"
+                          onPointerDown={(e) => {
+                            e.stopPropagation()
+                            const idDe = nos[de]?.id
+                            const idPara = nos[para]?.id
+                            if (idDe && idPara) onDesconectar(idDe, idPara)
+                          }}
+                        >
+                          <title>Clique para remover esta ligação</title>
+                        </path>
+                      ) : null}
+                    </g>
                   )
                 })}
+
+                {ligando ? (
+                  <path
+                    d={`M ${ligando.origemX} ${ligando.origemY} L ${ligando.x} ${ligando.y}`}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeDasharray="6 4"
+                    className="text-brand"
+                  />
+                ) : null}
               </svg>
 
               {marquee ? (
@@ -399,6 +542,46 @@ export function CanvasFluxoRastreio({
                           : 'border-brand bg-superficie-card'
                     } ${ativo ? 'ring-2 ring-brand ring-offset-2' : ''}`}
                   >
+                    {editavel ? (
+                      <>
+                        {/* Alça de saída: arraste dela até outro nó para ligar. */}
+                        <span
+                          role="button"
+                          tabIndex={-1}
+                          aria-label={`Ligar a partir de ${no.titulo}`}
+                          title="Arraste até outro nó para ligar"
+                          onPointerDown={(e) => {
+                            e.stopPropagation()
+                            const id = no.id
+                            if (!id) return
+                            setLigando({
+                              de: id,
+                              origemX: pos.x + LARGURA_NO,
+                              origemY: pos.y + ALTURA_NO / 2,
+                              x: pos.x + LARGURA_NO,
+                              y: pos.y + ALTURA_NO / 2,
+                            })
+                          }}
+                          className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 cursor-crosshair rounded-full border-2 border-brand bg-superficie-card"
+                        />
+                        {/* Alça de entrada: solte aqui para fechar a ligação. */}
+                        <span
+                          aria-hidden="true"
+                          onPointerUp={(e) => {
+                            if (!ligando || !no.id || ligando.de === no.id) return
+                            e.stopPropagation()
+                            onConectar(ligando.de, no.id)
+                            setLigando(null)
+                          }}
+                          className={`absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border-2 ${
+                            ligando && ligando.de !== no.id
+                              ? 'border-brand bg-brand'
+                              : 'border-borda-campo bg-superficie-card'
+                          }`}
+                        />
+                      </>
+                    ) : null}
+
                     {editavel ? (
                       <button
                         type="button"

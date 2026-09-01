@@ -57,6 +57,11 @@ enum StatusPagamento {
   CANCELADO
 }
 
+enum AmbienteApiToken {
+  SANDBOX
+  PRODUCAO
+}
+
 model User {
   id                String    @id @default(cuid())
   tipo              TipoUser
@@ -79,6 +84,7 @@ model User {
   webhookApps      WebhookApp[]
   statusRastreios  StatusRastreio[]
   rastreioTemplate RastreioTemplate?
+  apiTokens        ApiToken[]
 
   @@map("users")
 }
@@ -242,6 +248,13 @@ model Shipment {
   produtos               Json
   labelUrl               String?
   dceNumero              String?
+  /**
+   * `true` para envios criados por um `ApiToken` de ambiente SANDBOX pela
+   * API pública (`/api/v0`). Isola o teste do lojista do dinheiro real: o
+   * pagamento de um envio sandbox nunca toca a `Wallet` nem dispara a
+   * emissão de etiqueta real — ver `src/server/api-publica-service.ts`.
+   */
+  sandbox                Boolean          @default(false)
   cenario                CenarioSimulacao @default(ENTREGA_NORMAL)
   simulacaoIniciadaEm    DateTime?
   fatorSimulacao         Int              @default(1)
@@ -443,10 +456,35 @@ model RastreioTemplate {
   userId       String   @unique
   ativo        Boolean  @default(true)
   passos       Json
+  /// Ligações entre nós, por id de instância. Nulo = percurso linear pela
+  /// ordem dos passos.
+  conexoes     Json?
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("rastreio_templates")
+}
+
+/// Token de acesso à API pública (`/api/v0`), por conta e por ambiente.
+///
+/// O valor em claro nunca é gravado — só `tokenHash` (SHA-256 hex). O valor
+/// em claro é devolvido uma única vez, na criação
+/// (`src/server/api-token-service.ts`), e nunca mais reconstruído: nem
+/// listagem, nem log, nem mensagem de erro voltam a mostrá-lo.
+model ApiToken {
+  id          String           @id @default(cuid())
+  userId      String
+  nome        String
+  tokenHash   String           @unique
+  ambiente    AmbienteApiToken
+  ultimoUsoEm DateTime?
+  revogadoEm  DateTime?
+  criadoEm    DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("api_tokens")
 }

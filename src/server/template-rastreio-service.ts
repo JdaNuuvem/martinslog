@@ -2,8 +2,10 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { ValorInvalidoError } from '@/domain/errors'
 import {
+  ordenarPorConexoes,
   statusPorCodigoDoTemplate,
   validarTemplate,
+  type ConexaoTemplate,
   type PassoTemplate,
 } from '@/domain/rastreio/template-rastreio'
 
@@ -21,15 +23,26 @@ function paraPassos(valor: unknown): PassoTemplate[] {
   return valor as PassoTemplate[]
 }
 
+function paraConexoes(valor: unknown): ConexaoTemplate[] {
+  if (!Array.isArray(valor)) return []
+  return valor as ConexaoTemplate[]
+}
+
 /** Devolve o template da conta, ou `null` se ela usa o caminho padrão. */
 export async function obterTemplate(
   userId: string,
   cliente: ClientePrisma = prisma,
-): Promise<{ passos: PassoTemplate[]; ativo: boolean } | null> {
+): Promise<{ passos: PassoTemplate[]; conexoes: ConexaoTemplate[]; ativo: boolean } | null> {
   const registro = await cliente.rastreioTemplate.findUnique({ where: { userId } })
   if (!registro) return null
 
-  return { passos: paraPassos(registro.passos), ativo: registro.ativo }
+  const passos = paraPassos(registro.passos)
+  const conexoes = paraConexoes(registro.conexoes)
+
+  // A ordem entregue já é a do percurso: quem consome não precisa saber que
+  // existe um grafo por trás, e a ordem do array deixa de ser fonte de
+  // verdade concorrente com as setas.
+  return { passos: ordenarPorConexoes(passos, conexoes), conexoes, ativo: registro.ativo }
 }
 
 /**
@@ -39,10 +52,22 @@ export async function obterTemplate(
  * isolado pode vir depois de outro que encerra o envio, e só a sequência
  * revela isso.
  */
-export async function salvarTemplate(userId: string, passos: PassoTemplate[]) {
-  validarTemplate(passos)
+export async function salvarTemplate(
+  userId: string,
+  passos: PassoTemplate[],
+  conexoes: ConexaoTemplate[] = [],
+) {
+  // Valida a ordem que vai valer de fato — a das conexões —, e não a ordem
+  // em que os nós foram criados. Validar a outra deixaria passar um percurso
+  // que só quebra depois, na emissão.
+  const ordenados = ordenarPorConexoes(passos, conexoes)
+  validarTemplate(ordenados)
 
-  const dados = { passos: passos as unknown as Prisma.InputJsonValue, ativo: true }
+  const dados = {
+    passos: passos as unknown as Prisma.InputJsonValue,
+    conexoes: conexoes as unknown as Prisma.InputJsonValue,
+    ativo: true,
+  }
 
   const existente = await prisma.rastreioTemplate.findUnique({ where: { userId } })
 

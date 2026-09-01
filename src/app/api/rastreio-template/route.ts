@@ -21,8 +21,11 @@ const passoSchema = z.object({
   valorCentavos: z.number().int().min(0).optional(),
 })
 
+const conexaoSchema = z.object({ de: z.string().min(1), para: z.string().min(1) })
+
 const templateSchema = z.object({
   passos: z.array(passoSchema).min(1, 'O template precisa de ao menos um passo'),
+  conexoes: z.array(conexaoSchema).optional(),
 })
 
 /**
@@ -76,7 +79,11 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const salvo = await salvarTemplate(sessao.userId, analisado.data.passos)
+    const salvo = await salvarTemplate(
+      sessao.userId,
+      analisado.data.passos,
+      analisado.data.conexoes ?? [],
+    )
     return NextResponse.json({ template: salvo })
   } catch (error) {
     if (error instanceof DomainError) {

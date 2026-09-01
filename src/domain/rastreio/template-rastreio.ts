@@ -381,3 +381,82 @@ export function gerarRoteiroDeTemplate(
     }
   })
 }
+
+/** Ligação entre dois nós, pelos ids das instâncias. */
+export type ConexaoTemplate = { de: string; para: string }
+
+/**
+ * Ordena os passos seguindo as conexões desenhadas no canvas.
+ *
+ * As conexões não são enfeite: elas definem a ordem do percurso. Sem isso a
+ * ordem viria do array e desenhar uma seta não mudaria nada — o canvas
+ * mostraria uma coisa e a timeline entregaria outra.
+ *
+ * Ordenação topológica com empate resolvido pelo dia, e depois pela posição
+ * original. Nó sem conexão nenhuma não é erro: ele entra na ordem pelo dia,
+ * que é o que determina quando o evento aparece de fato.
+ *
+ * Ciclo é erro: um percurso que volta para trás não tem ordem possível, e
+ * aceitar em silêncio produziria uma timeline arbitrária.
+ */
+export function ordenarPorConexoes(
+  passos: readonly PassoTemplate[],
+  conexoes: readonly ConexaoTemplate[],
+): PassoTemplate[] {
+  if (conexoes.length === 0) return [...passos]
+
+  const porId = new Map(passos.map((passo, indice) => [passo.id ?? `sem-id-${indice}`, passo]))
+  const grauEntrada = new Map<string, number>()
+  const saidas = new Map<string, string[]>()
+
+  for (const id of porId.keys()) {
+    grauEntrada.set(id, 0)
+    saidas.set(id, [])
+  }
+
+  for (const conexao of conexoes) {
+    if (!porId.has(conexao.de) || !porId.has(conexao.para)) continue
+    saidas.get(conexao.de)!.push(conexao.para)
+    grauEntrada.set(conexao.para, (grauEntrada.get(conexao.para) ?? 0) + 1)
+  }
+
+  const posicaoOriginal = new Map(
+    passos.map((passo, indice) => [passo.id ?? `sem-id-${indice}`, indice]),
+  )
+
+  const criterio = (a: string, b: string): number => {
+    const pa = porId.get(a)!
+    const pb = porId.get(b)!
+    if (pa.diasAposEmissao !== pb.diasAposEmissao) return pa.diasAposEmissao - pb.diasAposEmissao
+    return (posicaoOriginal.get(a) ?? 0) - (posicaoOriginal.get(b) ?? 0)
+  }
+
+  const prontos = [...grauEntrada.entries()]
+    .filter(([, grau]) => grau === 0)
+    .map(([id]) => id)
+    .sort(criterio)
+
+  const ordenados: PassoTemplate[] = []
+
+  while (prontos.length > 0) {
+    const id = prontos.shift()!
+    ordenados.push(porId.get(id)!)
+
+    for (const seguinte of saidas.get(id) ?? []) {
+      const restante = (grauEntrada.get(seguinte) ?? 0) - 1
+      grauEntrada.set(seguinte, restante)
+      if (restante === 0) {
+        prontos.push(seguinte)
+        prontos.sort(criterio)
+      }
+    }
+  }
+
+  if (ordenados.length !== passos.length) {
+    throw new ValorInvalidoError(
+      'As conexões formam um ciclo: há um caminho que volta para um nó anterior. Remova uma das ligações.',
+    )
+  }
+
+  return ordenados
+}

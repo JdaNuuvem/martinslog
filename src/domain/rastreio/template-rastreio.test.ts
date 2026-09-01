@@ -3,6 +3,7 @@ import { ValorInvalidoError } from '../errors'
 import {
   PALETA,
   itemDaPaleta,
+  ordenarPorConexoes,
   statusPorCodigoDoTemplate,
   templatePadrao,
   validarTemplate,
@@ -154,5 +155,68 @@ describe('statusPorCodigoDoTemplate', () => {
 
     expect(mapa.TENTATIVA_ENTREGA_1).toBe('POSTED')
     expect(mapa.ENTREGUE).toBe('DELIVERED')
+  })
+})
+
+describe('ordenarPorConexoes', () => {
+  function comId(id: string, codigo: string, dias: number): PassoTemplate {
+    return { ...passo(codigo, dias), id }
+  }
+
+  it('sem conexões, mantém a ordem do array', () => {
+    const passos = [comId('a', 'POSTADO', 1), comId('b', 'ENTREGUE', 5)]
+    expect(ordenarPorConexoes(passos, []).map((p) => p.id)).toEqual(['a', 'b'])
+  })
+
+  it('segue as setas, e não a ordem em que os nós foram criados', () => {
+    // O nó "b" foi criado antes, mas a seta diz que ele vem depois.
+    const passos = [comId('b', 'ENTREGUE', 5), comId('a', 'POSTADO', 1)]
+    const conexoes = [{ de: 'a', para: 'b' }]
+
+    expect(ordenarPorConexoes(passos, conexoes).map((p) => p.id)).toEqual(['a', 'b'])
+  })
+
+  it('resolve empate de conexão pelo dia', () => {
+    const passos = [
+      comId('raiz', 'ETIQUETA_EMITIDA', 0),
+      comId('tarde', 'TRANSFERENCIA', 5),
+      comId('cedo', 'POSTADO', 1),
+    ]
+    const conexoes = [
+      { de: 'raiz', para: 'tarde' },
+      { de: 'raiz', para: 'cedo' },
+    ]
+
+    expect(ordenarPorConexoes(passos, conexoes).map((p) => p.id)).toEqual(['raiz', 'cedo', 'tarde'])
+  })
+
+  it('inclui nó solto, posicionado pelo dia', () => {
+    const passos = [
+      comId('a', 'POSTADO', 1),
+      comId('solto', 'TRANSFERENCIA', 2),
+      comId('b', 'ENTREGUE', 5),
+    ]
+    const conexoes = [{ de: 'a', para: 'b' }]
+
+    const ordem = ordenarPorConexoes(passos, conexoes).map((p) => p.id)
+    expect(ordem).toHaveLength(3)
+    expect(ordem).toContain('solto')
+  })
+
+  it('recusa ciclo em vez de produzir uma ordem arbitrária', () => {
+    const passos = [comId('a', 'POSTADO', 1), comId('b', 'TRANSFERENCIA', 2)]
+    const conexoes = [
+      { de: 'a', para: 'b' },
+      { de: 'b', para: 'a' },
+    ]
+
+    expect(() => ordenarPorConexoes(passos, conexoes)).toThrow(/ciclo/)
+  })
+
+  it('ignora conexão que aponta para nó inexistente, em vez de quebrar', () => {
+    const passos = [comId('a', 'POSTADO', 1)]
+    const conexoes = [{ de: 'a', para: 'apagado' }]
+
+    expect(ordenarPorConexoes(passos, conexoes).map((p) => p.id)).toEqual(['a'])
   })
 })

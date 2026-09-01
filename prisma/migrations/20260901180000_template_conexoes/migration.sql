@@ -1,0 +1,11 @@
+-- Conexões desenhadas entre os nós do fluxo.
+--
+-- Elas definem a ordem do percurso: sem persistir, desenhar uma seta mudaria
+-- o canvas e não mudaria a timeline, e o cliente veria uma coisa configurada
+-- e outra entregue.
+--
+-- JSON pelo mesmo motivo dos passos: são lidas e gravadas sempre juntas, e a
+-- ordem topológica é calculada na leitura, nunca consultada aresta a aresta.
+-- Nulo significa percurso linear pela ordem dos passos, que é o
+-- comportamento de todo template salvo antes desta coluna existir.
+ALTER TABLE "rastreio_templates" ADD COLUMN "conexoes" JSONB;
