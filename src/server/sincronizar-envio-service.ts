@@ -8,6 +8,29 @@ import {
 } from '@/domain/shipment/estados'
 import { statusDoEvento } from '@/domain/simulacao/roteiro'
 import { enviarAtualizacao } from './email-service'
+import { enfileirarEvento, type Evento } from './webhook-service'
+
+/**
+ * Eventos de webhook que nascem aqui, e só aqui.
+ *
+ * `order.created`, `order.released`, `order.generated` e `order.cancelled` são
+ * enfileirados nos serviços que causam cada uma dessas transições. `POSTED` e
+ * `DELIVERED` não têm serviço próprio: eles acontecem sozinhos, quando o
+ * relógio da simulação alcança o evento — e, por isso, ficaram sem notificação
+ * nenhuma desde que os webhooks existem.
+ *
+ * O efeito era silencioso e sério: quem integrou recebia o código de rastreio
+ * em `order.generated` e nunca mais ouvia falar do pedido. O rastreio do
+ * comprador congelava em "etiqueta emitida" até a entrega, e nada no log
+ * acusava, porque não havia entrega falhando — não havia entrega alguma.
+ *
+ * `LOST` fica de fora de propósito: extravio não é cancelamento, e mandar
+ * `order.cancelled` descreveria errado o que aconteceu com a carga.
+ */
+const EVENTO_POR_STATUS: Partial<Record<StatusShipment, Evento>> = {
+  POSTED: 'order.posted',
+  DELIVERED: 'order.delivered',
+}
 
 /**
  * Sincronização do status do envio com o relógio da simulação.
@@ -154,12 +177,27 @@ export async function sincronizarEnvio(
 
     const porDevolucao = evento.codigo === 'DEVOLVIDO'
 
-    await prisma.shipment.update({
-      where: { id: envio.id, status },
-      data: {
-        status: alvo,
-        ...datasDoStatus(alvo, evento.ocorridoEm, porDevolucao),
-      },
+    /*
+      Mudança de status e notificação na mesma transação, ao contrário do
+      e-mail logo abaixo. Enfileirar fora dela abriria a janela em que o
+      status avançou e a notificação não existe — e, como aqui só se gravam
+      linhas (a entrega é do disparo, depois), não há I/O de rede prendendo
+      a conexão pelo tempo de um servidor de terceiro responder.
+    */
+    const eventoWebhook = EVENTO_POR_STATUS[alvo]
+
+    await prisma.$transaction(async (tx) => {
+      await tx.shipment.update({
+        where: { id: envio.id, status },
+        data: {
+          status: alvo,
+          ...datasDoStatus(alvo, evento.ocorridoEm, porDevolucao),
+        },
+      })
+
+      if (eventoWebhook) {
+        await enfileirarEvento(envio.id, eventoWebhook, tx)
+      }
     })
 
     status = alvo
