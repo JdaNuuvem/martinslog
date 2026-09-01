@@ -1,32 +1,30 @@
-import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { AppShell } from '@/components/layout/app-shell'
 import { CalculadoraForm } from '@/components/calculadora-form'
 import { lerSessaoDoServidor } from '@/server/auth/sessao-servidor'
 
 /**
- * Única rota que atende tanto visitante quanto usuário autenticado com o
- * mesmo shell: a calculadora funciona sem login. Por isso, ao contrário do
- * layout do grupo `(app)`, aqui a sessão é lida sem redirecionar — só para
- * decidir se a topbar mostra o nome real e o botão "Sair" (autenticado) ou
- * "VISITANTE" sem ele.
+ * Calculadora de frete — área do vendedor, não do destinatário.
+ *
+ * Era aberta a visitantes, e com ela vinha a navegação inteira do produto:
+ * etiquetas, carteira, integrações, convites. Quem só recebeu um código de
+ * rastreio via a área de trabalho de um lojista, com telas que iriam recusá-lo
+ * ao primeiro clique.
+ *
+ * A única coisa pública é o rastreio (`/r/[codigo]` e `/rastrear`), que usa o
+ * `ShellPublico`, sem a navegação de vendedor. Quem chega aqui sem conta vai
+ * para o cadastro.
  */
 export default async function PaginaCalculadora() {
   const sessao = await lerSessaoDoServidor()
 
+  if (!sessao) {
+    redirect('/login')
+  }
+
   return (
-    <AppShell nomeUsuario={sessao?.nome} autenticado={!!sessao}>
-      <div className="flex flex-col gap-4">
-        <CalculadoraForm autenticado={!!sessao} />
-        {/* Quem recebeu um código de rastreio por mensagem e caiu na home
-            precisa achar o caminho — este link discreto é a porta de
-            entrada dedicada em `/rastrear`. */}
-        <p className="text-center text-sm text-texto-secundario">
-          Já comprou de um vendedor e recebeu um código?{' '}
-          <Link href="/rastrear" className="font-medium text-brand-texto underline underline-offset-2">
-            Rastreie seu pedido
-          </Link>
-        </p>
-      </div>
+    <AppShell nomeUsuario={sessao.nome} autenticado>
+      <CalculadoraForm autenticado />
     </AppShell>
   )
 }

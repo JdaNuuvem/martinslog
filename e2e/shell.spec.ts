@@ -18,13 +18,18 @@ test('visitante sem sessão não vê atalho de saldo na topbar', async ({ page }
   // Guarda do comportamento novo: mostrar "R$ 0,00" a quem não entrou seria
   // afirmar um saldo que não existe.
   await page.context().clearCookies()
-  await page.goto('/')
+  // A raiz deixou de ser pública: a única tela aberta a quem não tem conta é
+  // o rastreio, e é lá que a ausência do atalho de saldo precisa valer.
+  await page.goto('/rastrear')
   await page.waitForLoadState('networkidle')
 
   await expect(page.getByRole('link', { name: /R\$/ })).toHaveCount(0)
 })
 
 test('sidebar mostra os itens na ordem e destaca o item ativo', async ({ page }) => {
+  // A navegação do vendedor é da área logada: a raiz deixou de ser pública
+  // quando a calculadora passou a exigir cadastro.
+  await entrarComContaNova(page, 'sidebar')
   await page.goto('/')
   const nav = page.getByRole('navigation', { name: 'Navegação principal' })
   const itens = nav.getByRole('link')
@@ -54,6 +59,7 @@ test('rotas da área logada respondem com a tela, e não com 404', async ({ page
 })
 
 test('abaixo de 1024px o menu retrátil abre pelo botão e fecha com Escape', async ({ page }) => {
+  await entrarComContaNova(page, 'menu-mobile')
   await page.setViewportSize({ width: 390, height: 800 })
   await page.goto('/')
 

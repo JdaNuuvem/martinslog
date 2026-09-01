@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { entrarComContaNova } from './apoio/sessao'
 
 /**
  * Guarda das rotas autenticadas.
@@ -79,5 +80,42 @@ test.describe('conta autenticada', () => {
     await page.goto('/etiquetas')
 
     await expect(page).toHaveURL(/\/login/)
+  })
+})
+
+test.describe('fronteira entre vendedor e destinatário', () => {
+  test('a calculadora exige cadastro: visitante vai para o login', async ({ page }) => {
+    await page.context().clearCookies()
+    await page.goto('/')
+
+    // A raiz era aberta, e com ela vinha a navegação inteira do produto.
+    // Quem só recebeu um código de rastreio via a área de trabalho de um
+    // lojista, com telas que o recusariam ao primeiro clique.
+    await expect(page).toHaveURL(/\/login/)
+    await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toHaveCount(0)
+  })
+
+  test('o rastreio é público e não mostra a navegação do vendedor', async ({ page }) => {
+    await page.context().clearCookies()
+    await page.goto('/rastrear')
+
+    await expect(page).toHaveURL(/\/rastrear/)
+    await expect(page.getByRole('heading', { name: 'Rastrear pedido' })).toBeVisible()
+
+    // O destinatário não é vendedor: nada de etiquetas, carteira ou
+    // integrações na tela dele.
+    await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Etiquetas' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Integrações' })).toHaveCount(0)
+  })
+
+  test('cadastrar leva à área logada, e não de volta ao formulário', async ({ page }) => {
+    // Regressão: quando a raiz passou a exigir sessão, o roteador do cliente
+    // servia o redirecionamento em cache e o recém-cadastrado voltava ao
+    // formulário sem explicação.
+    await entrarComContaNova(page, 'pos-cadastro')
+
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toBeVisible()
   })
 })

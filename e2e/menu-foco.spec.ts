@@ -14,6 +14,7 @@ const MOBILE = { width: 390, height: 844 }
 test.use({ viewport: MOBILE })
 
 test('devolve o foco ao botão de menu ao fechar com Escape', async ({ page }) => {
+  await entrarComContaNova(page, 'foco-esc')
   await page.goto('/')
 
   const botao = page.getByRole('button', { name: 'Abrir menu de navegação' })
@@ -31,6 +32,7 @@ test('devolve o foco ao botão de menu ao fechar com Escape', async ({ page }) =
 })
 
 test('devolve o foco ao botão de menu ao fechar pelo botão Fechar', async ({ page }) => {
+  await entrarComContaNova(page, 'foco-fechar')
   await page.goto('/')
 
   await page.getByRole('button', { name: 'Abrir menu de navegação' }).click()
@@ -59,6 +61,7 @@ test('não rouba o foco quando o menu fecha por navegação em um link', async (
 })
 
 test('mantém aria-expanded sincronizado com o estado do menu', async ({ page }) => {
+  await entrarComContaNova(page, 'foco-aria')
   await page.goto('/')
 
   const botao = page.getByRole('button', { name: 'Abrir menu de navegação' })

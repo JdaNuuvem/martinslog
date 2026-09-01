@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { AppShell } from '@/components/layout/app-shell'
+import { ShellPublico } from '@/components/layout/shell-publico'
 import { RastreioForm } from '@/components/rastreio-form'
 
 type Props = { params: Promise<{ codigo: string }> }
@@ -21,7 +21,7 @@ export default async function PaginaRastreioPublico({ params }: Props) {
   const { codigo } = await params
 
   return (
-    <AppShell>
+    <ShellPublico>
       <div className="flex flex-col gap-6">
         <div>
           <h1 className="text-2xl font-bold text-texto-principal">Rastreio</h1>
@@ -31,6 +31,6 @@ export default async function PaginaRastreioPublico({ params }: Props) {
         </div>
         <RastreioForm codigoInicial={decodeURIComponent(codigo).toUpperCase()} />
       </div>
-    </AppShell>
+    </ShellPublico>
   )
 }

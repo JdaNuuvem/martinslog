@@ -1,7 +1,6 @@
 ﻿'use client'
 
 import { FormEvent, useId, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { cadastroRequestSchema } from '@/lib/auth-schema'
 
 type EstadoFormulario = {
@@ -23,7 +22,6 @@ const ESTADO_INICIAL: EstadoFormulario = {
 type ErrosCampo = Partial<Record<keyof EstadoFormulario, string>>
 
 export default function CadastroPage() {
-  const router = useRouter()
   const idBase = useId()
 
   const [form, setForm] = useState<EstadoFormulario>(ESTADO_INICIAL)
@@ -84,8 +82,13 @@ export default function CadastroPage() {
         return
       }
 
-      router.push('/')
-      router.refresh()
+      // Navegação completa, e não `router.push`: a rota `/` passou a exigir
+      // sessão, então o roteador do cliente pode ter em cache o
+      // redirecionamento para o login feito antes de a conta existir. Com o
+      // cache antigo, o recém-cadastrado voltava para o formulário sem
+      // explicação. Recarregar garante que o servidor decida com o cookie
+      // que acabou de ser criado.
+      window.location.assign('/')
     } catch {
       setErroGeral('Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.')
     } finally {

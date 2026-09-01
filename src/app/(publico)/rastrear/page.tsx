@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { AppShell } from '@/components/layout/app-shell'
+import { ShellPublico } from '@/components/layout/shell-publico'
 import { RastrearForm } from '@/components/rastrear-form'
 
 export const metadata: Metadata = {
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
  */
 export default function PaginaRastrear() {
   return (
-    <AppShell>
+    <ShellPublico>
       <div className="flex flex-col gap-6">
         <div>
           <h1 className="text-2xl font-bold text-texto-principal">Rastrear pedido</h1>
@@ -25,6 +25,6 @@ export default function PaginaRastrear() {
         </div>
         <RastrearForm />
       </div>
-    </AppShell>
+    </ShellPublico>
   )
 }

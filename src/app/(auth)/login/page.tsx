@@ -1,7 +1,6 @@
 ﻿'use client'
 
 import { FormEvent, useId, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { loginRequestSchema } from '@/lib/auth-schema'
 import { destinoSeguro } from '@/lib/destino-seguro'
 
@@ -15,7 +14,6 @@ const ESTADO_INICIAL: EstadoFormulario = { email: '', senha: '' }
 type ErrosCampo = Partial<Record<keyof EstadoFormulario, string>>
 
 export default function LoginPage() {
-  const router = useRouter()
   const idBase = useId()
 
   const [form, setForm] = useState<EstadoFormulario>(ESTADO_INICIAL)
@@ -71,8 +69,10 @@ export default function LoginPage() {
         de um parâmetro; `destinoSeguro` recusa endereço externo.
       */
       const destino = destinoSeguro(new URLSearchParams(window.location.search).get('destino'))
-      router.push(destino)
-      router.refresh()
+      // Navegação completa pelo mesmo motivo do cadastro: as rotas da área
+      // logada redirecionam quem não tem sessão, e o roteador do cliente
+      // pode ter esse redirecionamento em cache de antes do login.
+      window.location.assign(destino)
     } catch {
       setErroGeral('Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.')
     } finally {
