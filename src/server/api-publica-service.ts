@@ -97,7 +97,20 @@ export type EntradaCarrinho = {
   produtos: EntradaEnvio['produtos']
 }
 
-export type ItemCarrinho = { id: string; price: string; status: string }
+/**
+ * Item do carrinho.
+ *
+ * `price` é o **frete** do envio, que é o que o integrador mostra ao
+ * comprador dele. `label_fee` é o que a plataforma cobra do lojista por
+ * etiqueta gerada — número diferente, com dono diferente, e misturar os dois
+ * num campo só fez a API responder R$ 1,00 onde deveria estar o transporte.
+ */
+export type ItemCarrinho = {
+  id: string
+  price: string
+  label_fee: string
+  status: string
+}
 
 function dividirIdServico(service: string): { quoteId: string; servicoId: string } {
   const separador = service.indexOf(':')
@@ -164,7 +177,12 @@ export async function criarCarrinho(
     await marcarEntregasComoSandbox(envio.id, 'order.created')
   }
 
-  return { id: envio.id, price: (envio.precoCobradoCentavos / 100).toFixed(2), status: envio.status }
+  return {
+    id: envio.id,
+    price: (envio.precoFreteCentavos / 100).toFixed(2),
+    label_fee: (envio.precoCobradoCentavos / 100).toFixed(2),
+    status: envio.status,
+  }
 }
 
 /**
@@ -253,7 +271,10 @@ export type InfoEnvio = {
   status: string
   tracking: string | null
   tracking_url: string | null
+  /** Frete do envio: o valor do transporte, que o comprador do lojista vê. */
   price: string
+  /** Taxa por etiqueta gerada, debitada da carteira do lojista. */
+  label_fee: string
   sandbox: boolean
   created_at: string
 }
@@ -275,7 +296,8 @@ export async function obterInfoEnvio(contexto: ContextoApi, shipmentId: string):
     status: envio.status,
     tracking: envio.codigoRastreio,
     tracking_url: envio.codigoRastreio ? `/r/${envio.codigoRastreio}` : null,
-    price: (envio.precoCobradoCentavos / 100).toFixed(2),
+    price: (envio.precoFreteCentavos / 100).toFixed(2),
+    label_fee: (envio.precoCobradoCentavos / 100).toFixed(2),
     sandbox: envio.sandbox,
     created_at: envio.criadoEm.toISOString(),
   }

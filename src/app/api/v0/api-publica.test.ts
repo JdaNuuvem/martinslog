@@ -128,7 +128,18 @@ describe('API pública /api/v0', () => {
 
     const { respCart } = await cotarEMontarCarrinho(tokenClaro)
     expect(respCart.status).toBe(201)
-    const carrinho = (await respCart.json()) as { id: string; price: string; status: string }
+    const carrinho = (await respCart.json()) as {
+      id: string
+      price: string
+      label_fee: string
+      status: string
+    }
+
+    // O que sai da carteira é a taxa por etiqueta, não o frete. São dois
+    // números com donos diferentes: o frete é o que o comprador do lojista
+    // paga a ele; a taxa é o que o lojista paga à plataforma.
+    expect(carrinho.label_fee).toBe('1.00')
+    expect(Number(carrinho.price)).toBeGreaterThan(Number(carrinho.label_fee))
 
     const walletAntes = await prisma.wallet.findUniqueOrThrow({ where: { userId: user.id } })
 
@@ -138,16 +149,26 @@ describe('API pública /api/v0', () => {
     expect(respCheckout.status).toBe(200)
 
     const walletDepois = await prisma.wallet.findUniqueOrThrow({ where: { userId: user.id } })
-    const precoCentavos = Math.round(Number(carrinho.price) * 100)
+    const taxaCentavos = Math.round(Number(carrinho.label_fee) * 100)
 
-    expect(walletAntes.saldoCentavos - walletDepois.saldoCentavos).toBe(precoCentavos)
+    expect(walletAntes.saldoCentavos - walletDepois.saldoCentavos).toBe(taxaCentavos)
 
     const info = await ORDER_INFO(
       reqGet(`/api/v0/order/info/${carrinho.id}`, tokenClaro),
       { params: Promise.resolve({ id: carrinho.id }) },
     )
     expect(info.status).toBe(200)
-    const corpoInfo = (await info.json()) as { status: string; tracking: string | null }
+    const corpoInfo = (await info.json()) as {
+      status: string
+      tracking: string | null
+      price: string
+      label_fee: string
+    }
+
+    // O detalhe do envio precisa carregar os dois: sem o frete, quem integra
+    // não tem o valor do transporte para mostrar ao comprador dele.
+    expect(corpoInfo.price).toBe(carrinho.price)
+    expect(corpoInfo.label_fee).toBe('1.00')
     expect(['RELEASED', 'GENERATED']).toContain(corpoInfo.status)
   })
 
@@ -213,17 +234,23 @@ describe('API pública /api/v0', () => {
     expect(checkoutAlheio.status).toBe(404)
   })
 
-  it('ignora price enviado no corpo — o valor debitado é sempre o da cotação', async () => {
+  it('ignora price enviado no corpo — nem o frete nem a taxa vêm do cliente', async () => {
     const user = await criarUsuarioDeTeste(5000)
     const { tokenClaro } = await criarToken(user.id, 'Loja preço', 'PRODUCAO')
 
     const { respCart } = await cotarEMontarCarrinho(tokenClaro, { price: 1 })
     expect(respCart.status).toBe(201)
-    const carrinho = (await respCart.json()) as { id: string; price: string }
+    const carrinho = (await respCart.json()) as { id: string; price: string; label_fee: string }
 
     const salvo = await prisma.shipment.findUniqueOrThrow({ where: { id: carrinho.id } })
-    expect(salvo.precoCobradoCentavos).not.toBe(1)
-    expect(salvo.precoCobradoCentavos).toBe(Math.round(Number(carrinho.price) * 100))
+
+    // O frete vem da tabela de preços, não do corpo da requisição.
+    expect(salvo.precoFreteCentavos).not.toBe(1)
+    expect(salvo.precoFreteCentavos).toBe(Math.round(Number(carrinho.price) * 100))
+
+    // E o que é debitado é a taxa por etiqueta, fixa e definida por nós —
+    // um cliente que manda price: 1 no corpo não muda nenhum dos dois.
+    expect(salvo.precoCobradoCentavos).toBe(Math.round(Number(carrinho.label_fee) * 100))
   })
 
   it('devolve 429 quando o token excede o limite de requisições', async () => {
