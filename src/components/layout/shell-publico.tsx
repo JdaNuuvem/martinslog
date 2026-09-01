@@ -36,11 +36,11 @@ export function ShellPublico({
         <div className="mx-auto flex h-topbar max-w-5xl items-center justify-between gap-4 px-4">
           <Link
             href="/"
-            className="flex shrink-0 items-center gap-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+            className="flex min-w-0 items-center gap-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.webp" alt="" width={32} height={32} className="h-8 w-8 object-contain" />
-            <span className="text-base font-extrabold tracking-tight text-white">
+            <img src="/logo.webp" alt="" width={32} height={32} className="h-8 w-8 shrink-0 object-contain" />
+            <span className="truncate text-dado font-extrabold tracking-tight text-white sm:text-base">
               MARTINS<span className="text-sidebar-marcador">LOG</span>
             </span>
           </Link>
@@ -60,9 +60,15 @@ export function ShellPublico({
             >
               Entrar
             </Link>
+            {/*
+              Menor no celular. Somando marca, "Entrar" e este botão no tamanho
+              de desktop, a barra passa de 320px de largura e o conteúdo
+              transborda para fora da tela — que é onde a régua horizontal
+              aparece e a página inteira ganha cara de quebrada.
+            */}
             <Link
               href="/cadastro"
-              className="rounded-pilula bg-destaque px-4 py-2 text-dado font-bold text-white transition hover:bg-destaque-escuro focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="shrink-0 rounded-pilula bg-destaque px-3 py-1.5 text-rotulo font-bold text-white transition hover:bg-destaque-escuro focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:px-4 sm:py-2 sm:text-dado"
             >
               Criar conta
             </Link>
