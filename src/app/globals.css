@@ -3,10 +3,13 @@
 @tailwind utilities;
 
 :root {
-  --cor-marca: #0a6e4a;
-  --cor-marca-clara: #0c7d54;
-  --cor-marca-fundo: #d6f5e6;
-  --cor-marca-texto: #0b7a52;
+  /* Espelham os tokens `brand` do tailwind.config.ts — ver as razões de
+     contraste documentadas lá. Mudar aqui sem mudar lá deixa a interface
+     com duas marcas diferentes na mesma tela. */
+  --cor-marca: #1d3a72;
+  --cor-marca-clara: #152a55;
+  --cor-marca-fundo: #e0e9f7;
+  --cor-marca-texto: #1d3a72;
   --cor-texto-principal: #1a1a1a;
   --cor-texto-secundario: #5b6472;
   --cor-texto-riscado: #6b7280;

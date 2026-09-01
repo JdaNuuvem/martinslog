@@ -5,17 +5,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        /**
+         * Azul-marinho da identidade da Martins Log (martinslog.net), onde ele
+         * é a cor que estrutura — cabeçalho, rodapé, faixas — e o vermelho é a
+         * cor que age.
+         *
+         * Aqui a relação se inverte de propósito: `erro` já é vermelho
+         * (#B91C1C), e num sistema cheio de formulários pintar os 56
+         * preenchimentos de botão de vermelho apagaria a diferença entre
+         * "ação principal" e "algo deu errado". O vermelho da marca fica
+         * reservado ao logotipo e a destaques pontuais.
+         *
+         * Todas as razões abaixo superam as da paleta anterior.
+         */
         brand: {
-          // Preenchimento de botão (texto branco em cima) — 6,28:1 sobre branco.
-          DEFAULT: '#0A6E4A',
-          // Hover do preenchimento — 5,15:1 sobre branco.
-          light: '#0C7D54',
-          bg: '#D6F5E6',
-          // Verde para texto/links sobre fundo claro (branco ou cinza de página) —
-          // 5,36:1 sobre branco, 4,95:1 sobre `superficie.pagina`. Mais claro que
-          // `DEFAULT` seria reprovado nessas duas superfícies (a paleta de
-          // referência original, #0E8A5F, ficava em 4,36:1 sobre branco).
-          texto: '#0B7A52',
+          // Preenchimento de botão (texto branco em cima) — 11,05:1 sobre branco.
+          DEFAULT: '#1D3A72',
+          // Hover do preenchimento — 14,05:1 sobre branco. Escurece em vez de
+          // clarear: clarear reduziria o contraste com o texto branco em cima.
+          light: '#152A55',
+          // Fundo suave de destaque. Texto principal em cima — 14,23:1.
+          bg: '#E0E9F7',
+          // Texto e links sobre fundo claro — 11,05:1 sobre branco e 10,21:1
+          // sobre `superficie.pagina`.
+          texto: '#1D3A72',
         },
         alerta: {
           DEFAULT: '#F59E0B',
