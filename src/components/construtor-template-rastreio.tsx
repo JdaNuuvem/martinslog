@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { CanvasFluxoRastreio, posicaoPadrao } from './canvas-fluxo-rastreio'
+import { INTERVALO_PADRAO_DIAS } from '@/domain/rastreio/template-rastreio'
 
 type ItemPaleta = {
   codigo: string
@@ -18,7 +19,8 @@ type Passo = {
   codigo: string
   titulo: string
   descricao: string
-  diasAposEmissao: number
+  /** Dias desde a etapa anterior; no primeiro nó, desde a emissão. */
+  diasAposAnterior: number
   tipo?: 'ETAPA' | 'COBRANCA'
   x?: number
   y?: number
@@ -133,7 +135,10 @@ export function ConstrutorTemplateRastreio() {
         codigo: item.codigo,
         titulo: item.rotulo,
         descricao: item.descricaoPadrao,
-        diasAposEmissao: item.diasSugeridos,
+        // Um dia depois da etapa anterior. `diasSugeridos` da paleta é um dia
+        // absoluto, que não diz nada quando o nó entra no fim de um percurso
+        // já montado.
+        diasAposAnterior: INTERVALO_PADRAO_DIAS,
         tipo: item.tipo,
       },
     ])

@@ -48,9 +48,9 @@ const destinatario: EnderecoEnvio = {
 }
 
 const PASSOS_TEMPLATE = [
-  { id: 'p1', codigo: 'POSTADO', titulo: 'Postado', descricao: 'Saiu da loja', diasAposEmissao: 0 },
-  { id: 'p2', codigo: 'TRANSFERENCIA', titulo: 'A caminho', descricao: 'Rodando', diasAposEmissao: 1 },
-  { id: 'p3', codigo: 'ENTREGUE', titulo: 'Chegou', descricao: 'Entregue', diasAposEmissao: 2 },
+  { id: 'p1', codigo: 'POSTADO', titulo: 'Postado', descricao: 'Saiu da loja', diasAposAnterior: 0 },
+  { id: 'p2', codigo: 'TRANSFERENCIA', titulo: 'A caminho', descricao: 'Rodando', diasAposAnterior: 1 },
+  { id: 'p3', codigo: 'ENTREGUE', titulo: 'Chegou', descricao: 'Entregue', diasAposAnterior: 1 },
 ]
 
 /** Usuário com um envio já emitido — timeline gravada pelo roteiro automático. */

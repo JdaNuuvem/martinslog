@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { DomainError } from '@/domain/errors'
-import { PALETA, templatePadrao } from '@/domain/rastreio/template-rastreio'
+import { normalizarDias, PALETA, templatePadrao, type PassoTemplate } from '@/domain/rastreio/template-rastreio'
 import { lerSessao } from '@/server/auth/sessao'
 import {
   obterTemplate,
@@ -14,7 +14,10 @@ const passoSchema = z.object({
   codigo: z.string().min(1),
   titulo: z.string().trim().min(1, 'Título é obrigatório'),
   descricao: z.string().trim().min(1, 'Descrição é obrigatória'),
-  diasAposEmissao: z.number().min(0).max(365),
+  /* Intervalo desde a etapa anterior. `diasAposEmissao` ainda é aceito para
+     não quebrar quem tenha a tela antiga aberta: `normalizarDias` converte. */
+  diasAposAnterior: z.number().min(0).max(365).optional(),
+  diasAposEmissao: z.number().min(0).max(365).optional(),
   tipo: z.enum(['ETAPA', 'COBRANCA']).optional(),
   x: z.number().optional(),
   y: z.number().optional(),
@@ -81,7 +84,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
   try {
     const salvo = await salvarTemplate(
       sessao.userId,
-      analisado.data.passos,
+      normalizarDias(analisado.data.passos as PassoTemplate[]),
       analisado.data.conexoes ?? [],
     )
     return NextResponse.json({ template: salvo })
