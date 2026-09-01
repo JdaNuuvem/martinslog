@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useId, useState } from 'react'
 import { cotacaoRequestSchema, type CotacaoErro, type CotacaoResposta } from '@/lib/cotacao-schema'
 import { OpcaoFreteCard } from './opcao-frete-card'
+import { ModalCadastro } from './modal-cadastro'
 import { IconeChevron, IconeLimpar, IconeSalvar } from './layout/icones'
 
 const FAIXAS_PESO = [
@@ -74,6 +75,13 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
   const [carregando, setCarregando] = useState(false)
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   const [resultado, setResultado] = useState<CotacaoResposta | null>(null)
+  /**
+   * Destino do frete escolhido por um visitante — e, enquanto tiver valor, o
+   * sinal de que o cadastro está aberto. Guardar o destino em vez de um
+   * booleano evita perder qual serviço foi clicado entre a escolha e o fim do
+   * cadastro.
+   */
+  const [destinoCadastro, setDestinoCadastro] = useState<string | null>(null)
   const [mensagemSalvar, setMensagemSalvar] = useState<string | null>(null)
   const idBase = useId()
 
@@ -505,12 +513,22 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
                   opcao={opcao}
                   quoteId={resultado.quoteId}
                   autenticado={autenticado}
+                  aoEscolherComoVisitante={setDestinoCadastro}
                 />
               ))}
             </ul>
           ) : (
             <p className="text-sm text-texto-secundario">Nenhuma opção de frete encontrada para essa rota.</p>
           )
+        ) : null}
+
+        {/*
+          Visitante que escolhe um frete cria conta aqui mesmo. A cotação
+          continua na tela atrás do diálogo, e o destino guardado leva direto
+          ao fluxo de envio com o serviço escolhido — sem recalcular nada.
+        */}
+        {destinoCadastro ? (
+          <ModalCadastro destino={destinoCadastro} aoFechar={() => setDestinoCadastro(null)} />
         ) : null}
       </div>
     </div>

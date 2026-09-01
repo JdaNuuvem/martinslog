@@ -28,13 +28,31 @@ async function calcularNaHome(page: import('@playwright/test').Page): Promise<vo
   await expect(page.getByTestId('opcao-frete').first()).toBeVisible({ timeout: 20_000 })
 }
 
-test('visitante clica na opção, entra e volta para o fluxo com a cotação escolhida', async ({ page }) => {
+test('visitante clica na opção e o cadastro abre sobre a cotação', async ({ page }) => {
   await calcularNaHome(page)
 
-  const link = page.getByTestId('opcao-frete-link').first()
-  const href = await link.getAttribute('href')
+  await page.getByTestId('opcao-frete-link').first().click()
+
+  // O cadastro abre na própria página: a lista de preços continua atrás do
+  // diálogo, e ninguém precisa recalcular nada ao voltar. Antes daqui o
+  // clique navegava para `/login?destino=`, e quem não tinha conta batia
+  // numa tela de entrar sem ter o que digitar.
+  await expect(page.getByTestId('modal-cadastro')).toBeVisible()
+  await expect(page).toHaveURL(/\/$/)
+
+  // Quem já tem conta tem saída, e ela carrega o mesmo destino — entrar por
+  // ali devolve a pessoa ao fluxo com a cotação escolhida.
+  const entrar = page.getByTestId('modal-cadastro').getByRole('link', { name: 'Já tenho conta' })
+  const href = await entrar.getAttribute('href')
   expect(href).toContain('/login?destino=')
   expect(decodeURIComponent(href ?? '')).toContain('/envios/novo?quoteId=')
+
+  // Escape fecha e devolve a cotação intacta — comportamento do `<dialog>`
+  // nativo, verificado aqui porque é o caminho de fuga de quem clicou sem
+  // querer.
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('modal-cadastro')).toBeHidden()
+  await expect(page.getByTestId('opcao-frete').first()).toBeVisible()
 })
 
 test('autenticado clica na opção e cai no fluxo de envio já cotado', async ({ page }) => {
