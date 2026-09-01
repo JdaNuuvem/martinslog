@@ -55,7 +55,12 @@ export default async function PaginaEtiqueta({ params }: { params: Promise<{ id:
     { rotulo: 'Código', valor: etiqueta.codigoRastreio ?? 'sem código' },
     { rotulo: 'Serviço', valor: etiqueta.servico },
     { rotulo: 'Prazo', valor: `${etiqueta.prazoDias} dias úteis` },
-    { rotulo: 'Valor pago', valor: reais(etiqueta.valorCentavos) },
+    { rotulo: 'Frete calculado', valor: reais(etiqueta.precoFreteCentavos) },
+    // Dois números diferentes, nomeados pelo que cada um é: o frete é o custo
+    // do transporte impresso na etiqueta, e "pago pela etiqueta" é o que saiu
+    // da carteira. Chamar os dois de "valor" faria o cliente ler cobrança em
+    // dobro onde há uma só.
+    { rotulo: 'Pago pela etiqueta', valor: reais(etiqueta.valorCentavos) },
     { rotulo: 'Criado em', valor: dataHora(etiqueta.criadoEm) },
   ]
 

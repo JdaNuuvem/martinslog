@@ -7,6 +7,7 @@ import {
   SaldoInsuficienteError,
   TransicaoInvalidaError,
 } from '@/domain/errors'
+import { PRECO_ETIQUETA_CENTAVOS } from '@/domain/pricing/etiqueta'
 import { criarUsuarioComSaldo, criarCotacaoValida } from '@/test/factories'
 import { criarEnvio, pagarEnvio, type EnderecoEnvio, type EntradaEnvio } from './shipment-service'
 
@@ -62,8 +63,9 @@ async function criarUsuarioDeTeste(saldoCentavos: number) {
 
 describe('pagarEnvio sob concorrência', () => {
   it('nunca deixa o saldo negativo com dois pagamentos simultâneos', async () => {
-    // saldo cobre exatamente UM envio de R$ 14,16
-    const user = await criarUsuarioDeTeste(1416)
+    // Saldo que cobre exatamente UMA etiqueta. O frete da cotação não entra
+    // na conta: o que sai da carteira é o preço por etiqueta gerada.
+    const user = await criarUsuarioDeTeste(PRECO_ETIQUETA_CENTAVOS)
     const cotacao = await criarCotacaoValida(user.id)
     const a = await criarEnvio(user.id, entradaEnvio(cotacao.id))
     const b = await criarEnvio(user.id, entradaEnvio(cotacao.id))
@@ -92,7 +94,7 @@ describe('pagarEnvio sob concorrência', () => {
     // Mesmo cenário do teste anterior, com mais concorrentes. Dois atores já
     // reprovam sem o `FOR UPDATE`, mas quatro estressam a fila do lock: se a
     // serialização só funcionasse para o primeiro par, apareceria aqui.
-    const user = await criarUsuarioDeTeste(1416)
+    const user = await criarUsuarioDeTeste(PRECO_ETIQUETA_CENTAVOS)
     const cotacao = await criarCotacaoValida(user.id)
     const envios = await Promise.all(
       Array.from({ length: 4 }, () => criarEnvio(user.id, entradaEnvio(cotacao.id))),
@@ -119,14 +121,14 @@ describe('pagarEnvio sob concorrência', () => {
   })
 
   it('mantém o saldo intacto e o envio PENDING quando o pagamento falha por saldo insuficiente', async () => {
-    const user = await criarUsuarioDeTeste(100)
+    const user = await criarUsuarioDeTeste(PRECO_ETIQUETA_CENTAVOS - 1)
     const cotacao = await criarCotacaoValida(user.id)
     const envio = await criarEnvio(user.id, entradaEnvio(cotacao.id))
 
     await expect(pagarEnvio(user.id, envio.id)).rejects.toBeInstanceOf(SaldoInsuficienteError)
 
     const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: user.id } })
-    expect(wallet.saldoCentavos).toBe(100)
+    expect(wallet.saldoCentavos).toBe(PRECO_ETIQUETA_CENTAVOS - 1)
 
     const atualizado = await prisma.shipment.findUniqueOrThrow({ where: { id: envio.id } })
     expect(atualizado.status).toBe('PENDING')
@@ -148,10 +150,14 @@ describe('criarEnvio', () => {
     const envio = await criarEnvio(user.id, entrada)
 
     expect(envio.status).toBe('PENDING')
-    expect(envio.precoCobradoCentavos).toBe(1416)
+    // O frete continua vindo da cotação salva, nunca do corpo do cliente...
+    expect(envio.precoFreteCentavos).toBe(1416)
+    // ...e o que a plataforma cobra é o preço fixo da etiqueta.
+    expect(envio.precoCobradoCentavos).toBe(PRECO_ETIQUETA_CENTAVOS)
 
     const salvo = await prisma.shipment.findUniqueOrThrow({ where: { id: envio.id } })
-    expect(salvo.precoCobradoCentavos).toBe(1416)
+    expect(salvo.precoFreteCentavos).toBe(1416)
+    expect(salvo.precoCobradoCentavos).toBe(PRECO_ETIQUETA_CENTAVOS)
     expect(salvo.status).toBe('PENDING')
   })
 
@@ -241,7 +247,7 @@ describe('pagarEnvio', () => {
     await pagarEnvio(user.id, envio.id)
 
     const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: user.id } })
-    expect(wallet.saldoCentavos).toBe(2000 - 1416)
+    expect(wallet.saldoCentavos).toBe(2000 - PRECO_ETIQUETA_CENTAVOS)
 
     // O pagamento em si só garante RELEASED; a emissão do código de
     // rastreio (gancho pós-commit) leva o envio adiante para GENERATED na
@@ -265,7 +271,7 @@ describe('pagarEnvio', () => {
     await expect(pagarEnvio(user.id, envio.id)).rejects.toThrow()
 
     const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: user.id } })
-    expect(wallet.saldoCentavos).toBe(5000 - 1416)
+    expect(wallet.saldoCentavos).toBe(5000 - PRECO_ETIQUETA_CENTAVOS)
 
     const lancamentos = await prisma.ledgerEntry.count({
       where: { walletId: wallet.id, tipo: 'DEBITO' },
@@ -341,5 +347,60 @@ describe('pagarEnvio', () => {
         }
       }
     }
+  })
+})
+
+/**
+ * A regra de preço do produto, em um lugar só.
+ *
+ * O frete é calculado e exibido — é o valor do transporte, que vai na
+ * etiqueta e no rastreio. O que a plataforma cobra é um valor fixo por
+ * etiqueta gerada, e é só ele que sai da carteira. Confundir os dois foi o
+ * modelo antigo, em que o débito era o frete.
+ */
+describe('preço da etiqueta', () => {
+  it('debita R$ 1,00 seja qual for o frete calculado', async () => {
+    // Uma conta só, três fretes muito diferentes: se o débito acompanhasse o
+    // frete, o saldo cairia em passos desiguais.
+    const user = await criarUsuarioDeTeste(1000)
+    const fretes = [500, 1416, 9900]
+
+    for (const [indice, freteCentavos] of fretes.entries()) {
+      const cotacao = await criarCotacaoValida(user.id, { precoCentavos: freteCentavos })
+      const envio = await criarEnvio(user.id, entradaEnvio(cotacao.id))
+
+      await pagarEnvio(user.id, envio.id)
+
+      const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: user.id } })
+      expect(wallet.saldoCentavos).toBe(1000 - PRECO_ETIQUETA_CENTAVOS * (indice + 1))
+
+      const salvo = await prisma.shipment.findUniqueOrThrow({ where: { id: envio.id } })
+      expect(salvo.precoFreteCentavos).toBe(freteCentavos)
+      expect(salvo.precoCobradoCentavos).toBe(PRECO_ETIQUETA_CENTAVOS)
+    }
+  }, 20_000)
+
+  it('o lançamento no extrato registra o valor da etiqueta, não o do frete', async () => {
+    const user = await criarUsuarioDeTeste(1000)
+    const cotacao = await criarCotacaoValida(user.id, { precoCentavos: 9900 })
+    const envio = await criarEnvio(user.id, entradaEnvio(cotacao.id))
+
+    await pagarEnvio(user.id, envio.id)
+
+    const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: user.id } })
+    const lancamento = await prisma.ledgerEntry.findFirstOrThrow({
+      where: { walletId: wallet.id, refTipo: 'SHIPMENT', refId: envio.id },
+    })
+
+    expect(lancamento.tipo).toBe('DEBITO')
+    expect(lancamento.valorCentavos).toBe(PRECO_ETIQUETA_CENTAVOS)
+  })
+
+  it('saldo abaixo do preço da etiqueta recusa, mesmo com frete barato', async () => {
+    const user = await criarUsuarioDeTeste(PRECO_ETIQUETA_CENTAVOS - 1)
+    const cotacao = await criarCotacaoValida(user.id, { precoCentavos: 200 })
+    const envio = await criarEnvio(user.id, entradaEnvio(cotacao.id))
+
+    await expect(pagarEnvio(user.id, envio.id)).rejects.toBeInstanceOf(SaldoInsuficienteError)
   })
 })

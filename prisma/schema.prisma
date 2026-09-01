@@ -243,6 +243,10 @@ model Shipment {
   destinatario           Json
   pontoPostagemId        String?
   precoBalcaoCentavos    Int
+  /// Frete calculado pela tabela. Informativo: é o valor que aparece na
+  /// etiqueta e no rastreio, e NÃO é o que sai da carteira do cliente.
+  precoFreteCentavos     Int              @default(0)
+  /// O que a plataforma cobra por esta etiqueta — hoje R$ 1,00 fixo.
   precoCobradoCentavos   Int
   descontoCentavos       Int
   opcionais              Json

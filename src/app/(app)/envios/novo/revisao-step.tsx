@@ -11,6 +11,7 @@ type PreviaResposta = {
   servicoNome: string
   carrierNome: string
   precoBalcaoCentavos: number
+  precoFreteCentavos: number
   precoCobradoCentavos: number
   descontoCentavos: number
   prazoDias: number
@@ -220,8 +221,19 @@ export function RevisaoStep({
             {destinatario.cidade}/{destinatario.uf}
           </p>
           <p>
+            <span className="font-semibold text-texto-principal">Frete calculado:</span>{' '}
+            {formatarReais(previa.precoFreteCentavos)}
+          </p>
+          {/*
+            Duas linhas, e não uma: o frete é o valor do transporte, que vai
+            impresso na etiqueta; o débito é o que a plataforma cobra para
+            gerá-la. Mostrar só um dos dois deixaria o cliente esperando um
+            desconto que não existe, ou uma cobrança que não vai acontecer.
+          */}
+          <p>
             <span className="font-semibold text-texto-principal">Valor a debitar:</span>{' '}
-            {formatarReais(previa.precoCobradoCentavos)}
+            {formatarReais(previa.precoCobradoCentavos)}{' '}
+            <span className="text-texto-secundario">(preço por etiqueta gerada)</span>
           </p>
           {saldoCentavos !== null && (
             <p>

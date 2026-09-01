@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/infra/db/client'
+import { PRECO_ETIQUETA_CENTAVOS } from '@/domain/pricing/etiqueta'
 import {
   CancelamentoNaoPermitidoError,
   EnvioNaoEncontradoError,
@@ -99,7 +100,9 @@ describe('listarEtiquetas', () => {
     expect(etiquetas).toHaveLength(1)
     const etiqueta = etiquetas[0]
     expect(etiqueta?.id).toBe(shipmentId)
-    expect(etiqueta?.valorCentavos).toBe(PRECO_CENTAVOS)
+    // `valorCentavos` é o que o cliente pagou pela etiqueta, não o frete: o
+    // frete de PRECO_CENTAVOS aparece no detalhe, em `precoFreteCentavos`.
+    expect(etiqueta?.valorCentavos).toBe(PRECO_ETIQUETA_CENTAVOS)
     expect(etiqueta?.codigoRastreio).toMatch(/^[A-Z]{2}\d{9}BR$/)
     expect(etiqueta?.podeCancelar).toBe(true)
     expect(etiqueta?.destinatarioNome).toBe('Bruno Lima')

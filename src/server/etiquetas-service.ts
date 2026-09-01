@@ -56,6 +56,8 @@ type ProdutoGravado = {
 }
 
 export type EtiquetaDetalhe = EtiquetaResumo & {
+  /** Frete calculado pela tabela. Informativo: não foi isto que o cliente pagou. */
+  precoFreteCentavos: number
   remetente: EnderecoGravado
   destinatario: EnderecoGravado
   produtos: ProdutoGravado[]
@@ -222,6 +224,7 @@ export async function obterEtiqueta(
     valorDeclaradoCentavos: envio.valorDeclaradoCentavos,
     descontoCentavos: envio.descontoCentavos,
     precoBalcaoCentavos: envio.precoBalcaoCentavos,
+    precoFreteCentavos: envio.precoFreteCentavos,
     eventos: envio.trackingEvents.map((evento) => ({
       sequencia: evento.sequencia,
       codigo: evento.codigo,

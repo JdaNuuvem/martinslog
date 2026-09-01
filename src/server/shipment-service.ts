@@ -4,6 +4,7 @@ import { aplicarDebito } from '@/domain/wallet/ledger'
 import { garantirTransicao, type StatusShipment } from '@/domain/shipment/estados'
 import type { OpcaoCotacao } from '@/domain/pricing/cotacao'
 import { normalizarCep } from '@/domain/pricing/cep'
+import { PRECO_ETIQUETA_CENTAVOS } from '@/domain/pricing/etiqueta'
 import {
   CarteiraNaoEncontradaError,
   CotacaoExpiradaError,
@@ -69,6 +70,9 @@ export type EnvioCriado = {
   id: string
   status: StatusShipment
   precoBalcaoCentavos: number
+  /** Frete calculado. Informativo — não é o que sai da carteira. */
+  precoFreteCentavos: number
+  /** O que a plataforma cobra por esta etiqueta. */
   precoCobradoCentavos: number
   descontoCentavos: number
   valorDeclaradoCentavos: number
@@ -80,6 +84,9 @@ export type PreviaEnvio = {
   servicoNome: string
   carrierNome: string
   precoBalcaoCentavos: number
+  /** Frete calculado pela tabela, exibido na revisão e na etiqueta. */
+  precoFreteCentavos: number
+  /** O que será debitado da carteira ao gerar a etiqueta. */
   precoCobradoCentavos: number
   descontoCentavos: number
   prazoDias: number
@@ -174,7 +181,8 @@ export async function obterPreviaEnvio(
     servicoNome: opcao.servicoNome,
     carrierNome: opcao.carrierNome,
     precoBalcaoCentavos: opcao.precoBalcaoCentavos,
-    precoCobradoCentavos: opcao.precoFinalCentavos,
+    precoFreteCentavos: opcao.precoFinalCentavos,
+    precoCobradoCentavos: PRECO_ETIQUETA_CENTAVOS,
     descontoCentavos: opcao.descontoCentavos,
     prazoDias: opcao.prazoDias,
   }
@@ -201,7 +209,11 @@ export async function criarEnvio(userId: string, entrada: EntradaEnvio): Promise
         remetente: entrada.remetente as unknown as Prisma.InputJsonValue,
         destinatario: entrada.destinatario as unknown as Prisma.InputJsonValue,
         precoBalcaoCentavos: opcao.precoBalcaoCentavos,
-        precoCobradoCentavos: opcao.precoFinalCentavos,
+        // O frete calculado fica gravado como informação da etiqueta; o que
+        // a plataforma cobra é o valor fixo por etiqueta gerada, e é ele que
+        // `pagarEnvio` debita.
+        precoFreteCentavos: opcao.precoFinalCentavos,
+        precoCobradoCentavos: PRECO_ETIQUETA_CENTAVOS,
         descontoCentavos: opcao.descontoCentavos,
         opcionais: {},
         valorDeclaradoCentavos,
@@ -222,6 +234,7 @@ export async function criarEnvio(userId: string, entrada: EntradaEnvio): Promise
     id: envio.id,
     status: envio.status,
     precoBalcaoCentavos: envio.precoBalcaoCentavos,
+    precoFreteCentavos: envio.precoFreteCentavos,
     precoCobradoCentavos: envio.precoCobradoCentavos,
     descontoCentavos: envio.descontoCentavos,
     valorDeclaradoCentavos: envio.valorDeclaradoCentavos,

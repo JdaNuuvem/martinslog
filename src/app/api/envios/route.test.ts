@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { afterAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/infra/db/client'
 import { criarSessao, SESSION_COOKIE } from '@/server/auth/sessao'
+import { PRECO_ETIQUETA_CENTAVOS } from '@/domain/pricing/etiqueta'
 import { criarUsuarioComSaldo, criarCotacaoValida } from '@/test/factories'
 import { GET, PATCH, POST } from './route'
 
@@ -95,14 +96,16 @@ describe('POST /api/envios', () => {
     expect(corpo.status).toBe('RELEASED')
 
     const salvo = await prisma.shipment.findUniqueOrThrow({ where: { id: corpo.id } })
-    expect(salvo.precoCobradoCentavos).toBe(1416)
+    // O frete vem da cotação salva; o débito é o preço da etiqueta.
+    expect(salvo.precoFreteCentavos).toBe(1416)
+    expect(salvo.precoCobradoCentavos).toBe(PRECO_ETIQUETA_CENTAVOS)
 
     const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: user.id } })
-    expect(wallet.saldoCentavos).toBe(2000 - 1416)
+    expect(wallet.saldoCentavos).toBe(2000 - PRECO_ETIQUETA_CENTAVOS)
   })
 
   it('devolve 402 e mantém o envio PENDING quando o saldo é insuficiente', async () => {
-    const user = await criarUsuarioDeTeste(100)
+    const user = await criarUsuarioDeTeste(PRECO_ETIQUETA_CENTAVOS - 1)
     const sessionId = await criarSessionId(user.id)
     const cotacao = await criarCotacaoValida(user.id, { precoCentavos: 1416 })
 
@@ -174,7 +177,7 @@ describe('POST /api/envios', () => {
 
 describe('PATCH /api/envios (retry de pagamento)', () => {
   it('paga um envio PENDING depois que o cliente recarrega', async () => {
-    const user = await criarUsuarioDeTeste(100)
+    const user = await criarUsuarioDeTeste(PRECO_ETIQUETA_CENTAVOS - 1)
     const sessionId = await criarSessionId(user.id)
     const cotacao = await criarCotacaoValida(user.id, { precoCentavos: 1416 })
 
@@ -214,8 +217,11 @@ describe('GET /api/envios (prévia)', () => {
     )
 
     expect(resposta.status).toBe(200)
-    const corpo = (await resposta.json()) as { previa: { precoCobradoCentavos: number } }
-    expect(corpo.previa.precoCobradoCentavos).toBe(1416)
+    const corpo = (await resposta.json()) as {
+      previa: { precoFreteCentavos: number; precoCobradoCentavos: number }
+    }
+    expect(corpo.previa.precoFreteCentavos).toBe(1416)
+    expect(corpo.previa.precoCobradoCentavos).toBe(PRECO_ETIQUETA_CENTAVOS)
 
     const total = await prisma.shipment.count({ where: { userId: user.id } })
     expect(total).toBe(0)

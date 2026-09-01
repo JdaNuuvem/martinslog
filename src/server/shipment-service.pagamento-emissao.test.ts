@@ -17,6 +17,7 @@ vi.mock('./emitir-etiqueta-service', async (importOriginal) => {
 
 import { prisma } from '@/infra/db/client'
 import { TransicaoInvalidaError } from '@/domain/errors'
+import { PRECO_ETIQUETA_CENTAVOS } from '@/domain/pricing/etiqueta'
 import { criarUsuarioComSaldo, criarCotacaoValida } from '@/test/factories'
 import { emitirEtiqueta } from './emitir-etiqueta-service'
 import { criarEnvio, pagarEnvio, reemitirEtiqueta, type EnderecoEnvio, type EntradaEnvio } from './shipment-service'
@@ -95,7 +96,7 @@ describe('pagarEnvio — gancho de emissão pós-pagamento', () => {
     expect(emitirEtiquetaMock).toHaveBeenCalledWith(envio.id)
 
     const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: user.id } })
-    expect(wallet.saldoCentavos).toBe(2000 - 1416)
+    expect(wallet.saldoCentavos).toBe(2000 - PRECO_ETIQUETA_CENTAVOS)
 
     const lancamentos = await prisma.ledgerEntry.count({
       where: { walletId: wallet.id, tipo: 'DEBITO' },
@@ -171,8 +172,10 @@ describe('pagarEnvio — gancho de emissão pós-pagamento', () => {
     // participantes não bastam: a primeira transação costuma terminar antes
     // da segunda começar e a corrida não se manifesta — com quatro, a fila
     // do lock (`SELECT ... FOR UPDATE`) fica sob pressão de verdade.
+    // O saldo cobre exatamente quatro etiquetas — o frete da cotação é outro
+    // número e não entra nesta conta.
     const precoCentavos = 1416
-    const user = await criarUsuarioDeTeste(precoCentavos * 4)
+    const user = await criarUsuarioDeTeste(PRECO_ETIQUETA_CENTAVOS * 4)
     const cotacao = await criarCotacaoValida(user.id, { precoCentavos })
     const envios = await Promise.all(
       Array.from({ length: 4 }, () => criarEnvio(user.id, entradaEnvio(cotacao.id))),
