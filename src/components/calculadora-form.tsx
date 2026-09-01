@@ -61,7 +61,14 @@ function paraNumero(valor: string): number | undefined {
 const classeCampo =
   'w-full border-0 border-b border-borda-campo bg-transparent px-1 py-2 text-sm text-texto-principal focus:border-brand focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand'
 
-export function CalculadoraForm() {
+/**
+ * `autenticado` vem do servidor (a home lê a sessão sem redirecionar) só
+ * para o cartão de resultado saber se manda direto ao fluxo de envio ou
+ * passa pelo login antes. Esconder ou mostrar dado sensível não depende
+ * disto — a decisão é de destino de link, e as rotas protegidas continuam
+ * checando sessão por conta própria.
+ */
+export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean }) {
   const [form, setForm] = useState<EstadoFormulario>(ESTADO_INICIAL)
   const [erros, setErros] = useState<ErrosCampo>({})
   const [carregando, setCarregando] = useState(false)
@@ -493,7 +500,12 @@ export function CalculadoraForm() {
           resultado.opcoes.length > 0 ? (
             <ul data-testid="lista-opcoes" className="flex flex-col gap-3">
               {resultado.opcoes.map((opcao) => (
-                <OpcaoFreteCard key={opcao.servicoId} opcao={opcao} />
+                <OpcaoFreteCard
+                  key={opcao.servicoId}
+                  opcao={opcao}
+                  quoteId={resultado.quoteId}
+                  autenticado={autenticado}
+                />
               ))}
             </ul>
           ) : (

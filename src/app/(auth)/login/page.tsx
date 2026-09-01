@@ -3,6 +3,7 @@
 import { FormEvent, useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { loginRequestSchema } from '@/lib/auth-schema'
+import { destinoSeguro } from '@/lib/destino-seguro'
 
 type EstadoFormulario = {
   email: string
@@ -62,7 +63,15 @@ export default function LoginPage() {
         return
       }
 
-      router.push('/')
+      /*
+        Quem chegou aqui clicando numa cotação da home volta para o fluxo de
+        envio com a cotação escolhida, em vez de cair na home e ter que
+        calcular tudo de novo. O destino é lido no clique, e não no render,
+        para não obrigar a página a uma fronteira de Suspense só por causa
+        de um parâmetro; `destinoSeguro` recusa endereço externo.
+      */
+      const destino = destinoSeguro(new URLSearchParams(window.location.search).get('destino'))
+      router.push(destino)
       router.refresh()
     } catch {
       setErroGeral('Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.')

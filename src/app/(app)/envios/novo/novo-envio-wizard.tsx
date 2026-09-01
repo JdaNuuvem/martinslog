@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import type { EnderecoResposta } from '@/lib/endereco-schema'
 import { SeletorEndereco } from './endereco-seletor'
 import { CotacaoStep } from './cotacao-step'
@@ -35,6 +36,7 @@ export function NovoEnvioWizard({
   quoteIdInicial?: string
   servicoIdInicial?: string
 }) {
+  const router = useRouter()
   const [etapa, setEtapa] = useState<Etapa>(quoteIdInicial ? 'remetente' : 'cotacao')
 
   const [quoteId, setQuoteId] = useState<string | null>(quoteIdInicial ?? null)
@@ -47,14 +49,28 @@ export function NovoEnvioWizard({
 
   const [envioConcluidoId, setEnvioConcluidoId] = useState<string | null>(null)
 
+  /*
+    Pagou, acabou: o pagamento já emite a etiqueta dentro de `pagarEnvio`
+    (`emitirEtiquetaAposPagamento`), então quando o `POST /api/envios`
+    responde 201 a etiqueta existe e tem código de rastreio. A tela de
+    "criado e pago" que ficava aqui era um beco — o cliente lia que a
+    etiqueta "será gerada em seguida" e tinha que ir procurá-la na aba
+    Etiquetas por conta própria. Agora ele cai direto nela.
+
+    `replace`, e não `push`: voltar para um wizard cujo envio já foi pago só
+    levaria a uma segunda cobrança confusa.
+  */
+  useEffect(() => {
+    if (envioConcluidoId) {
+      router.replace(`/etiquetas/${envioConcluidoId}`)
+    }
+  }, [envioConcluidoId, router])
+
   if (envioConcluidoId) {
     return (
       <div role="status" className="flex flex-col items-center gap-3 rounded-xl bg-superficie-card p-8 text-center">
-        <h1 className="text-xl font-bold text-texto-principal">Envio criado e pago!</h1>
-        <p className="text-sm text-texto-secundario">
-          O envio <span className="font-mono">{envioConcluidoId}</span> foi confirmado. A etiqueta será
-          gerada em seguida.
-        </p>
+        <h1 className="text-xl font-bold text-texto-principal">Envio pago e etiqueta gerada!</h1>
+        <p className="text-sm text-texto-secundario">Abrindo a etiqueta…</p>
       </div>
     )
   }

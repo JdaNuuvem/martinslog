@@ -16,7 +16,7 @@ export default async function PaginaCalculadora() {
   return (
     <AppShell nomeUsuario={sessao?.nome} autenticado={!!sessao}>
       <div className="flex flex-col gap-4">
-        <CalculadoraForm />
+        <CalculadoraForm autenticado={!!sessao} />
         {/* Quem recebeu um código de rastreio por mensagem e caiu na home
             precisa achar o caminho — este link discreto é a porta de
             entrada dedicada em `/rastrear`. */}
