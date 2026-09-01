@@ -64,6 +64,15 @@ export type EntradaEnvio = {
    * Default `false`: o fluxo do painel nunca passa este campo.
    */
   sandbox?: boolean
+  /**
+   * Loja que originou o envio, quando a chamada veio de um token de perfil.
+   *
+   * Só grava o vínculo — é o que permite avisar o comprador pelo WhatsApp da
+   * marca certa quando o status mudar. Envio sem perfil não gera mensagem
+   * nenhuma, que é o comportamento correto: melhor não avisar do que avisar
+   * pelo número de outra loja.
+   */
+  perfilId?: string | null
 }
 
 export type EnvioCriado = {
@@ -219,6 +228,7 @@ export async function criarEnvio(userId: string, entrada: EntradaEnvio): Promise
         valorDeclaradoCentavos,
         produtos: entrada.produtos as unknown as Prisma.InputJsonValue,
         sandbox: entrada.sandbox ?? false,
+        perfilId: entrada.perfilId ?? null,
       },
     })
 

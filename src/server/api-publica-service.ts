@@ -176,6 +176,10 @@ export async function criarCarrinho(
     destinatario: entrada.destinatario,
     produtos: entrada.produtos,
     sandbox,
+    // Vem do token, não do corpo: um perfil informado a cada requisição é um
+    // perfil que uma hora vai vir trocado, e o comprador receberia a mensagem
+    // pelo WhatsApp de outra loja sem que nada acusasse o erro.
+    perfilId: contexto.perfilId,
   })
 
   if (sandbox) {
