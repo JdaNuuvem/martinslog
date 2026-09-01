@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 import { ConstrutorTemplateRastreio } from './construtor-template-rastreio'
 
 /**
@@ -15,11 +17,19 @@ import { ConstrutorTemplateRastreio } from './construtor-template-rastreio'
 export function PainelStatusRastreio() {
   return (
     <div className="mx-auto flex w-full flex-col gap-6 py-8">
-      <header>
-        <h1 className="text-2xl font-bold text-texto-principal">Rastreio</h1>
-        <p className="mt-1 text-sm text-texto-secundario">
-          Monte o percurso que o seu cliente acompanha e escreva o texto de cada etapa.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <Link
+            href="/rastreio"
+            className="text-sm font-medium text-brand-texto hover:underline focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+          >
+            ← Voltar ao rastreio
+          </Link>
+          <h1 className="mt-1 text-2xl font-bold text-texto-principal">Fluxo do rastreio</h1>
+          <p className="mt-1 text-sm text-texto-secundario">
+            Monte o percurso que o seu cliente acompanha e escreva o texto de cada etapa.
+          </p>
+        </div>
       </header>
 
       <ConstrutorTemplateRastreio />
