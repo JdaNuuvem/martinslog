@@ -1,0 +1,6 @@
+.git
+.gitattributes
+.gitignore
+README.md
+DEPLOY.md
+node_modules
