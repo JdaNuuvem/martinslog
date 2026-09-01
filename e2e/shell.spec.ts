@@ -1,13 +1,27 @@
 import { expect, test } from '@playwright/test'
+import { entrarComContaNova } from './apoio/sessao'
 
-test('topbar mostra saldo em verde, sublinhado e clicável para /carteira', async ({ page }) => {
-  await page.goto('/')
+test('topbar mostra o saldo da conta, clicável para /carteira', async ({ page }) => {
+  // O atalho de saldo é da área logada: a topbar deixou de exibir um
+  // "R$ 0,00" fixo para visitante quando passou a buscar o saldo real.
+  await entrarComContaNova(page, 'saldo')
   await page.waitForLoadState('networkidle')
+
   const saldo = page.getByRole('link', { name: 'R$ 0,00' })
   await expect(saldo).toBeVisible()
   await saldo.click()
   await expect(page).toHaveURL('/carteira')
   await expect(page.getByRole('heading', { name: 'Carteira' })).toBeVisible()
+})
+
+test('visitante sem sessão não vê atalho de saldo na topbar', async ({ page }) => {
+  // Guarda do comportamento novo: mostrar "R$ 0,00" a quem não entrou seria
+  // afirmar um saldo que não existe.
+  await page.context().clearCookies()
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+
+  await expect(page.getByRole('link', { name: /R\$/ })).toHaveCount(0)
 })
 
 test('sidebar mostra os itens na ordem e destaca o item ativo', async ({ page }) => {
@@ -29,7 +43,12 @@ test('sidebar mostra os itens na ordem e destaca o item ativo', async ({ page })
   await expect(nav.getByRole('link', { name: 'Calcular' })).toHaveAttribute('aria-current', 'page')
 })
 
-test('rotas ainda não implementadas mostram página "Em breve" em vez de 404', async ({ page }) => {
+test('rotas da área logada respondem com a tela, e não com 404', async ({ page }) => {
+  // Precisa de sessão desde que a área logada passou a redirecionar quem não
+  // entrou: sem isso o teste cai no login e falha por não achar a tela, não
+  // porque a tela esteja quebrada.
+  await entrarComContaNova(page, 'shell')
+
   await page.goto('/integracoes')
   await expect(page.getByRole('heading', { name: 'Integrações' })).toBeVisible()
 })

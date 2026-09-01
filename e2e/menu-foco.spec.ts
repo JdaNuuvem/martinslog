@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { entrarComContaNova } from './apoio/sessao'
 
 /**
  * Foco do menu retrátil em mobile.
@@ -41,6 +42,10 @@ test('devolve o foco ao botão de menu ao fechar pelo botão Fechar', async ({ p
 })
 
 test('não rouba o foco quando o menu fecha por navegação em um link', async ({ page }) => {
+  // "Ajuda" fica na área logada: sem sessão a navegação cai no login, que não
+  // tem o botão de menu, e o teste falharia por elemento ausente em vez de
+  // por foco no lugar errado.
+  await entrarComContaNova(page, 'foco')
   await page.goto('/')
 
   await page.getByRole('button', { name: 'Abrir menu de navegação' }).click()
