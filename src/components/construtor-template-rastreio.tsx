@@ -50,6 +50,14 @@ export function ConstrutorTemplateRastreio() {
   const [padraoDoFluxo, setPadraoDoFluxo] = useState<Passo[]>([])
   const [passos, setPassos] = useState<Passo[]>([])
   const [usaTemplate, setUsaTemplate] = useState(false)
+  /*
+    O que está valendo de fato para as etiquetas, segundo o servidor — que não
+    é a mesma coisa que o modo aberto na tela. Quem monta um fluxo sem salvar,
+    ou abre a aba do personalizado só para olhar, continua emitindo pelo
+    caminho padrão; sem dizer isso em algum lugar, a tela deixa a pessoa
+    achando que já trocou.
+  */
+  const [ativoNoServidor, setAtivoNoServidor] = useState(false)
   const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
@@ -82,6 +90,7 @@ export function ConstrutorTemplateRastreio() {
       // Template salvo mas desligado é caminho padrão para todos os efeitos:
       // é o roteiro automático que sai nas etiquetas.
       setUsaTemplate(Boolean(corpo.template?.ativo))
+      setAtivoNoServidor(Boolean(corpo.template?.ativo))
       // Templates montados antes da repetição não têm id; atribui na leitura
       // para que dois nós do mesmo tipo não se confundam ao editar.
       const comId = (corpo.template?.passos ?? corpo.padrao).map((passo, indice) => ({
@@ -229,6 +238,7 @@ export function ConstrutorTemplateRastreio() {
         return
       }
       setUsaTemplate(true)
+      setAtivoNoServidor(true)
       setAviso('Fluxo salvo. Envios novos passam a seguir este percurso.')
     } catch {
       setErro('Não foi possível conectar ao servidor. Tente novamente.')
@@ -294,6 +304,7 @@ export function ConstrutorTemplateRastreio() {
       return
     }
     setUsaTemplate(false)
+    setAtivoNoServidor(false)
     setAviso('Voltou ao caminho padrão. Seu fluxo personalizado fica guardado, desligado.')
   }
 
@@ -304,12 +315,37 @@ export function ConstrutorTemplateRastreio() {
       aria-label="Fluxo do rastreio"
       className="flex flex-col gap-5 rounded-xl bg-superficie-card p-6"
     >
-      <div>
-        <h2 className="text-lg font-bold text-texto-principal">Fluxo do rastreio</h2>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-lg font-bold text-texto-principal">Fluxo do rastreio</h2>
+          <span
+            className={`rounded-pilula px-3 py-1 text-xs font-bold ${
+              ativoNoServidor ? 'bg-brand text-white' : 'bg-superficie-bloco text-texto-secundario'
+            }`}
+          >
+            {ativoNoServidor ? 'Valendo: fluxo personalizado' : 'Valendo: caminho padrão'}
+          </span>
+        </div>
         <p className="text-sm text-texto-secundario">
           Cada nó é uma etapa que o seu cliente vê na timeline. Clique em um nó para editar o
           texto e quando ele acontece.
         </p>
+
+        {/* O modo aberto na tela e o que está valendo são coisas diferentes:
+            montar um percurso não o liga, salvar liga. Enquanto os dois não
+            coincidem, a tela diz qual está de pé. */}
+        {usaTemplate && !ativoNoServidor ? (
+          <p role="status" className="rounded-lg bg-superficie-bloco p-3 text-sm text-texto-secundario">
+            Você está montando o fluxo personalizado, mas as etiquetas novas ainda seguem o{' '}
+            <strong>caminho padrão</strong>. Ele só passa a valer depois de salvar.
+          </p>
+        ) : null}
+        {!usaTemplate && ativoNoServidor ? (
+          <p role="status" className="rounded-lg bg-superficie-bloco p-3 text-sm text-texto-secundario">
+            Você está vendo o caminho padrão, mas as etiquetas novas seguem o seu{' '}
+            <strong>fluxo personalizado</strong>. Clique em “Caminho padrão” para desligá-lo.
+          </p>
+        ) : null}
       </div>
 
       <div
