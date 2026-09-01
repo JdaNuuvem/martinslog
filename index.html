@@ -47,7 +47,8 @@
   };
 </script>
 
-<!-- TODO: preencher com os dados reais da empresa antes de publicar -->
+<!-- Dados estruturados que o buscador lê para ligar o site à empresa.
+     Razão social, telefone e endereço são reais; falta o CNPJ (taxID). -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -61,10 +62,10 @@
   "email": "contato@martinslog.net",
   "address": {
     "@type": "PostalAddress",
-    "streetAddress": "Rua Exemplo, 000",
-    "addressLocality": "Cidade",
-    "addressRegion": "UF",
-    "postalCode": "00000-000",
+    "streetAddress": "Rua Tarcísio Pelogia, 19 — Vila Ita",
+    "addressLocality": "Jacareí",
+    "addressRegion": "SP",
+    "postalCode": "12321-313",
     "addressCountry": "BR"
   },
   "openingHours": "Mo-Fr 08:00-18:00",
@@ -459,12 +460,13 @@
 
     <div class="rodape__coluna">
       <h3>Contato</h3>
-      <!-- TODO: dados reais -->
       <ul>
         <li><a href="tel:+551198376392">(11) 9837-6392</a></li>
+        <!-- TODO: o domínio ainda não recebe e-mail. Configurar o
+             encaminhamento antes de divulgar este endereço. -->
         <li><a href="mailto:contato@martinslog.net">contato@martinslog.net</a></li>
-        <li>Rua Exemplo, 000 — Centro</li>
-        <li>Cidade/UF — CEP 00000-000</li>
+        <li>Rua Tarcísio Pelogia, 19 — Vila Ita</li>
+        <li>Jacareí/SP — CEP 12321-313</li>
       </ul>
     </div>
   </div>
