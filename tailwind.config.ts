@@ -50,6 +50,25 @@ const config: Config = {
           marcador: '#E8323C',
           borda: '#1C2B4A',
         },
+        /**
+         * O vermelho de ação da landing — e ele existe **só nas telas
+         * abertas** (calculadora pública, rastreio público).
+         *
+         * Dentro do app autenticado a regra documentada em `brand` continua
+         * valendo: `erro` já é vermelho, e pintar de vermelho os 56 botões de
+         * preenchimento apagaria a diferença entre "ação principal" e "algo
+         * deu errado". Na página pública existe uma ação só, ela é a mesma
+         * ação do botão vermelho de martinslog.net, e a continuidade com o
+         * site vale mais do que a coerência interna de uma tela sem formulário
+         * de cadastro.
+         */
+        destaque: {
+          // Branco em cima — 5,08:1.
+          DEFAULT: '#D81E28',
+          // Hover: escurece, porque clarear reduziria o contraste com o texto
+          // branco. Branco em cima — 6,90:1.
+          escuro: '#B3151E',
+        },
         alerta: {
           DEFAULT: '#F59E0B',
         },
@@ -104,6 +123,19 @@ const config: Config = {
         subtitulo: ['1.25rem', { lineHeight: '1.4' }],
         titulo: ['1.5625rem', { lineHeight: '1.25' }],
         display: ['1.953rem', { lineHeight: '1.15', letterSpacing: '-0.01em' }],
+        /**
+         * O degrau seguinte na mesma razão de 1,25 — e existe só para a faixa
+         * de marca das páginas abertas.
+         *
+         * A escala parava em `display` porque foi desenhada para telas densas
+         * de trabalho, onde nada precisa ser maior que um título de página. A
+         * calculadora pública não é uma tela de trabalho: é a primeira coisa
+         * que alguém vê do produto, e ali o título compete com uma fotografia
+         * mental do site de onde a pessoa veio. Usar `display` deixava a
+         * chamada em 31px sobre uma faixa de 200px de altura — texto pequeno
+         * em muito espaço, que lê como rascunho.
+         */
+        hero: ['2.441rem', { lineHeight: '1.1', letterSpacing: '-0.02em' }],
       },
       borderRadius: {
         /** Campos e botões. */

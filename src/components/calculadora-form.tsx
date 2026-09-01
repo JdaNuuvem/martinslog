@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { FormEvent, useEffect, useId, useState } from 'react'
+import { FormEvent, useEffect, useId, useState, type ReactNode } from 'react'
 import { cotacaoRequestSchema, type CotacaoErro, type CotacaoResposta } from '@/lib/cotacao-schema'
 import { OpcaoFreteCard } from './opcao-frete-card'
 import { ModalCadastro } from './modal-cadastro'
@@ -220,18 +220,24 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
   }
 
   return (
-    <div className="mx-auto flex max-w-conteudo flex-col gap-6 py-2">
-      <div className="rounded-xl bg-superficie-bloco p-6 text-center text-sm font-medium text-texto-secundario">
-        Espaço reservado para campanha
-      </div>
-
-      <form onSubmit={aoSubmeter} noValidate className="flex flex-col gap-6">
+    /*
+      Na página pública a largura vem da moldura (`ShellPublico`), que já
+      centraliza em `max-w-5xl`; no app autenticado o `main` não limita nada,
+      então o limite de leitura precisa vir daqui — sem ele o formulário se
+      estica até a borda do monitor.
+    */
+    <div
+      className={`flex flex-col gap-bloco ${autenticado ? 'mx-auto max-w-conteudo py-2' : ''}`}
+    >
+      <form
+        onSubmit={aoSubmeter}
+        noValidate
+        className="flex flex-col gap-6 rounded-painel bg-superficie-card p-5 shadow-elevado sm:p-7"
+      >
         <div className="flex flex-col gap-3">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-texto-secundario">
-            Informe a origem
-          </h2>
+          <PassoTitulo numero={1}>De onde sai</PassoTitulo>
 
-          <fieldset className="rounded-xl bg-superficie-bloco p-4">
+          <fieldset className="rounded-cartao bg-superficie-pagina p-4">
             <legend className="sr-only">Informe a origem</legend>
 
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -283,8 +289,22 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
                 {mensagemSalvar}
               </p>
             ) : null}
+          </fieldset>
+        </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/*
+          Formato, peso e medidas descrevem o pacote, não a origem — estavam
+          no mesmo bloco do CEP de partida só por ordem de escrita. Separados,
+          o formulário passa a ter os três blocos que a pessoa já tem na
+          cabeça: de onde sai, o que vai dentro, para onde vai.
+        */}
+        <div className="flex flex-col gap-3">
+          <PassoTitulo numero={2}>O que vai dentro</PassoTitulo>
+
+          <fieldset className="rounded-cartao bg-superficie-pagina p-4">
+            <legend className="sr-only">O que vai dentro</legend>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1">
                 <label htmlFor={`${idBase}-formato`} className="text-xs font-medium text-texto-secundario">
                   Formato
@@ -445,12 +465,10 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
         </div>
 
         <div className="flex flex-col gap-3">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-texto-secundario">
-            Informe o destino
-          </h2>
+          <PassoTitulo numero={3}>Para onde vai</PassoTitulo>
 
-          <fieldset className="rounded-xl bg-superficie-bloco p-4">
-            <legend className="sr-only">Informe o destino</legend>
+          <fieldset className="rounded-cartao bg-superficie-pagina p-4">
+            <legend className="sr-only">Para onde vai</legend>
 
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex flex-1 flex-col gap-1">
@@ -488,13 +506,28 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
           </fieldset>
         </div>
 
+        {/*
+          Vermelho na página aberta, navy dentro do app — a razão está no
+          token `destaque` (tailwind.config.ts). Aqui é a mesma ação do botão
+          vermelho de martinslog.net, e é a única ação da tela.
+        */}
         <button
           type="submit"
           disabled={carregando}
-          className="w-full rounded-pilula bg-brand px-6 py-3 text-base font-bold uppercase tracking-wide text-white transition hover:bg-brand-light focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60"
+          className={`w-full rounded-pilula px-6 py-4 text-base font-bold tracking-wide text-white transition focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${
+            autenticado
+              ? 'bg-brand hover:bg-brand-light focus-visible:outline-brand'
+              : 'bg-destaque shadow-elevado hover:bg-destaque-escuro focus-visible:outline-destaque'
+          }`}
         >
-          {carregando ? 'Calculando…' : 'Calcular frete com desconto'}
+          {carregando ? 'Calculando…' : 'Calcular frete'}
         </button>
+
+        {autenticado ? null : (
+          <p className="text-center text-dado text-texto-secundario">
+            Consulta gratuita. Você só cria conta na hora de emitir a etiqueta.
+          </p>
+        )}
       </form>
 
       <div aria-live="polite" aria-atomic="true" className="flex flex-col gap-4">
@@ -532,5 +565,27 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
         ) : null}
       </div>
     </div>
+  )
+}
+
+/**
+ * Cabeçalho numerado de cada bloco do formulário.
+ *
+ * O número não é enfeite: antes os três blocos eram títulos em caixa alta e
+ * cinza-claro, do mesmo tamanho e peso dos rótulos de campo logo abaixo. Com
+ * tudo cinza sobre cinza, nada dizia onde um bloco terminava e o outro
+ * começava — a tela lia como uma lista única de doze campos.
+ */
+function PassoTitulo({ numero, children }: { numero: number; children: ReactNode }) {
+  return (
+    <h2 className="flex items-center gap-2">
+      <span
+        aria-hidden="true"
+        className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-rotulo font-bold text-white"
+      >
+        {numero}
+      </span>
+      <span className="text-rotulo font-bold uppercase text-texto-principal">{children}</span>
+    </h2>
   )
 }

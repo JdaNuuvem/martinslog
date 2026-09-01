@@ -34,9 +34,33 @@ export default async function PaginaCalculadora() {
   }
 
   return (
-    <ShellPublico>
+    <ShellPublico
+      hero={{
+        eyebrow: 'Calculadora de frete',
+        titulo: (
+          <>
+            Descubra quanto custa enviar{' '}
+            <span className="text-sidebar-marcador">antes de fechar a venda</span>
+          </>
+        ),
+        apoio:
+          'Preço e prazo reais para qualquer CEP do Brasil, sem cadastro. Gostou do valor? Aí sim você cria a conta.',
+      }}
+    >
       <div className="flex flex-col gap-bloco">
         <CalculadoraForm />
+
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {ARGUMENTOS.map((a) => (
+            <li
+              key={a.titulo}
+              className="rounded-cartao border border-superficie-bloco bg-superficie-card p-4"
+            >
+              <p className="font-bold text-texto-principal">{a.titulo}</p>
+              <p className="text-dado text-texto-secundario">{a.apoio}</p>
+            </li>
+          ))}
+        </ul>
 
         <p className="text-dado text-texto-secundario">
           Já tem conta?{' '}
@@ -51,3 +75,30 @@ export default async function PaginaCalculadora() {
     </ShellPublico>
   )
 }
+
+/**
+ * Os quatro motivos ficam **abaixo** da calculadora, não acima.
+ *
+ * Quem chega aqui veio calcular um frete, e argumento de venda antes do
+ * formulário é obstáculo. Depois do formulário ele responde a pergunta que
+ * nasce logo em seguida — "posso confiar nesse preço?" — para quem ainda não
+ * tem conta.
+ */
+const ARGUMENTOS = [
+  {
+    titulo: 'Sem cadastro',
+    apoio: 'Consulte à vontade. Conta só na hora de enviar.',
+  },
+  {
+    titulo: 'Preço já com desconto',
+    apoio: 'O valor que aparece é o que você paga.',
+  },
+  {
+    titulo: 'Seguro incluso',
+    apoio: 'Toda carga viaja coberta.',
+  },
+  {
+    titulo: 'Todo o Brasil',
+    apoio: 'Frota própria nos principais corredores.',
+  },
+]
