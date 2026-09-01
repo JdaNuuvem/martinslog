@@ -26,6 +26,26 @@ const schema = z.object({
    * (`openssl rand -hex 32`) e trate como senha.
    */
   WEBHOOK_CRON_TOKEN: z.string().min(32).optional(),
+
+  /**
+   * Conta de SMS da própria plataforma, usada quando o perfil não trouxe a
+   * dele.
+   *
+   * Existe porque a Martins Log decidiu custear o envio: com uma conta só,
+   * uma loja passa a avisar o comprador sem contratar nada nem colar chave
+   * nenhuma. O `SmsConfig` por perfil continua valendo e tem precedência —
+   * é para a loja que quiser pagar o próprio envio e aparecer com o próprio
+   * remetente.
+   *
+   * No SMS brasileiro a diferença entre um e outro é pequena de propósito: o
+   * remetente é um número curto, não o nome da loja, então o comprador não
+   * distingue quem pagou. Quem precisa aparecer é o nome escrito DENTRO da
+   * mensagem.
+   */
+  SMS_PROVEDOR: z.string().min(1).optional(),
+  SMS_CHAVE: z.string().min(1).optional(),
+  SMS_IDENTIFICADOR: z.string().optional(),
+  SMS_REMETENTE: z.string().optional(),
 })
 
 export type Env = z.infer<typeof schema>

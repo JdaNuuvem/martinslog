@@ -592,12 +592,26 @@ model EmailDelivery {
 model Perfil {
   id       String   @id @default(cuid())
   userId   String
+  /// Nome interno, para o lojista se achar no seletor de perfil.
   nome     String
+  /**
+   * Nome que o COMPRADOR vê nas mensagens.
+   *
+   * Existe porque os dois raramente coincidem. O operador precisa distinguir
+   * "Best Buy Tech" de "Loja PG" no painel; o comprador nunca ouviu falar de
+   * nenhum dos dois — ele lembra do lugar onde comprou. Sem este campo, ou o
+   * painel fica com três perfis de nome igual, ou o comprador recebe uma
+   * mensagem de um remetente que não reconhece e denuncia como spam.
+   *
+   * Nulo usa `nome`. É o comportamento de quem não configurou nada.
+   */
+  nomeExibicao String?
   ativo    Boolean  @default(true)
   criadoEm DateTime @default(now())
 
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   whatsappConfig    WhatsappConfig?
+  smsConfig         SmsConfig?
   templates         MensagemTemplate[]
   pedidos           Pedido[]
   mensagens         MensagemEnvio[]
@@ -659,9 +673,53 @@ model WhatsappConfig {
 /// `variaveis` é a ordem em que os campos do pedido entram nos `{{1}}`,
 /// `{{2}}` do template. A ordem importa e é do template, não nossa: trocá-la
 /// manda o código de rastreio no lugar do nome do cliente sem erro nenhum.
+enum CanalMensagem {
+  WHATSAPP
+  SMS
+}
+
+/// Credenciais de SMS, por perfil.
+///
+/// Espelha `WhatsappConfig` porque o raciocínio é o mesmo: cada loja paga o
+/// próprio envio e aparece como o próprio remetente. A plataforma não
+/// intermedia mensagem nem empresta reputação de número.
+///
+/// `provedor` é texto livre e não enum: a escolha do fornecedor ainda está em
+/// aberto, e um enum obrigaria a uma migration a cada troca — exatamente o que
+/// a interface `SmsProvider` existe para evitar.
+model SmsConfig {
+  id            String   @id @default(cuid())
+  perfilId      String   @unique
+  provedor      String
+  /// Conta no provedor, quando ele exigir uma além da chave.
+  identificador String?
+  chaveCifrada  String
+  dicaChave     String
+  /// Número ou nome que aparece como remetente, quando o provedor permitir.
+  remetente     String?
+  ativo         Boolean  @default(true)
+  verificadaEm  DateTime?
+  ultimoErro    String?
+  criadoEm      DateTime @default(now())
+  atualizadoEm  DateTime @updatedAt
+
+  perfil Perfil @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+
+  @@map("sms_configs")
+}
+
 model MensagemTemplate {
-  id           String   @id @default(cuid())
+  id           String        @id @default(cuid())
   perfilId     String
+  /**
+   * Canal por onde este texto sai.
+   *
+   * Muda o papel de `previa`. No WhatsApp o texto vive aprovado na Meta e
+   * `nome` é o que o identifica lá — `previa` serve só para a tela mostrar ao
+   * lojista o que será enviado. No SMS não há aprovação nenhuma: `previa` É a
+   * mensagem, com as variáveis entre chaves duplas.
+   */
+  canal        CanalMensagem @default(WHATSAPP)
   /// Evento que dispara: `PEDIDO_PENDENTE`, `PEDIDO_PAGO` ou um código de
   /// rastreio do catálogo (`POSTADO`, `ENTREGUE`…). É String, e não enum,
   /// porque o catálogo de status já é personalizável por conta — um enum
@@ -679,9 +737,10 @@ model MensagemTemplate {
   mensagens MensagemEnvio[]
   regras    RegraRecuperacao[]
 
-  /// Um evento, uma mensagem. Dois templates para o mesmo evento fariam o
-  /// comprador receber a notificação em dobro.
-  @@unique([perfilId, evento])
+  /// Um evento e um canal, uma mensagem. O canal faz parte da chave porque a
+  /// loja pode querer avisar por SMS **e** por WhatsApp do mesmo fato; sem
+  /// ele, escolher um canal proibiria o outro.
+  @@unique([perfilId, evento, canal])
   @@index([perfilId, ativo])
   @@map("mensagem_templates")
 }
@@ -773,6 +832,11 @@ enum StatusMensagem {
 model MensagemEnvio {
   id                 String         @id @default(cuid())
   perfilId           String
+  canal              CanalMensagem  @default(WHATSAPP)
+  /// Por onde a mensagem saiu de fato — `registrado` quando nenhum provedor
+  /// estava contratado. Sem isto, "o cliente não recebeu" não distingue falha
+  /// do fornecedor de canal que nunca chegou a ser ligado.
+  provedor           String?
   templateId         String?
   pedidoId           String?
   shipmentId         String?
@@ -794,7 +858,9 @@ model MensagemEnvio {
   template MensagemTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   pedido   Pedido?           @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
 
-  @@unique([perfilId, evento, pedidoId, shipmentId])
+  /// O canal entra na chave: sem ele, o SMS enviado bloquearia o WhatsApp do
+  /// mesmo evento, em silêncio, como se fosse repetição.
+  @@unique([perfilId, evento, canal, pedidoId, shipmentId])
   @@index([proximaTentativaEm, status])
   @@index([perfilId, criadoEm])
   @@map("mensagem_envios")

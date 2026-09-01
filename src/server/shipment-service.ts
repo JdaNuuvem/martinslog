@@ -16,6 +16,7 @@ import {
 } from '@/domain/errors'
 import { emitirEtiqueta } from './emitir-etiqueta-service'
 import { enfileirarEvento } from './webhook-service'
+import { enfileirarSms } from './sms-service'
 
 /**
  * Endereço copiado para dentro do envio (`Shipment.remetente` /
@@ -412,6 +413,50 @@ export async function pagarEnvio(userId: string, shipmentId: string): Promise<vo
   // acima nem derruba esta chamada — `pagarEnvio` sempre resolve depois que
   // o pagamento em si foi gravado.
   await emitirEtiquetaAposPagamento(shipmentId)
+
+  await avisarCompradorPorSms(shipmentId)
+}
+
+/**
+ * Avisa o comprador, por SMS, de que o pagamento entrou.
+ *
+ * Roda depois da etiqueta para que o código de rastreio já exista quando a
+ * mensagem for composta — o aviso vale bem mais com o link do que sem.
+ *
+ * Nunca lança e nunca derruba o pagamento. Aviso ao comprador é um extra do
+ * envio: uma falha aqui não pode desfazer um débito que já aconteceu nem
+ * devolver erro a quem pagou corretamente. É a mesma regra do aviso por
+ * e-mail, algumas linhas acima em `sincronizar-envio-service`.
+ *
+ * O telefone sai do destinatário do próprio envio — o mesmo que a loja mandou
+ * em `/cart`. Não há campo novo a preencher nem integração a mudar do lado de
+ * quem já integrou.
+ */
+async function avisarCompradorPorSms(shipmentId: string): Promise<void> {
+  try {
+    const envio = await prisma.shipment.findUnique({
+      where: { id: shipmentId },
+      select: { perfilId: true, sandbox: true, destinatario: true },
+    })
+
+    // Sem perfil não há loja dona da mensagem, e envio de teste não avisa
+    // ninguém: o comprador de um pedido que não existe não pode receber SMS.
+    if (!envio || !envio.perfilId || envio.sandbox) return
+
+    const destinatario = envio.destinatario as { telefone?: string | null } | null
+    const telefone = destinatario?.telefone?.trim()
+    if (!telefone) return
+
+    await enfileirarSms({
+      perfilId: envio.perfilId,
+      evento: 'PEDIDO_PAGO',
+      para: telefone,
+      shipmentId,
+      valores: {},
+    })
+  } catch (error) {
+    console.error('Falha ao enfileirar o aviso de pagamento por SMS', { cause: error })
+  }
 }
 
 /**

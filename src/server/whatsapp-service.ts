@@ -170,7 +170,13 @@ export async function enfileirarMensagem(entrada: PedidoDeMensagem): Promise<'en
   if (!config?.ativo || !config.verificadaEm) return 'sem-whatsapp'
 
   const template = await prisma.mensagemTemplate.findUnique({
-    where: { perfilId_evento: { perfilId: entrada.perfilId, evento: entrada.evento } },
+    where: {
+      perfilId_evento_canal: {
+        perfilId: entrada.perfilId,
+        evento: entrada.evento,
+        canal: 'WHATSAPP',
+      },
+    },
   })
   if (!template || !template.ativo) return 'sem-template'
 
@@ -181,6 +187,7 @@ export async function enfileirarMensagem(entrada: PedidoDeMensagem): Promise<'en
     await prisma.mensagemEnvio.create({
       data: {
         perfilId: entrada.perfilId,
+        canal: 'WHATSAPP',
         templateId: template.id,
         pedidoId: entrada.pedidoId ?? null,
         shipmentId: entrada.shipmentId ?? null,
