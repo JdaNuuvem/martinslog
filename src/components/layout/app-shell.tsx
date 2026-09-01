@@ -51,8 +51,16 @@ export function AppShell({ children, nomeUsuario = 'VISITANTE', autenticado = fa
         meta. O `pb-secao` fecha a página com o mesmo respiro que separa suas
         seções, em vez de cortar o conteúdo rente ao fim da rolagem.
       */}
-      <main className="min-w-0 px-5 pb-secao pt-topbar sm:px-8 lg:pl-sidebar">
-        <div className="pt-bloco lg:pt-secao">{children}</div>
+      {/*
+        O respiro lateral vive no container interno, não no `main`.
+        Enquanto estava no `main`, o `lg:pl-sidebar` do desktop sobrescrevia o
+        `px` do lado esquerdo — a sidebar tem exatamente 240px, então o
+        conteúdo colava nela, sem folga nenhuma. Com a distância aqui dentro,
+        o `pl` externo continua reservando o espaço da sidebar e o texto
+        ganha margem dos dois lados, em qualquer largura de tela.
+      */}
+      <main className="min-w-0 pb-secao pt-topbar lg:pl-sidebar">
+        <div className="px-5 pt-bloco sm:px-8 lg:pt-secao">{children}</div>
       </main>
     </div>
   )
