@@ -1,0 +1,1283 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API Martins Log — documentação para integração</title>
+<meta name="description" content="Documentação da API v0 da Martins Log: cotação de frete, criação de envio, pagamento, webhooks assinados e rastreio — para integrar sua loja.">
+<link rel="canonical" href="https://martinslog.net/docs/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Martins Log">
+<meta property="og:title" content="API Martins Log">
+<meta property="og:description" content="Documentação da API v0 da Martins Log: cotação de frete, criação de envio, pagamento, webhooks assinados e rastreio — para integrar sua loja.">
+<meta property="og:url" content="https://martinslog.net/docs/">
+<meta name="twitter:card" content="summary">
+
+<link rel="icon" href="/assets/img/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="/assets/img/favicon-180.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+</head>
+<body>
+
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<div class="barra-site">
+  <div class="barra-site__interno">
+    <a class="barra-site__marca" href="/">
+      <picture>
+        <source srcset="/assets/img/logo-martins-log-640.webp" type="image/webp">
+        <img src="/assets/img/logo-martins-log-640.png" alt="" width="26" height="26">
+      </picture>
+      <span>MARTINS<span>LOG</span></span>
+    </a>
+    <nav class="barra-site__links" aria-label="Atalhos do site">
+      <a href="/">Site</a>
+      <a href="/#rastreio">Rastreio</a>
+      <a href="/#ajuda">Ajuda</a>
+      <a href="https://app.martinslog.net/integracoes">Meus tokens</a>
+    </nav>
+  </div>
+</div>
+
+<style>
+  /* ===== Barra do site (só na versão hospedada) ===== */
+  .pular {
+    position: absolute; left: 12px; top: -60px; z-index: 200;
+    background: var(--acao); color: #fff; padding: 10px 18px;
+    border-radius: 0 0 8px 8px; font-weight: 600; text-decoration: none;
+    transition: top .2s;
+  }
+  .pular:focus { top: 0; }
+
+  .barra-site {
+    background: var(--papel-2);
+    border-bottom: 1px solid var(--linha);
+  }
+  .barra-site__interno {
+    max-width: 1180px; margin: 0 auto; padding: 9px 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    flex-wrap: wrap;
+  }
+  .barra-site__marca {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--display); font-weight: 800; font-size: 0.86rem;
+    letter-spacing: -0.01em; color: var(--tinta); text-decoration: none;
+  }
+  .barra-site__marca img { display: block; width: 26px; height: 26px; object-fit: contain; }
+  .barra-site__marca span span { color: var(--acao); }
+  .barra-site__links { display: flex; flex-wrap: wrap; gap: 18px; }
+  .barra-site__links a {
+    font-size: 0.84rem; color: var(--texto-2); text-decoration: none;
+  }
+  .barra-site__links a:hover { color: var(--tinta); text-decoration: underline; }
+
+  /* ============================================================
+     Paleta e tipografia herdadas da identidade Martins Log
+     (martinslog.net): azul-marinho estrutura, vermelho age.
+     Os neutros têm viés azul de propósito — cinza puro ao lado
+     do marinho lê como cinza sujo.
+     ============================================================ */
+  :root {
+    --tinta:      #0E1E3C;
+    --tinta-2:    #1D3A72;
+    --papel:      #FFFFFF;
+    --papel-2:    #F4F6FA;
+    --papel-3:    #EAEEF6;
+    --linha:      #D9E0EC;
+    --linha-forte:#B9C4D6;
+    --texto:      #16202F;
+    --texto-2:    #566274;
+    --acao:       #D81E28;
+    --acao-fundo: #FDECEC;
+
+    --ok:         #0F7B4F;
+    --ok-fundo:   #E6F4EC;
+    --atencao:    #8A5300;
+    --atencao-fundo:#FBF0DC;
+    --falha:      #B3151E;
+    --falha-fundo:#FDECEC;
+
+    --cod-fundo:  #0E1E3C;
+    --cod-texto:  #DCE4F2;
+    --cod-chave:  #9FC5F8;
+    --cod-valor:  #F5B7B1;
+    --cod-coment: #7F8FAB;
+
+    --display: 'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --corpo:   'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono:    'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --tinta:      #E8EDF7;
+      --tinta-2:    #A9C0EA;
+      --papel:      #0B1424;
+      --papel-2:    #111C31;
+      --papel-3:    #17243D;
+      --linha:      #22314E;
+      --linha-forte:#33456A;
+      --texto:      #DFE6F2;
+      --texto-2:    #93A2BC;
+      --acao:       #FF5A63;
+      --acao-fundo: #37151A;
+
+      --ok:         #5FD19B;
+      --ok-fundo:   #102C21;
+      --atencao:    #E8B657;
+      --atencao-fundo:#2E2413;
+      --falha:      #FF7A82;
+      --falha-fundo:#37151A;
+
+      --cod-fundo:  #060D1A;
+      --cod-texto:  #DCE4F2;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --tinta:      #E8EDF7;
+    --tinta-2:    #A9C0EA;
+    --papel:      #0B1424;
+    --papel-2:    #111C31;
+    --papel-3:    #17243D;
+    --linha:      #22314E;
+    --linha-forte:#33456A;
+    --texto:      #DFE6F2;
+    --texto-2:    #93A2BC;
+    --acao:       #FF5A63;
+    --acao-fundo: #37151A;
+
+    --ok:         #5FD19B;
+    --ok-fundo:   #102C21;
+    --atencao:    #E8B657;
+    --atencao-fundo:#2E2413;
+    --falha:      #FF7A82;
+    --falha-fundo:#37151A;
+
+    --cod-fundo:  #060D1A;
+    --cod-texto:  #DCE4F2;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--papel);
+    color: var(--texto);
+    font-family: var(--corpo);
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--display);
+    color: var(--tinta);
+    margin: 0;
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+
+  a { color: var(--tinta-2); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--acao);
+    outline-offset: 3px;
+    border-radius: 3px;
+  }
+
+  code, pre, .mono { font-family: var(--mono); font-variant-ligatures: none; }
+
+  /* ===== Faixa de identificação, no espírito de um conhecimento de transporte ===== */
+  .capa {
+    background: var(--tinta);
+    color: #fff;
+    padding: 40px 0 0;
+  }
+  :root[data-theme="dark"] .capa,
+  :root:not([data-theme="light"]) .capa { background: var(--papel-2); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .capa { background: #0E1E3C; } }
+
+  .env { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+  .capa h1 {
+    color: #fff;
+    font-size: clamp(2rem, 5.2vw, 3.1rem);
+    font-weight: 900;
+    letter-spacing: -0.025em;
+    margin-bottom: 10px;
+  }
+  .capa p.resumo {
+    color: #B9C4D6;
+    max-width: 62ch;
+    margin: 0 0 28px;
+    font-size: 1.02rem;
+  }
+  .selo {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: #E8323C; margin-bottom: 14px;
+  }
+  .selo::before { content: ""; width: 26px; height: 2px; background: #E8323C; }
+
+  /* Campos de cabeçalho como os de um manifesto: rótulo minúsculo, valor firme. */
+  .manifesto {
+    display: grid; gap: 1px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    background: rgba(255,255,255,.12);
+    border-top: 1px solid rgba(255,255,255,.12);
+  }
+  .manifesto div { background: #0E1E3C; padding: 14px 24px; }
+  :root[data-theme="dark"] .manifesto div { background: var(--papel-2); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .manifesto div { background: var(--papel-2); } }
+  .manifesto dt {
+    font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #8FA0BC; margin-bottom: 3px;
+  }
+  .manifesto dd { margin: 0; color: #fff; font-weight: 600; font-size: 0.92rem; font-family: var(--mono); }
+
+  /* ===== Estrutura ===== */
+  .corpo { max-width: 1180px; margin: 0 auto; padding: 0 24px 96px; }
+  .colunas { display: block; }
+  @media (min-width: 1000px) {
+    .colunas { display: grid; grid-template-columns: 214px minmax(0, 1fr); gap: 56px; align-items: start; }
+    .indice { position: sticky; top: 24px; max-height: calc(100vh - 48px); overflow-y: auto; }
+  }
+
+  .indice { padding-top: 44px; }
+  .indice h2 {
+    font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--texto-2); font-weight: 600; margin-bottom: 12px;
+  }
+  .indice ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+  .indice a {
+    display: block; padding: 5px 0 5px 11px; font-size: 0.86rem;
+    color: var(--texto-2); text-decoration: none;
+    border-left: 2px solid var(--linha);
+  }
+  .indice a:hover { color: var(--tinta); border-left-color: var(--acao); }
+
+  section { padding-top: 44px; scroll-margin-top: 20px; }
+  section > h2 {
+    font-size: 1.62rem; font-weight: 800; letter-spacing: -0.015em;
+    padding-bottom: 10px; border-bottom: 2px solid var(--tinta);
+    margin-bottom: 20px;
+  }
+  section h3 { font-size: 1.12rem; font-weight: 700; margin: 30px 0 10px; }
+  section h4 {
+    font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--texto-2); font-weight: 600;
+    margin: 22px 0 8px;
+  }
+  p { margin: 0 0 14px; max-width: 68ch; }
+  ul, ol.lista { max-width: 68ch; padding-left: 20px; margin: 0 0 14px; }
+  li { margin-bottom: 6px; }
+
+  .cod-linha { font-family: var(--mono); font-size: 0.88rem; background: var(--papel-3); padding: 1px 6px; border-radius: 4px; }
+
+  /* ===== Blocos de código ===== */
+  pre {
+    background: var(--cod-fundo); color: var(--cod-texto);
+    padding: 16px 18px; border-radius: 8px;
+    overflow-x: auto; margin: 0 0 16px;
+    font-size: 0.845rem; line-height: 1.6;
+    border: 1px solid var(--linha);
+  }
+  pre .k { color: var(--cod-chave); }
+  pre .s { color: var(--cod-valor); }
+  pre .c { color: var(--cod-coment); font-style: italic; }
+
+  /* ===== Endpoints ===== */
+  .rota {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    background: var(--papel-2); border: 1px solid var(--linha);
+    border-left: 3px solid var(--acao);
+    border-radius: 6px; padding: 11px 14px; margin: 0 0 16px;
+  }
+  .verbo {
+    font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+    letter-spacing: 0.08em; padding: 3px 9px; border-radius: 4px;
+    background: var(--tinta); color: #fff;
+  }
+  :root[data-theme="dark"] .verbo { color: var(--papel); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .verbo { color: var(--papel); } }
+  .verbo.get { background: var(--ok); color: #fff; }
+  .rota .caminho { font-family: var(--mono); font-size: 0.94rem; font-weight: 500; color: var(--texto); word-break: break-all; }
+  .rota .nota { font-size: 0.8rem; color: var(--texto-2); margin-left: auto; }
+
+  /* ===== Tabelas ===== */
+  .rolagem { overflow-x: auto; margin: 0 0 18px; border: 1px solid var(--linha); border-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.875rem; }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--linha); vertical-align: top; }
+  thead th {
+    background: var(--papel-2); font-family: var(--mono); font-size: 0.66rem;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--texto-2); font-weight: 600;
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td code, th code { font-size: 0.84rem; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .obrig { font-family: var(--mono); font-size: 0.68rem; color: var(--acao); font-weight: 600; }
+  .opc   { font-family: var(--mono); font-size: 0.68rem; color: var(--texto-2); }
+
+  /* ===== Chips de status ===== */
+  .chip {
+    display: inline-block; font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+    padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+  }
+  .chip.ok { background: var(--ok-fundo); color: var(--ok); }
+  .chip.at { background: var(--atencao-fundo); color: var(--atencao); }
+  .chip.er { background: var(--falha-fundo); color: var(--falha); }
+
+  /* ===== Avisos ===== */
+  .aviso {
+    border: 1px solid var(--linha); border-left: 3px solid var(--atencao);
+    background: var(--papel-2); border-radius: 6px;
+    padding: 14px 16px; margin: 0 0 18px;
+  }
+  .aviso.grave { border-left-color: var(--acao); }
+  .aviso p { margin: 0 0 8px; }
+  .aviso p:last-child { margin: 0; }
+  .aviso strong { color: var(--tinta); }
+  .aviso .rotulo {
+    font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--atencao); font-weight: 600; display: block; margin-bottom: 5px;
+  }
+  .aviso.grave .rotulo { color: var(--acao); }
+
+  /* ===== Ciclo de vida: é sequência de verdade, então recebe trilho ===== */
+  .trilho { display: flex; flex-wrap: wrap; gap: 0; margin: 0 0 18px; }
+  .etapa {
+    flex: 1 1 130px; min-width: 130px;
+    border-top: 3px solid var(--tinta-2);
+    padding: 10px 12px 10px 0;
+  }
+  .etapa:last-child { border-top-color: var(--linha-forte); }
+  .etapa .n {
+    font-family: var(--mono); font-size: 0.66rem; color: var(--texto-2);
+    letter-spacing: 0.1em; display: block;
+  }
+  .etapa .nome { font-family: var(--mono); font-size: 0.86rem; font-weight: 600; color: var(--tinta); display: block; margin: 2px 0 3px; }
+  .etapa .quando { font-size: 0.78rem; color: var(--texto-2); line-height: 1.45; }
+
+  .rodape {
+    border-top: 1px solid var(--linha); margin-top: 60px; padding-top: 22px;
+    font-size: 0.84rem; color: var(--texto-2);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<header class="capa">
+  <div class="env">
+    <span class="selo">Referência de integração · v0</span>
+    <h1>API Martins Log</h1>
+    <p class="resumo">
+      Cotação, criação de envio, pagamento por carteira, rastreio e webhooks — o
+      que uma loja precisa para transformar uma venda paga em uma etiqueta e um
+      código de rastreio, sem intervenção humana.
+    </p>
+  </div>
+  <dl class="manifesto">
+    <div><dt>URL base</dt><dd>app.martinslog.net</dd></div>
+    <div><dt>Autenticação</dt><dd>Bearer token</dd></div>
+    <div><dt>Formato</dt><dd>JSON · UTF-8</dd></div>
+    <div><dt>Limite</dt><dd>60 req/min por token</dd></div>
+  </dl>
+</header>
+
+<div class="corpo" id="conteudo">
+<div class="colunas">
+
+  <nav class="indice" aria-label="Índice">
+    <h2>Nesta página</h2>
+    <ol>
+      <li><a href="#fluxo">O fluxo em 4 chamadas</a></li>
+      <li><a href="#auth">Autenticação</a></li>
+      <li><a href="#ambientes">Sandbox e produção</a></li>
+      <li><a href="#limites">Limite de requisições</a></li>
+      <li><a href="#erros">Erros</a></li>
+      <li><a href="#dinheiro">Os três números</a></li>
+      <li><a href="#calculator">1 · Cotação</a></li>
+      <li><a href="#cart">2 · Criar envio</a></li>
+      <li><a href="#checkout">3 · Pagar</a></li>
+      <li><a href="#info">4 · Consultar</a></li>
+      <li><a href="#ciclo">Ciclo de vida</a></li>
+      <li><a href="#webhooks">Webhooks</a></li>
+      <li><a href="#assinatura">Verificar a assinatura</a></li>
+      <li><a href="#rastreio">Rastreio</a></li>
+      <li><a href="#checklist">Checklist de checkout</a></li>
+      <li><a href="#limitacoes">O que ainda não existe</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <!-- ============================================================ -->
+    <section id="fluxo">
+      <h2>O fluxo em 4 chamadas</h2>
+      <p>
+        Uma venda paga na sua loja vira um envio despachado em quatro chamadas,
+        nesta ordem. Cada uma depende do resultado da anterior.
+      </p>
+
+      <div class="trilho">
+        <div class="etapa">
+          <span class="n">01</span>
+          <span class="nome">/calculator</span>
+          <span class="quando">Preço e prazo. Devolve o <code>id</code> de cada serviço.</span>
+        </div>
+        <div class="etapa">
+          <span class="n">02</span>
+          <span class="nome">/cart</span>
+          <span class="quando">Cria o envio com remetente, destinatário e produtos.</span>
+        </div>
+        <div class="etapa">
+          <span class="n">03</span>
+          <span class="nome">/checkout</span>
+          <span class="quando">Debita a carteira e emite a etiqueta.</span>
+        </div>
+        <div class="etapa">
+          <span class="n">04</span>
+          <span class="nome">/order/info</span>
+          <span class="quando">Lê o código de rastreio. Ou espere o webhook.</span>
+        </div>
+      </div>
+
+      <p>
+        O preço nunca viaja no corpo da requisição. A cotação fica salva no
+        servidor e o <code>/cart</code> a referencia pelo <code>id</code> — se você
+        mandar um campo <code>price</code>, ele é descartado em silêncio. Isso é
+        proposital: o valor cobrado não pode depender do que o cliente envia.
+      </p>
+
+      <h4>Exemplo completo</h4>
+<pre><span class="c"># 1. cotar</span>
+curl -X POST https://app.martinslog.net/api/v0/calculator \
+  -H <span class="s">"Authorization: Bearer frete_live_..."</span> \
+  -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{"cepOrigem":"12321-313","cepDestino":"80010-000","formato":"CAIXA",
+       "pesoRealG":1000,"alturaCm":20,"larguraCm":15,"comprimentoCm":10}'</span>
+
+<span class="c"># devolve, entre outras: {"id":"clx123:svc-eco","price":"12.30", ...}</span>
+
+<span class="c"># 2. criar o envio com o id da opção escolhida</span>
+curl -X POST https://app.martinslog.net/api/v0/cart \
+  -H <span class="s">"Authorization: Bearer frete_live_..."</span> \
+  -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{"service":"clx123:svc-eco","remetente":{...},"destinatario":{...},
+       "produtos":[{"nome":"Kit 4em1","quantidade":1,"valorUnitarioCentavos":9790}]}'</span>
+
+<span class="c"># devolve: {"id":"shp_abc","price":"12.30","label_fee":"1.00","charged":false,"status":"PENDING"}</span>
+
+<span class="c"># 3. pagar</span>
+curl -X POST https://app.martinslog.net/api/v0/checkout \
+  -H <span class="s">"Authorization: Bearer frete_live_..."</span> \
+  -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{"orders":["shp_abc"]}'</span>
+
+<span class="c"># 4. ler o rastreio</span>
+curl https://app.martinslog.net/api/v0/order/info/shp_abc \
+  -H <span class="s">"Authorization: Bearer frete_live_..."</span></pre>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="auth">
+      <h2>Autenticação</h2>
+      <p>
+        Toda chamada de <code>/api/v0</code> exige o token no cabeçalho:
+      </p>
+<pre>Authorization: Bearer frete_live_a1b2c3...</pre>
+      <p>
+        O token é criado no painel, em <strong>Integrações</strong>, e pertence a
+        uma conta. A carteira que paga o frete é a da conta dona do token — uma
+        loja, um token.
+      </p>
+
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Prefixo</th><th>Ambiente</th><th>Efeito</th></tr></thead>
+          <tbody>
+            <tr><td><code>frete_test_</code></td><td>Sandbox</td><td>Não encosta na carteira</td></tr>
+            <tr><td><code>frete_live_</code></td><td>Produção</td><td>Debita de verdade</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="aviso">
+        <span class="rotulo">Guarde na hora</span>
+        <p>
+          O token aparece <strong>uma única vez</strong>, na tela de criação. Só o
+          hash fica gravado — não há como recuperá-lo depois, apenas revogar e
+          criar outro.
+        </p>
+      </div>
+
+      <p>
+        Token ausente, malformado, inválido ou revogado responde
+        <span class="chip er">401 TOKEN_INVALIDO</span>. O prefixo é rótulo, não
+        credencial: a entropia inteira está nos 32 bytes que vêm depois dele.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="ambientes">
+      <h2>Sandbox e produção</h2>
+      <p>
+        <strong>Mesma URL, mesmos campos, mesmas respostas.</strong> Só o token
+        muda. Não existe host separado de teste.
+      </p>
+
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Comportamento</th><th>Sandbox</th><th>Produção</th></tr></thead>
+          <tbody>
+            <tr><td>Débito na carteira</td><td>Nenhum lançamento é criado</td><td>Debita ao pagar</td></tr>
+            <tr><td>Código de rastreio</td><td><code>SANDBOX</code> + 12 hex</td><td><code>EC000000014BR</code></td></tr>
+            <tr><td>Página pública de rastreio</td><td>Não abre</td><td>Abre</td></tr>
+            <tr><td>Webhook</td><td>Sai com <code>"sandbox": true</code></td><td>Sem esse campo</td></tr>
+            <tr><td>Campo <code>charged</code></td><td>Sempre <code>false</code></td><td><code>true</code> após o pagamento</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="aviso grave">
+        <span class="rotulo">Não trate teste como venda</span>
+        <p>
+          O <code>sandbox: true</code> do webhook existe para isso. Sem checá-lo, um
+          pedido de teste entra no seu sistema como venda real — e o código
+          <code>SANDBOX…</code> não abre na página pública, então o seu cliente
+          receberia um link morto.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="limites">
+      <h2>Limite de requisições</h2>
+      <p>
+        <strong>60 requisições por minuto, por token.</strong> A janela é deslizante
+        e a contagem é por token, não por IP — uma loja não derruba a cota de
+        outra que esteja atrás do mesmo servidor.
+      </p>
+      <p>
+        Estourando, a resposta é <span class="chip er">429 LIMITE_REQUISICOES_EXCEDIDO</span>
+        com o cabeçalho <code>Retry-After: 60</code> e o tempo em segundos na
+        mensagem. Respeite o cabeçalho em vez de repetir imediatamente.
+      </p>
+      <p>
+        Uma venda consome 3 ou 4 chamadas. O teto prático é de
+        <strong>cerca de 15 vendas por minuto por loja</strong>. Para importar
+        histórico, enfileire — não existe endpoint em lote.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="erros">
+      <h2>Erros</h2>
+      <p>Todo erro tem a mesma forma:</p>
+<pre>{
+  <span class="k">"codigo"</span>: <span class="s">"SALDO_INSUFICIENTE"</span>,
+  <span class="k">"mensagem"</span>: <span class="s">"Saldo insuficiente para pagar este envio."</span>
+}</pre>
+      <p>
+        Erro de validação acrescenta <code>campos</code>, com a lista de problemas
+        por campo:
+      </p>
+<pre>{
+  <span class="k">"codigo"</span>: <span class="s">"CORPO_INVALIDO"</span>,
+  <span class="k">"mensagem"</span>: <span class="s">"Dados de cotação inválidos."</span>,
+  <span class="k">"campos"</span>: { <span class="k">"cepDestino"</span>: [<span class="s">"CEP de destino inválido"</span>] }
+}</pre>
+
+      <p>
+        Programe contra o <code>codigo</code>, nunca contra a <code>mensagem</code> —
+        o texto muda, o código não.
+      </p>
+
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>HTTP</th><th>Código</th><th>Quando acontece</th><th>O que fazer</th></tr></thead>
+          <tbody>
+            <tr><td class="num"><span class="chip er">400</span></td><td><code>CORPO_INVALIDO</code></td><td>Campo faltando ou fora do formato</td><td>Corrigir e reenviar</td></tr>
+            <tr><td class="num"><span class="chip er">400</span></td><td><code>CEP_INVALIDO</code></td><td>CEP não existe na base</td><td>Corrigir o endereço</td></tr>
+            <tr><td class="num"><span class="chip er">401</span></td><td><code>TOKEN_INVALIDO</code></td><td>Token ausente, inválido ou revogado</td><td>Não repetir; conferir a credencial</td></tr>
+            <tr><td class="num"><span class="chip er">402</span></td><td><code>SALDO_INSUFICIENTE</code></td><td>Carteira sem saldo no <code>/checkout</code></td><td>Recarregar; o envio segue <code>PENDING</code></td></tr>
+            <tr><td class="num"><span class="chip er">403</span></td><td><code>NAO_AUTORIZADO</code></td><td>Ação fora do alcance do token</td><td>Não repetir</td></tr>
+            <tr><td class="num"><span class="chip er">404</span></td><td><code>ENVIO_NAO_ENCONTRADO</code></td><td>Id inexistente <em>ou</em> de outra conta</td><td>Não repetir</td></tr>
+            <tr><td class="num"><span class="chip er">404</span></td><td><code>COTACAO_NAO_ENCONTRADA</code></td><td><code>service</code> aponta para cotação que sumiu</td><td>Cotar de novo</td></tr>
+            <tr><td class="num"><span class="chip at">422</span></td><td><code>COTACAO_EXPIRADA</code></td><td>Cotação velha demais</td><td>Cotar de novo</td></tr>
+            <tr><td class="num"><span class="chip at">422</span></td><td><code>TRANSICAO_INVALIDA</code></td><td>Ex.: pagar um envio já pago</td><td>Ler o status antes</td></tr>
+            <tr><td class="num"><span class="chip at">422</span></td><td><code>ROTA_NAO_ATENDIDA</code></td><td>Sem serviço para o par de CEPs</td><td>Oferecer outra opção</td></tr>
+            <tr><td class="num"><span class="chip er">429</span></td><td><code>LIMITE_REQUISICOES_EXCEDIDO</code></td><td>Mais de 60 chamadas no minuto</td><td>Esperar o <code>Retry-After</code></td></tr>
+            <tr><td class="num"><span class="chip er">500</span></td><td><code>ERRO_INTERNO</code></td><td>Falha inesperada nossa</td><td>Repetir com espera crescente</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        <strong>404 em vez de 403 é decisão de segurança.</strong> Um id que existe em
+        outra conta responde exatamente como um id que não existe — a diferença de
+        código revelaria quais ids são reais.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="dinheiro">
+      <h2>Os três números</h2>
+      <p>
+        Confundi-los é o erro de integração mais caro. São valores diferentes,
+        com donos diferentes.
+      </p>
+
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Campo</th><th>O que é</th><th>Quem paga</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>price</code></td>
+              <td>O <strong>frete</strong> — o transporte em si</td>
+              <td>O comprador da sua loja, no checkout dela</td>
+            </tr>
+            <tr>
+              <td><code>label_fee</code></td>
+              <td>O que a plataforma cobra <strong>por etiqueta gerada</strong> — hoje <strong>R$ 1,00 fixo</strong></td>
+              <td>Você, lojista, da sua carteira</td>
+            </tr>
+            <tr>
+              <td><code>charged</code></td>
+              <td>Se a taxa <strong>saiu de fato</strong> da carteira</td>
+              <td>—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Todos os valores monetários são <strong>strings em reais com duas casas</strong>
+        (<code>"12.30"</code>), nunca centavos e nunca número. Nos campos de
+        <em>entrada</em> vale o contrário: <code>valorUnitarioCentavos</code> é inteiro
+        em centavos. A assimetria é real; não deduza uma coisa da outra.
+      </p>
+      <p>
+        <code>charged</code> é lido do livro-caixa, não do status nem da flag de
+        sandbox. Some <code>label_fee</code> apenas onde <code>charged</code> for
+        <code>true</code>, ou você vai contabilizar dinheiro que nunca saiu.
+      </p>
+      <p>
+        A taxa é <strong>por etiqueta, não proporcional ao frete</strong>: uma
+        encomenda de R$ 12,30 e outra de R$ 180,00 custam o mesmo R$ 1,00 a você.
+        O <code>price</code> aparece na etiqueta e no rastreio; o
+        <code>label_fee</code> aparece no seu extrato. Nunca cobre o
+        <code>label_fee</code> do comprador — ele não é frete.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="calculator">
+      <h2>1 · Cotação</h2>
+      <div class="rota">
+        <span class="verbo">POST</span>
+        <span class="caminho">/api/v0/calculator</span>
+        <span class="nota">200 · lista</span>
+      </div>
+
+      <h4>Corpo</h4>
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Campo</th><th>Tipo</th><th></th><th>Regra</th></tr></thead>
+          <tbody>
+            <tr><td><code>cepOrigem</code></td><td>string</td><td><span class="obrig">obrig.</span></td><td><code>00000-000</code> ou <code>00000000</code></td></tr>
+            <tr><td><code>cepDestino</code></td><td>string</td><td><span class="obrig">obrig.</span></td><td>idem</td></tr>
+            <tr><td><code>formato</code></td><td>enum</td><td><span class="obrig">obrig.</span></td><td><code>CAIXA</code> · <code>ROLO</code> · <code>ENVELOPE</code></td></tr>
+            <tr><td><code>pesoRealG</code></td><td>inteiro</td><td><span class="obrig">obrig.</span></td><td>gramas, &gt; 0</td></tr>
+            <tr><td><code>alturaCm</code></td><td>inteiro</td><td><span class="obrig">obrig.</span></td><td>centímetros, &gt; 0</td></tr>
+            <tr><td><code>larguraCm</code></td><td>inteiro</td><td><span class="obrig">obrig.</span></td><td>centímetros, &gt; 0</td></tr>
+            <tr><td><code>comprimentoCm</code></td><td>inteiro</td><td><span class="obrig">obrig.</span></td><td>centímetros, &gt; 0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Medidas são <strong>inteiras</strong>. <code>20.5</code> é recusado com
+        <code>CORPO_INVALIDO</code> — arredonde para cima antes de enviar.
+      </p>
+
+      <h4>Resposta 200</h4>
+<pre>[
+  {
+    <span class="k">"id"</span>: <span class="s">"clx123abc:svc-economico"</span>,
+    <span class="k">"name"</span>: <span class="s">"Econômico"</span>,
+    <span class="k">"price"</span>: <span class="s">"12.30"</span>,
+    <span class="k">"discount"</span>: <span class="s">"3.70"</span>,
+    <span class="k">"delivery_time"</span>: 5,
+    <span class="k">"company"</span>: { <span class="k">"name"</span>: <span class="s">"Martins Log"</span> }
+  }
+]</pre>
+
+      <ul>
+        <li><code>id</code> — no formato <code>quoteId:servicoId</code>. É o que vai no <code>service</code> do passo 2, inteiro e sem alterações.</li>
+        <li><code>delivery_time</code> — prazo em <strong>dias úteis</strong>, contado da postagem.</li>
+        <li>Serviços indisponíveis para a rota não aparecem. <strong>Lista vazia é resposta válida</strong> e significa "não atendemos esse trecho" — trate na sua tela, não como erro.</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="cart">
+      <h2>2 · Criar envio</h2>
+      <div class="rota">
+        <span class="verbo">POST</span>
+        <span class="caminho">/api/v0/cart</span>
+        <span class="nota">201 · objeto</span>
+      </div>
+
+      <h4>Corpo</h4>
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Campo</th><th>Tipo</th><th></th><th>Regra</th></tr></thead>
+          <tbody>
+            <tr><td><code>service</code></td><td>string</td><td><span class="obrig">obrig.</span></td><td>o <code>id</code> vindo da cotação</td></tr>
+            <tr><td><code>remetente</code></td><td>endereço</td><td><span class="obrig">obrig.</span></td><td>tabela abaixo</td></tr>
+            <tr><td><code>destinatario</code></td><td>endereço</td><td><span class="obrig">obrig.</span></td><td>tabela abaixo</td></tr>
+            <tr><td><code>produtos</code></td><td>lista</td><td><span class="obrig">obrig.</span></td><td>ao menos um item</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Endereço</h4>
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Campo</th><th>Tipo</th><th></th><th>Regra</th></tr></thead>
+          <tbody>
+            <tr><td><code>nome</code></td><td>string</td><td><span class="obrig">obrig.</span></td><td>não vazio</td></tr>
+            <tr><td><code>cep</code></td><td>string</td><td><span class="obrig">obrig.</span></td><td><code>00000-000</code> ou <code>00000000</code></td></tr>
+            <tr><td><code>logradouro</code></td><td>string</td><td><span class="obrig">obrig.</span></td><td>não vazio</td></tr>
+            <tr><td><code>numero</code></td><td>string</td><td><span class="obrig">obrig.</span></td><td>string, não número — <code>"S/N"</code> é válido</td></tr>
+            <tr><td><code>bairro</code></td><td>string</td><td><span class="obrig">obrig.</span></td><td>não vazio</td></tr>
+            <tr><td><code>cidade</code></td><td>string</td><td><span class="obrig">obrig.</span></td><td>não vazio</td></tr>
+            <tr><td><code>uf</code></td><td>string</td><td><span class="obrig">obrig.</span></td><td>exatamente 2 letras</td></tr>
+            <tr><td><code>documento</code></td><td>string</td><td><span class="opc">opc.</span></td><td>CPF ou CNPJ</td></tr>
+            <tr><td><code>email</code></td><td>string</td><td><span class="opc">opc.</span></td><td>e-mail válido <em>ou</em> string vazia</td></tr>
+            <tr><td><code>telefone</code></td><td>string</td><td><span class="opc">opc.</span></td><td>—</td></tr>
+            <tr><td><code>complemento</code></td><td>string</td><td><span class="opc">opc.</span></td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <code>email</code> tem uma pegadinha: se o campo existir, precisa ser um
+        e-mail válido <strong>ou</strong> exatamente <code>""</code>. Mandar
+        <code>null</code> ou <code>"—"</code> derruba a requisição inteira. Se não tem
+        e-mail, omita a chave.
+      </p>
+
+      <h4>Produto</h4>
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Campo</th><th>Tipo</th><th></th><th>Regra</th></tr></thead>
+          <tbody>
+            <tr><td><code>nome</code></td><td>string</td><td><span class="obrig">obrig.</span></td><td>não vazio</td></tr>
+            <tr><td><code>quantidade</code></td><td>inteiro</td><td><span class="obrig">obrig.</span></td><td>&gt; 0</td></tr>
+            <tr><td><code>valorUnitarioCentavos</code></td><td>inteiro</td><td><span class="obrig">obrig.</span></td><td>centavos, &gt; 0 — <code>9790</code> = R$ 97,90</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        A soma dos produtos vira o <strong>valor declarado</strong> do envio, que é a
+        base do seguro. Declarar menos que o real reduz a cobertura.
+      </p>
+
+      <h4>Resposta 201</h4>
+<pre>{
+  <span class="k">"id"</span>: <span class="s">"shp_9f2c..."</span>,
+  <span class="k">"price"</span>: <span class="s">"12.30"</span>,
+  <span class="k">"label_fee"</span>: <span class="s">"1.00"</span>,
+  <span class="k">"charged"</span>: false,
+  <span class="k">"status"</span>: <span class="s">"PENDING"</span>
+}</pre>
+      <p>
+        Guarde o <code>id</code> no seu pedido <strong>agora</strong>. Ele é a única
+        chave que liga a sua venda ao envio, e é o que impede a duplicação
+        descrita no <a href="#checklist">checklist</a>.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="checkout">
+      <h2>3 · Pagar</h2>
+      <div class="rota">
+        <span class="verbo">POST</span>
+        <span class="caminho">/api/v0/checkout</span>
+        <span class="nota">200 · objeto</span>
+      </div>
+
+      <p>
+        Debita a carteira e, em produção, <strong>emite a etiqueta na sequência</strong>.
+        Você não precisa chamar mais nada para obter o código de rastreio.
+      </p>
+
+      <h4>Corpo</h4>
+<pre>{ <span class="k">"orders"</span>: [<span class="s">"shp_9f2c..."</span>] }</pre>
+      <p>
+        Aceita vários ids, mas o processamento é <strong>sequencial e sem
+        transação</strong>: se o terceiro falhar por saldo, os dois primeiros já foram
+        pagos e continuam pagos. Mandar um id por chamada torna o tratamento de
+        erro muito mais simples.
+      </p>
+
+      <h4>Resposta 200</h4>
+<pre>{
+  <span class="k">"success"</span>: true,
+  <span class="k">"purchase"</span>: {
+    <span class="k">"status"</span>: <span class="s">"approved"</span>,
+    <span class="k">"orders"</span>: [ { <span class="k">"id"</span>: <span class="s">"shp_9f2c..."</span>, <span class="k">"status"</span>: <span class="s">"GENERATED"</span> } ]
+  }
+}</pre>
+
+      <div class="aviso">
+        <span class="rotulo">Leia o status devolvido</span>
+        <p>
+          O <code>status</code> de cada ordem é relido do banco depois do pagamento.
+          Ele costuma vir <code>GENERATED</code> — a etiqueta já saiu —, mas pode vir
+          <code>RELEASED</code> se a emissão ainda não concluiu. Não assuma nenhum dos
+          dois: use o valor devolvido, ou espere o webhook
+          <code>order.generated</code>.
+        </p>
+      </div>
+
+      <p>
+        Sem saldo, a resposta é <span class="chip er">402 SALDO_INSUFICIENTE</span> e o
+        envio permanece <code>PENDING</code> — nada se perde. Basta recarregar e
+        chamar de novo com o mesmo id.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="info">
+      <h2>4 · Consultar</h2>
+      <div class="rota">
+        <span class="verbo get">GET</span>
+        <span class="caminho">/api/v0/order/info/{id}</span>
+        <span class="nota">200 · objeto</span>
+      </div>
+
+<pre>{
+  <span class="k">"id"</span>: <span class="s">"shp_9f2c..."</span>,
+  <span class="k">"status"</span>: <span class="s">"POSTED"</span>,
+  <span class="k">"tracking"</span>: <span class="s">"EC000000014BR"</span>,
+  <span class="k">"tracking_url"</span>: <span class="s">"/r/EC000000014BR"</span>,
+  <span class="k">"price"</span>: <span class="s">"12.30"</span>,
+  <span class="k">"label_fee"</span>: <span class="s">"1.00"</span>,
+  <span class="k">"charged"</span>: true,
+  <span class="k">"sandbox"</span>: false,
+  <span class="k">"created_at"</span>: <span class="s">"2026-09-01T10:00:00.000Z"</span>
+}</pre>
+
+      <div class="aviso">
+        <span class="rotulo">tracking_url é relativo</span>
+        <p>
+          Vem como <code>/r/EC000000014BR</code>, sem domínio. Concatene com
+          <code>https://app.martinslog.net</code> antes de mostrar ao cliente. Mandar o
+          caminho cru num e-mail gera um link quebrado.
+        </p>
+      </div>
+
+      <p>
+        <code>tracking</code> e <code>tracking_url</code> são <code>null</code> enquanto o
+        envio não tem código — na prática, antes de <code>GENERATED</code>.
+        Datas são sempre ISO 8601 em UTC.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="ciclo">
+      <h2>Ciclo de vida do envio</h2>
+      <p>
+        Sete estados. As transições são verificadas no servidor: tentar um salto
+        inválido devolve <span class="chip at">422 TRANSICAO_INVALIDA</span>.
+      </p>
+
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Status</th><th>Significa</th><th>Pode ir para</th></tr></thead>
+          <tbody>
+            <tr><td><code>PENDING</code></td><td>Criado, não pago</td><td><code>RELEASED</code> · <code>CANCELLED</code></td></tr>
+            <tr><td><code>RELEASED</code></td><td>Pago, etiqueta em emissão</td><td><code>GENERATED</code> · <code>CANCELLED</code></td></tr>
+            <tr><td><code>GENERATED</code></td><td>Etiqueta emitida, <strong>já tem código</strong></td><td><code>POSTED</code> · <code>CANCELLED</code></td></tr>
+            <tr><td><code>POSTED</code></td><td>Coletado, em trânsito</td><td><code>DELIVERED</code> · <code>LOST</code></td></tr>
+            <tr><td><code>DELIVERED</code></td><td>Entregue</td><td>— final</td></tr>
+            <tr><td><code>CANCELLED</code></td><td>Cancelado</td><td>— final</td></tr>
+            <tr><td><code>LOST</code></td><td>Extraviado</td><td>— final</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Cancelamento só é possível até <code>GENERATED</code>. Depois de
+        <code>POSTED</code> a carga está na rua e não há mais o que cancelar.
+        <code>LOST</code> não tem webhook próprio — apareceria como
+        <code>order.cancelled</code>. Se o extravio importa para você, consulte o
+        status.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="webhooks">
+      <h2>Webhooks</h2>
+      <p>
+        A alternativa a ficar consultando <code>/order/info</code>. Nós avisamos a cada
+        mudança de estado.
+      </p>
+
+      <div class="aviso grave">
+        <span class="rotulo">O cadastro não é pela API</span>
+        <p>
+          <code>POST /api/v0/webhook</code> exige <strong>sessão do painel</strong>, não
+          aceita o token de API. Quem cadastra a URL é o dono da loja, logado em
+          <strong>Integrações</strong>. Não há como automatizar isso do seu lado.
+        </p>
+      </div>
+
+      <h4>Regras da URL de destino</h4>
+      <ul>
+        <li><code>https</code> obrigatório — <code>http</code> é recusado.</li>
+        <li>Sem usuário e senha embutidos na URL.</li>
+        <li>Sem <code>localhost</code>, <code>.localhost</code>, <code>.internal</code> ou IP de rede privada.</li>
+      </ul>
+      <p>URL recusada devolve <span class="chip at">422 ARQUIVO_INVALIDO</span> com o motivo.</p>
+
+      <h4>Eventos</h4>
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Evento</th><th>Disparado quando</th><th><code>tracking</code></th></tr></thead>
+          <tbody>
+            <tr><td><code>order.created</code></td><td>O envio é criado (<code>/cart</code>)</td><td><code>null</code></td></tr>
+            <tr><td><code>order.released</code></td><td>O pagamento é confirmado</td><td><code>null</code></td></tr>
+            <tr><td><code>order.generated</code></td><td><strong>A etiqueta sai — o código nasce aqui</strong></td><td>preenchido</td></tr>
+            <tr><td><code>order.posted</code></td><td>A carga é coletada</td><td>preenchido</td></tr>
+            <tr><td><code>order.delivered</code></td><td>A entrega é concluída</td><td>preenchido</td></tr>
+            <tr><td><code>order.cancelled</code></td><td>O envio é cancelado</td><td>varia</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>Se você só puder escutar um, escute <code>order.generated</code></strong> —
+        é onde o código de rastreio aparece.
+      </p>
+
+      <h4>Corpo entregue</h4>
+<pre>{
+  <span class="k">"event"</span>: <span class="s">"order.generated"</span>,
+  <span class="k">"data"</span>: {
+    <span class="k">"id"</span>: <span class="s">"shp_9f2c..."</span>,
+    <span class="k">"status"</span>: <span class="s">"GENERATED"</span>,
+    <span class="k">"tracking"</span>: <span class="s">"EC000000014BR"</span>,
+    <span class="k">"tracking_url"</span>: <span class="s">"/r/EC000000014BR"</span>,   <span class="c">// relativo</span>
+    <span class="k">"price"</span>: <span class="s">"12.30"</span>,                     <span class="c">// string, em reais</span>
+    <span class="k">"created_at"</span>: <span class="s">"2026-09-01T10:00:00.000Z"</span>
+  },
+  <span class="k">"sent_at"</span>: <span class="s">"2026-09-01T10:00:01.000Z"</span>,
+  <span class="k">"sandbox"</span>: true                          <span class="c">// só existe em sandbox</span>
+}</pre>
+
+      <h4>Entrega e retentativa</h4>
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Parâmetro</th><th>Valor</th></tr></thead>
+          <tbody>
+            <tr><td>Tempo limite por tentativa</td><td class="num">5 segundos</td></tr>
+            <tr><td>Tentativas totais</td><td class="num">6 (1 imediata + 5 reagendadas)</td></tr>
+            <tr><td>Intervalos</td><td class="num">1 min · 5 min · 30 min · 2 h · 12 h</td></tr>
+            <tr><td>Janela total</td><td class="num">≈ 14 horas</td></tr>
+            <tr><td>Repete em</td><td>falha de rede · 408 · 429 · 5xx</td></tr>
+            <tr><td>Desiste em</td><td>qualquer outro 4xx</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>Responda rápido e com 2xx.</strong> Grave o evento numa fila sua e
+        processe depois; passar de 5 segundos conta como falha e gera reentrega.
+        Um 404 (rota errada) faz o sistema desistir na primeira tentativa — o que
+        é proposital: repetir contra uma URL inexistente por catorze horas só
+        martelaria o seu servidor.
+      </p>
+      <p>
+        Entregas podem chegar <strong>fora de ordem ou repetidas</strong>. Trate cada
+        uma como idempotente: ignore um <code>order.posted</code> que chegue depois de
+        um <code>order.delivered</code> já processado.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="assinatura">
+      <h2>Verificar a assinatura</h2>
+      <p>Toda entrega vai assinada. Dois cabeçalhos:</p>
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Cabeçalho</th><th>Conteúdo</th></tr></thead>
+          <tbody>
+            <tr><td><code>x-frete-signature</code></td><td><code>sha256=&lt;hex&gt;</code></td></tr>
+            <tr><td><code>x-frete-timestamp</code></td><td>segundos desde a época Unix</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        A assinatura é o HMAC-SHA256 de <code>&lt;timestamp&gt;.&lt;corpo&gt;</code>,
+        com o segredo devolvido no cadastro. O timestamp entra <strong>dentro</strong>
+        do que é assinado — por isso alterá-lo invalida a assinatura, e uma
+        requisição capturada não serve para sempre.
+      </p>
+
+      <div class="aviso grave">
+        <span class="rotulo">Três detalhes que quebram tudo</span>
+        <p>
+          <strong>1.</strong> Use o corpo <strong>cru</strong>, antes de qualquer
+          <code>JSON.parse</code>. Reserializar muda espaços e ordem de chaves, e a
+          assinatura não fecha.
+        </p>
+        <p>
+          <strong>2.</strong> Rejeite timestamp fora de <strong>5 minutos</strong>. Sem
+          isso, quem capturar uma entrega pode reenviá-la para sempre.
+        </p>
+        <p>
+          <strong>3.</strong> Compare em <strong>tempo constante</strong>. Com
+          <code>===</code>, o tempo de resposta revela quantos bytes iniciais o
+          atacante acertou.
+        </p>
+      </div>
+
+      <h4>Node.js</h4>
+<pre><span class="k">const</span> { createHmac, timingSafeEqual } = require(<span class="s">'crypto'</span>)
+
+<span class="k">function</span> verificar(segredo, corpoCru, assinatura, timestamp) {
+  <span class="c">// 1. janela de 5 minutos</span>
+  <span class="k">if</span> (!/^\d+$/.test(timestamp)) <span class="k">return</span> false
+  <span class="k">const</span> agora = Math.floor(Date.now() / 1000)
+  <span class="k">if</span> (Math.abs(agora - Number(timestamp)) &gt; 300) <span class="k">return</span> false
+
+  <span class="c">// 2. o timestamp entra no que é assinado</span>
+  <span class="k">const</span> esperada = createHmac(<span class="s">'sha256'</span>, segredo)
+    .update(`${timestamp}.${corpoCru}`)
+    .digest(<span class="s">'hex'</span>)
+
+  <span class="k">if</span> (!assinatura.startsWith(<span class="s">'sha256='</span>)) <span class="k">return</span> false
+  <span class="k">const</span> recebida = assinatura.slice(<span class="s">'sha256='</span>.length)
+  <span class="k">if</span> (recebida.length !== esperada.length) <span class="k">return</span> false
+
+  <span class="c">// 3. comparação em tempo constante</span>
+  <span class="k">return</span> timingSafeEqual(
+    Buffer.from(recebida, <span class="s">'hex'</span>),
+    Buffer.from(esperada, <span class="s">'hex'</span>),
+  )
+}</pre>
+
+      <h4>PHP</h4>
+<pre><span class="k">function</span> verificar($segredo, $corpoCru, $assinatura, $timestamp) {
+  <span class="k">if</span> (!ctype_digit($timestamp)) <span class="k">return</span> false;
+  <span class="k">if</span> (abs(time() - (int)$timestamp) &gt; 300) <span class="k">return</span> false;
+
+  $esperada = <span class="s">'sha256='</span> . hash_hmac(<span class="s">'sha256'</span>, <span class="s">"$timestamp.$corpoCru"</span>, $segredo);
+  <span class="k">return</span> hash_equals($esperada, $assinatura);
+}
+
+<span class="c">// o corpo cru, nunca $_POST</span>
+$corpoCru = file_get_contents(<span class="s">'php://input'</span>);</pre>
+
+      <div class="aviso">
+        <span class="rotulo">O segredo aparece uma vez</span>
+        <p>
+          Ele é devolvido apenas na resposta do cadastro. A listagem de webhooks
+          nunca o traz de volta — se fosse legível depois, qualquer falha de
+          autorização em uma tela permitiria forjar entregas assinadas. Perdeu?
+          Cadastre outro webhook.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="rastreio">
+      <h2>Rastreio</h2>
+
+      <h4>Formato do código</h4>
+      <p>
+        <code class="cod-linha">EC 00000001 4 BR</code> — duas letras de serviço, oito
+        dígitos sequenciais, um dígito verificador módulo 11 e o sufixo do país.
+        O formato segue a convenção dos Correios para que leitores de código de
+        barras e planilhas já existentes o aceitem; o código em si é nosso.
+      </p>
+      <p>Em sandbox o formato é outro: <code>SANDBOX</code> seguido de 12 caracteres hexadecimais.</p>
+
+      <h4>Página para o seu cliente</h4>
+<pre>https://app.martinslog.net/r/EC000000014BR</pre>
+      <p>
+        Aberta, sem login, e não mostra nome, documento nem endereço de ninguém —
+        só serviço, situação e cidade/UF de cada etapa. É o link seguro para pôr
+        no e-mail de confirmação.
+      </p>
+
+      <h4>Consulta programática</h4>
+      <div class="rota">
+        <span class="verbo get">GET</span>
+        <span class="caminho">/api/rastreio/{codigo}</span>
+        <span class="nota">sem token</span>
+      </div>
+      <p>
+        Não exige autenticação, e por isso tem limite próprio:
+        <strong>30 consultas a cada 5 minutos por IP</strong>, com
+        <code>Retry-After</code> na resposta 429.
+      </p>
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>HTTP</th><th>Código</th><th>Significa</th></tr></thead>
+          <tbody>
+            <tr><td class="num"><span class="chip ok">200</span></td><td>—</td><td><code>{ "rastreio": { … } }</code></td></tr>
+            <tr><td class="num"><span class="chip at">422</span></td><td><code>CODIGO_INVALIDO</code></td><td>Formato ou dígito verificador errado</td></tr>
+            <tr><td class="num"><span class="chip er">404</span></td><td><code>ENVIO_NAO_ENCONTRADO</code></td><td>Código bem formado, envio inexistente</td></tr>
+            <tr><td class="num"><span class="chip er">429</span></td><td><code>LIMITE_CONSULTAS_EXCEDIDO</code></td><td>Limite por IP estourado</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        O 422 é útil: significa que o código foi digitado errado e dá para
+        corrigir. O 404 significa que o código é plausível mas não existe.
+      </p>
+      <p>
+        Cada evento traz <code>sequencia</code>, <code>codigo</code>, <code>titulo</code>,
+        <code>descricao</code>, <code>cidade</code>, <code>uf</code> e <code>ocorridoEm</code>.
+        Os códigos possíveis são <code>ETIQUETA_EMITIDA</code>, <code>POSTADO</code>,
+        <code>TRANSFERENCIA</code>, <code>AGUARDANDO_TRATAMENTO</code>,
+        <code>SAIU_PARA_ENTREGA</code>, <code>TENTATIVA_FRUSTRADA</code>,
+        <code>AGUARDANDO_RETIRADA</code>, <code>ENTREGUE</code>, <code>EXTRAVIADO</code>,
+        <code>DEVOLUCAO_INICIADA</code> e <code>DEVOLVIDO</code>.
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="checklist">
+      <h2>Checklist de checkout</h2>
+      <p>
+        O que separa uma integração que funciona de uma que cobra duas vezes.
+      </p>
+
+      <h3>Grave o id do envio antes de qualquer outra coisa</h3>
+      <p>
+        Assim que o <code>/cart</code> responder, guarde o <code>id</code> no seu pedido e
+        <strong>só chame o <code>/cart</code> quando esse campo estiver vazio</strong>. Duas
+        chamadas para a mesma venda criam dois envios e duas cobranças na sua
+        carteira.
+      </p>
+
+      <h3>Dispare a partir do pagamento confirmado, não do clique</h3>
+      <p>
+        O gatilho é o webhook do seu gateway confirmando o PIX ou o cartão. Criar
+        o envio no clique de "finalizar compra" gera etiqueta para venda que não
+        foi paga.
+      </p>
+
+      <h3>Trate 402 como estado, não como erro</h3>
+      <p>
+        Saldo insuficiente é rotina. O envio fica <code>PENDING</code> e nada se perde:
+        avise o lojista, e tente de novo com o mesmo id depois da recarga. Não
+        deixe o pedido travado em silêncio.
+      </p>
+
+      <h3>Prefira o webhook ao <em>polling</em></h3>
+      <p>
+        Consultar <code>/order/info</code> de minuto em minuto consome a cota de 60/min
+        que você vai precisar para vender. Use o webhook e reserve a consulta para
+        conferência.
+      </p>
+
+      <h3>Confira <code>sandbox</code> em toda entrada</h3>
+      <p>
+        Tanto no webhook quanto no <code>/order/info</code>. Um pedido de teste tratado
+        como venda real gera código de rastreio que não abre para o cliente.
+      </p>
+
+      <h3>Nunca mande preço</h3>
+      <p>
+        Não existe campo de preço em nenhum corpo de requisição. Se você enviar
+        um, ele é descartado sem erro — e você vai passar horas procurando por que
+        o valor "não foi aplicado".
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="limitacoes">
+      <h2>O que ainda não existe</h2>
+      <p>
+        Limites reais da versão v0, listados para que você não os descubra em
+        produção.
+      </p>
+
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Limitação</th><th>Consequência</th><th>Como contornar</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Sem chave de idempotência</strong></td>
+              <td><code>/cart</code> não aceita referência externa. Um campo <code>external_id</code> é descartado em silêncio.</td>
+              <td>Deduplicar do seu lado, pelo id do envio gravado no pedido.</td>
+            </tr>
+            <tr>
+              <td><strong>Sem endpoint em lote</strong></td>
+              <td>Importação de histórico é uma chamada por envio.</td>
+              <td>Enfileirar respeitando 60/min.</td>
+            </tr>
+            <tr>
+              <td><strong>Cadastro de webhook exige sessão</strong></td>
+              <td>Não dá para provisionar webhook por API.</td>
+              <td>O lojista cadastra no painel, uma vez.</td>
+            </tr>
+            <tr>
+              <td><strong>Saldo da carteira não é exposto</strong></td>
+              <td>Não há como checar saldo antes de faturar.</td>
+              <td>Tratar o 402 como caso esperado.</td>
+            </tr>
+            <tr>
+              <td><strong>Não há PDF de etiqueta</strong></td>
+              <td>A rota de etiqueta é de sessão e devolve só o código.</td>
+              <td>O <code>/checkout</code> já emite; imprimir é pelo painel.</td>
+            </tr>
+            <tr>
+              <td><strong><code>tracking_url</code> é relativo</strong></td>
+              <td>Link quebrado se usado direto.</td>
+              <td>Prefixar com a URL base.</td>
+            </tr>
+            <tr>
+              <td><strong><code>LOST</code> não tem evento</strong></td>
+              <td>Extravio chega como <code>order.cancelled</code>.</td>
+              <td>Consultar o status quando o evento chegar.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="rodape">
+      MARTINS LOG E TRANSPORTES LTDA · Documento gerado a partir do código-fonte
+      da plataforma. Endpoints, códigos de erro e limites verificados contra a
+      API em produção.
+    </p>
+
+  </main>
+</div>
+</div>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "API Martins Log",
+  "description": "Documentação da API v0 da Martins Log: cotação de frete, criação de envio, pagamento, webhooks assinados e rastreio — para integrar sua loja.",
+  "inLanguage": "pt-BR",
+  "url": "https://martinslog.net/docs/",
+  "publisher": { "@type": "Organization", "name": "MARTINS LOG E TRANSPORTES LTDA" }
+}
+</script>
+</body>
+</html>

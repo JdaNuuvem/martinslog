@@ -9,5 +9,8 @@ RUN rm -rf /usr/share/nginx/html/* /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY index.html /usr/share/nginx/html/
 COPY assets /usr/share/nginx/html/assets
+# Documentação pública da API, servida em /docs. Sem esta linha a pasta some da
+# imagem e a rota responde 404 — sem nenhum erro no build que denuncie isso.
+COPY docs /usr/share/nginx/html/docs
 
 EXPOSE 80
