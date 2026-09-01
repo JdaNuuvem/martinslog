@@ -1,117 +1,81 @@
-import type { EventoRastreio } from '@/lib/rastreio-schema'
+import type { EventoRastreio, FluxoPublico } from '@/lib/rastreio-schema'
 
 /**
- * Diagrama do caminho que um envio percorre, com a etapa atual destacada.
+ * Percurso do envio, desenhado como o fluxo que a conta montou.
  *
- * Mostra **etapas genéricas, nunca os eventos futuros deste envio**. A
- * distinção é o que mantém a página dentro da regra da spec (seção 7:
- * "eventos futuros nunca aparecem, nem esmaecidos"): dizer que todo envio
- * passa por "Saiu para entrega" é descrever o serviço; dizer que este envio
- * sai para entrega na terça é prometer uma data que a simulação ainda pode
- * mudar. Por isso nenhum nó pendente carrega data ou hora.
+ * Mostra os nós configurados pelo lojista, no mesmo formato do construtor —
+ * nós ligados por conectores curvos —, com o já percorrido em destaque e o
+ * atual marcado.
  *
- * As ramificações aparecem sempre, e não só quando acontecem, porque o
- * objetivo é o destinatário entender de antemão o que pode acontecer com a
- * encomenda dele — e reconhecer o estado quando acontecer.
+ * **Nenhuma data das etapas que ainda não aconteceram.** É a linha da seção 7
+ * da spec: dizer por onde a encomenda passa descreve o serviço; dizer quando
+ * ela passa promete uma data que a simulação ainda pode mudar. Por isso o
+ * componente recebe só a forma do percurso — código, título e posição —, e
+ * nunca os dias.
  */
 
-type EstadoEtapa = 'concluida' | 'atual' | 'pendente'
+const LARGURA = 190
+const ALTURA = 64
+const COLUNA = 250
+const LINHA = 110
 
-type Etapa = {
-  /** Códigos de evento que colocam o envio nesta etapa. */
-  codigos: string[]
-  titulo: string
-  /** Uma linha explicando o que a etapa significa para quem recebe. */
-  ajuda: string
-}
+type Estado = 'percorrido' | 'atual' | 'pendente'
 
-/** Trilho principal: o caminho que a maior parte dos envios percorre. */
-const CAMINHO_PRINCIPAL: Etapa[] = [
-  {
-    codigos: ['ETIQUETA_EMITIDA'],
-    titulo: 'Etiqueta emitida',
-    ajuda: 'O remetente preparou o envio.',
-  },
-  {
-    codigos: ['POSTADO'],
-    titulo: 'Postado',
-    ajuda: 'A encomenda entrou na rede de transporte.',
-  },
-  {
-    codigos: ['TRANSFERENCIA', 'AGUARDANDO_TRATAMENTO'],
-    titulo: 'Em trânsito',
-    ajuda: 'Passando pelas unidades até a cidade de destino.',
-  },
-  {
-    codigos: ['SAIU_PARA_ENTREGA'],
-    titulo: 'Saiu para entrega',
-    ajuda: 'É preciso alguém no endereço para receber.',
-  },
-  {
-    codigos: ['ENTREGUE'],
-    titulo: 'Entregue',
-    ajuda: 'Fim do percurso.',
-  },
-]
-
-/** Desvios possíveis, com o ponto do trilho de onde saem. */
-const DESVIOS: (Etapa & { saiDe: string; consequencia: string })[] = [
-  {
-    saiDe: 'Saiu para entrega',
-    codigos: ['TENTATIVA_FRUSTRADA', 'AGUARDANDO_RETIRADA'],
-    titulo: 'Tentativa sem sucesso',
-    ajuda: 'Ninguém no endereço para receber.',
-    consequencia: 'Uma nova tentativa é feita.',
-  },
-  {
-    saiDe: 'Saiu para entrega',
-    codigos: ['DEVOLUCAO_INICIADA', 'DEVOLVIDO'],
-    titulo: 'Devolvido ao remetente',
-    ajuda: 'O prazo de retirada terminou sem a encomenda ser recebida.',
-    consequencia: 'A encomenda volta para quem enviou.',
-  },
-  {
-    saiDe: 'Em trânsito',
-    codigos: ['EXTRAVIADO'],
-    titulo: 'Extraviado',
-    ajuda: 'A encomenda não foi localizada no fluxo de transporte.',
-    consequencia: 'O valor pago é devolvido ao remetente.',
-  },
-]
-
-function estadoDaEtapa(
-  etapa: Etapa,
-  codigosOcorridos: Set<string>,
-  indiceAtual: number,
-  indiceEtapa: number,
-): EstadoEtapa {
-  if (etapa.codigos.some((codigo) => codigosOcorridos.has(codigo))) {
-    return indiceEtapa === indiceAtual ? 'atual' : 'concluida'
+function posicao(no: FluxoPublico['nos'][number], indice: number) {
+  // Sem posição salva, cai num arranjo em escada. Vale para a conta que
+  // nunca arrastou nada no canvas.
+  return {
+    x: no.x ?? 40 + (indice % 4) * COLUNA,
+    y: no.y ?? 40 + Math.floor(indice / 4) * LINHA,
   }
-  return indiceEtapa < indiceAtual ? 'concluida' : 'pendente'
 }
 
-const CLASSES_NO: Record<EstadoEtapa, string> = {
-  concluida: 'border-brand bg-brand-bg text-brand-texto',
-  atual: 'border-brand bg-brand text-white shadow-md',
-  pendente: 'border-borda-campo bg-superficie-bloco text-texto-secundario',
-}
+export function FluxoRastreio({
+  fluxo,
+  eventos,
+}: {
+  fluxo: FluxoPublico
+  eventos: EventoRastreio[]
+}) {
+  if (fluxo.nos.length === 0) return null
 
-export function FluxoRastreio({ eventos }: { eventos: EventoRastreio[] }) {
-  const codigosOcorridos = new Set(eventos.map((evento) => evento.codigo))
+  const ocorridos = new Set(eventos.map((evento) => evento.codigo))
+  const codigoAtual = eventos[0]?.codigo
 
-  // A etapa atual é a última do trilho que já teve algum evento. Um desvio
-  // não avança o trilho: quem está em "aguardando retirada" continua na
-  // etapa de entrega, que é onde a encomenda de fato está parada.
-  const indiceAtual = CAMINHO_PRINCIPAL.reduce(
-    (ultimo, etapa, indice) =>
-      etapa.codigos.some((codigo) => codigosOcorridos.has(codigo)) ? indice : ultimo,
-    0,
+  // O último nó já percorrido é o "atual". Percorrer a lista até ele evita
+  // marcar como atual um nó que aparece duas vezes no percurso.
+  const indiceAtual = fluxo.nos.reduce(
+    (ultimo, no, indice) => (ocorridos.has(no.codigo) ? indice : ultimo),
+    -1,
   )
 
-  const desviosOcorridos = DESVIOS.filter((desvio) =>
-    desvio.codigos.some((codigo) => codigosOcorridos.has(codigo)),
-  )
+  const posicoes = fluxo.nos.map(posicao)
+
+  // Sem ligações desenhadas, o percurso é a cadeia na ordem dos nós — a mesma
+  // regra que o construtor usa.
+  const indicePorId = new Map(fluxo.nos.map((no, i) => [no.id, i]))
+  const arestas =
+    fluxo.conexoes.length > 0
+      ? fluxo.conexoes
+          .map((c) => ({ de: indicePorId.get(c.de), para: indicePorId.get(c.para) }))
+          .filter((a): a is { de: number; para: number } => a.de !== undefined && a.para !== undefined)
+      : fluxo.nos.slice(0, -1).map((_, i) => ({ de: i, para: i + 1 }))
+
+  const largura = Math.max(...posicoes.map((p) => p.x + LARGURA + 40), 600)
+  const altura = Math.max(...posicoes.map((p) => p.y + ALTURA + 40), 200)
+
+  function estadoDoNo(indice: number): Estado {
+    const no = fluxo.nos[indice]!
+    if (indice === indiceAtual) return 'atual'
+    if (no.codigo === codigoAtual) return 'atual'
+    return indice < indiceAtual || ocorridos.has(no.codigo) ? 'percorrido' : 'pendente'
+  }
+
+  const classes: Record<Estado, string> = {
+    percorrido: 'border-brand bg-brand-bg text-brand-texto',
+    atual: 'border-brand bg-brand text-white shadow-md',
+    pendente: 'border-borda-campo bg-superficie-bloco text-texto-secundario',
+  }
 
   return (
     <section
@@ -121,76 +85,67 @@ export function FluxoRastreio({ eventos }: { eventos: EventoRastreio[] }) {
       <div>
         <h2 className="text-lg font-bold text-texto-principal">Caminho do envio</h2>
         <p className="text-sm text-texto-secundario">
-          As etapas pelas quais uma encomenda passa. Não há previsão de data para as que ainda
+          As etapas pelas quais esta encomenda passa. Não há previsão de data para as que ainda
           não aconteceram.
         </p>
       </div>
 
-      {/* Rola na horizontal em telas estreitas em vez de espremer os nós. */}
       <div className="overflow-x-auto pb-2">
-        <ol className="flex min-w-max items-stretch gap-2">
-          {CAMINHO_PRINCIPAL.map((etapa, indice) => {
-            const estado = estadoDaEtapa(etapa, codigosOcorridos, indiceAtual, indice)
-            return (
-              <li key={etapa.titulo} className="flex items-center gap-2">
-                <div
+        <div className="relative" style={{ width: largura, height: altura, minWidth: '100%' }}>
+          <svg
+            className="absolute inset-0"
+            width={largura}
+            height={altura}
+            aria-hidden="true"
+          >
+            {arestas.map(({ de, para }, indice) => {
+              const origem = posicoes[de]!
+              const destino = posicoes[para]!
+              const x1 = origem.x + LARGURA
+              const y1 = origem.y + ALTURA / 2
+              const x2 = destino.x
+              const y2 = destino.y + ALTURA / 2
+              const meio = (x1 + x2) / 2
+              const percorrida = estadoDoNo(para) !== 'pendente'
+              return (
+                <path
+                  key={indice}
+                  d={`M ${x1} ${y1} C ${meio} ${y1}, ${meio} ${y2}, ${x2} ${y2}`}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  className={percorrida ? 'text-brand' : 'text-borda-campo'}
+                />
+              )
+            })}
+          </svg>
+
+          <ol className="contents">
+            {fluxo.nos.map((no, indice) => {
+              const pos = posicoes[indice]!
+              const estado = estadoDoNo(indice)
+              return (
+                <li
+                  key={`${no.id}-${indice}`}
                   aria-current={estado === 'atual' ? 'step' : undefined}
-                  className={`flex w-40 flex-col gap-1 rounded-lg border-2 p-3 ${CLASSES_NO[estado]}`}
+                  style={{ left: pos.x, top: pos.y, width: LARGURA }}
+                  className={`absolute flex flex-col justify-center gap-0.5 rounded-lg border-2 p-3 ${classes[estado]}`}
                 >
-                  <span className="text-sm font-bold">{etapa.titulo}</span>
-                  <span
-                    className={`text-xs ${estado === 'atual' ? 'text-white/90' : 'text-texto-secundario'}`}
-                  >
-                    {etapa.ajuda}
-                  </span>
+                  <span className="line-clamp-2 text-sm font-bold">{no.titulo}</span>
                   {estado === 'atual' ? (
-                    <span className="mt-1 text-xs font-medium uppercase tracking-wide">
+                    <span className="text-xs font-medium uppercase tracking-wide">
                       Etapa atual
                     </span>
-                  ) : null}
-                </div>
-                {indice < CAMINHO_PRINCIPAL.length - 1 ? (
-                  <span
-                    aria-hidden="true"
-                    className={`h-0.5 w-6 ${indice < indiceAtual ? 'bg-brand' : 'bg-borda-campo'}`}
-                  />
-                ) : null}
-              </li>
-            )
-          })}
-        </ol>
-      </div>
-
-      <div className="flex flex-col gap-2 border-t border-borda-campo pt-4">
-        <h3 className="text-sm font-bold text-texto-principal">Se algo sair do previsto</h3>
-        <ul className="flex flex-col gap-2">
-          {DESVIOS.map((desvio) => {
-            const ocorreu = desviosOcorridos.includes(desvio)
-            return (
-              <li
-                key={desvio.titulo}
-                className={`flex flex-col gap-0.5 rounded-lg border p-3 ${
-                  ocorreu ? 'border-brand bg-brand-bg' : 'border-borda-campo'
-                }`}
-              >
-                <span className="text-sm font-medium text-texto-principal">
-                  {desvio.titulo}
-                  <span className="ml-2 text-xs font-normal text-texto-secundario">
-                    a partir de &quot;{desvio.saiDe}&quot;
-                  </span>
-                  {ocorreu ? (
-                    <span className="ml-2 rounded-pilula bg-brand px-2 py-0.5 text-xs font-medium text-white">
-                      Aconteceu neste envio
-                    </span>
-                  ) : null}
-                </span>
-                <span className="text-xs text-texto-secundario">
-                  {desvio.ajuda} {desvio.consequencia}
-                </span>
-              </li>
-            )
-          })}
-        </ul>
+                  ) : estado === 'percorrido' ? (
+                    <span className="text-xs">Concluída</span>
+                  ) : (
+                    <span className="text-xs">Ainda não aconteceu</span>
+                  )}
+                </li>
+              )
+            })}
+          </ol>
+        </div>
       </div>
     </section>
   )

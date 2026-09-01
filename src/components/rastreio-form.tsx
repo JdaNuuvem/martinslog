@@ -248,7 +248,7 @@ export function RastreioForm({ codigoInicial = '' }: { codigoInicial?: string })
               percurso serve para situar quem quer saber o que vem pela
               frente. Mostra etapas genéricas, nunca os eventos futuros deste
               envio — ver o comentário em `FluxoRastreio`. */}
-          <FluxoRastreio eventos={rastreio.eventos} />
+          <FluxoRastreio fluxo={rastreio.fluxo} eventos={rastreio.eventos} />
         </>
       ) : null}
     </div>

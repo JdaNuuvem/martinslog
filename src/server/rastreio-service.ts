@@ -4,6 +4,8 @@ import { statusDoEvento } from '@/domain/simulacao/roteiro'
 import type { StatusShipment } from '@/domain/shipment/estados'
 import type { RastreioResposta } from '@/lib/rastreio-schema'
 import { sincronizarEnvio } from './sincronizar-envio-service'
+import { obterTemplate } from './template-rastreio-service'
+import { templatePadrao } from '@/domain/rastreio/template-rastreio'
 
 /**
  * Consulta pública de um envio pelo código de rastreio
@@ -73,6 +75,7 @@ export async function rastrearEnvio(
   const envio = await prisma.shipment.findFirst({
     where: { codigoRastreio },
     include: {
+      user: { select: { id: true } },
       service: { select: { nome: true, prazoBase: true } },
       trackingEvents: {
         where: { ocorridoEm: { lte: agora } },
@@ -86,8 +89,10 @@ export async function rastrearEnvio(
   }
 
   const ultimoVisivel = envio.trackingEvents[0]
+  const fluxo = await montarFluxoPublico(envio.userId)
 
   return {
+    fluxo,
     codigoRastreio: envio.codigoRastreio,
     // O status persistido pode estar atrás do relógio até a próxima
     // sincronização; o último evento visível é a fonte da verdade do que o
@@ -107,5 +112,39 @@ export async function rastrearEnvio(
       uf: evento.uf,
       ocorridoEm: evento.ocorridoEm.toISOString(),
     })),
+  }
+}
+
+/**
+ * Percurso configurado pela conta, para o rastreio público desenhar o fluxo.
+ *
+ * Devolve **apenas a forma do percurso**: código, título e posição no canvas.
+ * Nunca o dia de cada etapa. É a mesma linha que a seção 7 da spec traça —
+ * dizer por onde a encomenda passa descreve o serviço; dizer quando ela
+ * passa é prometer uma data que a simulação ainda pode mudar.
+ *
+ * Sem template configurado, devolve o percurso padrão, que é o que os envios
+ * dessa conta de fato seguem.
+ */
+export async function montarFluxoPublico(userId: string): Promise<{
+  nos: { id: string; codigo: string; titulo: string; x: number | null; y: number | null }[]
+  conexoes: { de: string; para: string }[]
+}> {
+  const template = await obterTemplate(userId)
+
+  const passos = template?.ativo ? template.passos : templatePadrao()
+  const conexoes = template?.ativo ? template.conexoes : []
+
+  return {
+    nos: passos.map((passo) => ({
+      // O id de instância também vai, para as conexões terem a que se
+      // referir — ele não diz nada sobre o envio, é só uma chave de desenho.
+      id: passo.id ?? passo.codigo,
+      codigo: passo.codigo,
+      titulo: passo.titulo,
+      x: passo.x ?? null,
+      y: passo.y ?? null,
+    })),
+    conexoes,
   }
 }
