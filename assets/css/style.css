@@ -10,6 +10,11 @@
   --navy-800:#152A55;
   --navy-700:#1D3A72;
   --red-600:#D81E28;
+  /* Hover do botão primário — branco em cima dá 6,90:1. Estava sendo usado
+     em `.botao--primario:hover` sem existir aqui: variável indefinida invalida
+     a declaração inteira, o navegador a descarta em silêncio e o hover nunca
+     escurecia. O sintoma de um token que falta é nada acontecer. */
+  --red-700:#B3151E;
   --red-500:#E8323C;
   --red-050:#FDECEC;
   --white:#FFFFFF;
