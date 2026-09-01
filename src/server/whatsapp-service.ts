@@ -4,6 +4,7 @@ import { cifrar, decifrar, dicaDaChave } from '@/infra/crypto/segredo'
 import { enviarTemplate, normalizarTelefone, verificarCredencial } from '@/infra/whatsapp/cloud-api'
 import { montarParametros } from '@/domain/mensagem/eventos'
 import { acharPerfil } from '@/server/perfil-service'
+import { cancelarCobrancasDePedidoResolvido } from '@/server/recuperacao-service'
 
 /**
  * WhatsApp por perfil: guardar a credencial, provar que ela funciona e
@@ -225,6 +226,15 @@ export type ResultadoDisparo = {
 export async function dispararPendentes(limite = LOTE_PADRAO): Promise<ResultadoDisparo> {
   const comecou = Date.now()
   const agora = new Date()
+
+  /*
+    Antes de qualquer envio, tira da fila a cobrança de pedido que já foi pago
+    ou cancelado. Ler os valores frescos na hora do envio — o que `valoresDe`
+    faz — não bastava: lia o pedido pago e mandava "conclua sua compra" mesmo
+    assim, que é exatamente o que aquele comentário dizia ser pior do que não
+    mandar nada.
+  */
+  await cancelarCobrancasDePedidoResolvido()
 
   const pendentes = await prisma.mensagemEnvio.findMany({
     where: {

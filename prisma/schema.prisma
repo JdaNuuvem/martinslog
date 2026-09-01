@@ -876,9 +876,30 @@ model MensagemEnvio {
   template MensagemTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   pedido   Pedido?           @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
 
+  /// Qual regra da régua de recuperação gerou esta mensagem.
+  ///
+  /// Entra na chave única porque várias cobranças para o MESMO pedido são o
+  /// desenho da régua — 15 minutos, 2 horas, 24 horas. Sem ela, a segunda
+  /// seria barrada como se fosse repetição da primeira, e a régua inteira
+  /// mandaria uma mensagem só.
+  regraId            String?
+
+  /// A trava contra mandar a mesma mensagem duas vezes.
+  ///
   /// O canal entra na chave: sem ele, o SMS enviado bloquearia o WhatsApp do
   /// mesmo evento, em silêncio, como se fosse repetição.
-  @@unique([perfilId, evento, canal, pedidoId, shipmentId])
+  ///
+  /// CUIDADO — ISTO AQUI NÃO É A VERDADE INTEIRA. No banco, o índice é criado
+  /// com `NULLS NOT DISTINCT`, cláusula que o Prisma não sabe escrever. Sem
+  /// ela, o Postgres trata cada NULL como valor único e deixa passar duas
+  /// linhas idênticas — e como toda mensagem de envio tem `pedidoId` nulo, a
+  /// trava não valia justamente para o caso que acontece sempre.
+  ///
+  /// Quem regenerar migration a partir deste schema precisa conferir se a
+  /// cláusula sobreviveu: ver
+  /// `20260903090000_trava_duplicata_com_nulos/migration.sql`.
+  @@unique([perfilId, evento, canal, pedidoId, shipmentId, regraId], map: "mensagem_envios_dedupe_key")
+  @@index([regraId])
   @@index([proximaTentativaEm, status])
   @@index([perfilId, criadoEm])
   @@map("mensagem_envios")
