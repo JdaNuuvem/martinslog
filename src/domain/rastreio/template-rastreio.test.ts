@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ValorInvalidoError } from '../errors'
+import { hubDaUf } from '../simulacao/corredor'
 import {
   PALETA,
   diasAcumulados,
@@ -298,5 +299,60 @@ describe('dias entre etapas', () => {
     const passos = [passo('POSTADO', 1), passo('ENTREGUE', 2)]
 
     expect(normalizarDias(normalizarDias(passos))).toEqual(normalizarDias(passos))
+  })
+})
+
+describe('percurso geográfico do roteiro', () => {
+  const fluxo = [
+    passo('ETIQUETA_EMITIDA', 0),
+    passo('POSTADO', 1),
+    passo('TRANSFERENCIA', 1),
+    passo('TRANSFERENCIA_FILIAL', 1),
+    passo('TRANSFERENCIA', 1),
+    passo('SAIU_PARA_ENTREGA', 1),
+    passo('ENTREGUE', 1),
+  ]
+
+  const ceara = { cidade: 'Fortaleza', uf: 'CE' }
+  const gaucho = { cidade: 'Porto Alegre', uf: 'RS' }
+
+  it('põe as etapas de trânsito no meio do caminho, não na cidade de origem', () => {
+    const roteiro = gerarRoteiroDeTemplate(fluxo, ceara, gaucho)
+    const transito = roteiro.filter((e) => e.codigo.startsWith('TRANSFERENCIA'))
+
+    expect(transito.length).toBeGreaterThan(0)
+    expect(transito.every((e) => e.uf !== 'CE' && e.uf !== 'RS')).toBe(true)
+  })
+
+  it('avança na direção do destino, sem voltar para trás', () => {
+    const roteiro = gerarRoteiroDeTemplate(fluxo, ceara, gaucho)
+    const transito = roteiro.filter((e) => e.codigo.startsWith('TRANSFERENCIA'))
+
+    // Viagem para o sul: cada parada fica mais ao sul que a anterior.
+    const latitudes = transito.map((e) => hubDaUf(e.uf)!.lat)
+    expect(latitudes.every((lat, i) => i === 0 || lat <= latitudes[i - 1]!)).toBe(true)
+  })
+
+  it('começa na origem e termina no destino, com ou sem escalas', () => {
+    const roteiro = gerarRoteiroDeTemplate(fluxo, ceara, gaucho)
+
+    expect(roteiro[0]).toMatchObject({ cidade: 'Fortaleza', uf: 'CE' })
+    expect(roteiro[roteiro.length - 1]).toMatchObject({ cidade: 'Porto Alegre', uf: 'RS' })
+  })
+
+  it('em trecho curto não inventa escala: tudo acontece entre as duas cidades', () => {
+    const roteiro = gerarRoteiroDeTemplate(fluxo, { cidade: 'Santos', uf: 'SP' }, { cidade: 'Campinas', uf: 'SP' })
+
+    expect(roteiro.every((e) => e.uf === 'SP')).toBe(true)
+    expect(roteiro.every((e) => ['Santos', 'Campinas'].includes(e.cidade))).toBe(true)
+  })
+
+  it('cada trânsito anuncia para onde vai, sem repetir a mesma dupla', () => {
+    const roteiro = gerarRoteiroDeTemplate(fluxo, ceara, gaucho)
+    const duplas = roteiro
+      .filter((e) => e.unidadeDestino)
+      .map((e) => `${e.unidadeOrigem} -> ${e.unidadeDestino}`)
+
+    expect(new Set(duplas).size).toBe(duplas.length)
   })
 })

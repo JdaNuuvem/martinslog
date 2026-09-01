@@ -1,4 +1,6 @@
 import { ValorInvalidoError } from '../errors'
+import { escalasDaRota } from '../simulacao/corredor'
+import { unidadeTratamento } from '../simulacao/unidades'
 import type { StatusShipment } from '../shipment/estados'
 
 /**
@@ -454,9 +456,52 @@ export function gerarRoteiroDeTemplate(
     passo.codigo.startsWith('TENTATIVA_ENTREGA_'),
   )
 
+  /*
+    Os nós de deslocamento acontecem no meio do caminho, não na cidade de
+    quem enviou. Um envio do Ceará para o Rio Grande do Sul que "transfere"
+    duas vezes dentro de Fortaleza não convence ninguém que acompanha o
+    rastreio; passar por Recife e São Paulo, sim.
+
+    Só os de deslocamento: as etapas de preparo continuam na origem, e da
+    saída para entrega em diante tudo acontece na cidade de destino.
+  */
+  const indicesEmTransito = passos
+    .map((passo, indice) => ({ passo, indice }))
+    .filter(
+      ({ passo, indice }) =>
+        ehDeslocamento(passo.codigo) && (indiceEntrega < 0 || indice < indiceEntrega),
+    )
+    .map(({ indice }) => indice)
+
+  const escalas = escalasDaRota(origem, destino, indicesEmTransito.length)
+  const escalaPorIndice = new Map<number, { cidade: string; uf: string }>()
+
+  /*
+    Menos escalas que nós de trânsito é o caso comum — o percurso desenhado
+    costuma ter mais paradas do que a geografia justifica. As escalas ficam
+    com os últimos nós, e os primeiros seguem na origem: a encomenda demora a
+    sair da cidade e depois avança, que é a ordem natural.
+  */
+  const primeiroComEscala = indicesEmTransito.length - escalas.length
+  escalas.forEach((escala, i) => {
+    escalaPorIndice.set(indicesEmTransito[primeiroComEscala + i]!, escala)
+  })
+
   return passos.map((passo, indice) => {
     const noDestino = indiceEntrega >= 0 && indice >= indiceEntrega
-    const local = noDestino ? destino : origem
+    const local = noDestino ? destino : (escalaPorIndice.get(indice) ?? origem)
+
+    /*
+      De onde para onde, quando o nó é um deslocamento que de fato leva a
+      algum lugar novo. Num trecho curto, sem escala, os três nós de trânsito
+      diriam todos "de Santos para Campinas" — repetição que não informa
+      nada; ali só o último anuncia o destino.
+    */
+    const ehTransito = ehDeslocamento(passo.codigo)
+    const proximaParada =
+      ehTransito && !noDestino && (escalaPorIndice.has(indice) || ehUltimoTransito(indice))
+        ? proximoLocal(indice)
+        : null
 
     return {
       sequencia: indice + 1,
@@ -464,12 +509,31 @@ export function gerarRoteiroDeTemplate(
       codigo: passo.codigo,
       titulo: passo.titulo,
       descricao: passo.descricao,
-      unidadeOrigem: null,
-      unidadeDestino: null,
+      unidadeOrigem: ehTransito ? unidadeTratamento(local) : null,
+      unidadeDestino: proximaParada ? unidadeTratamento(proximaParada) : null,
       cidade: local.cidade,
       uf: local.uf,
     }
   })
+
+  /** Se é o último nó de deslocamento antes da entrega. */
+  function ehUltimoTransito(indice: number): boolean {
+    return indicesEmTransito[indicesEmTransito.length - 1] === indice
+  }
+
+  /** Onde a encomenda estará depois deste nó: a próxima escala, ou o destino. */
+  function proximoLocal(indice: number): { cidade: string; uf: string } {
+    for (let i = indice + 1; i < passos.length; i += 1) {
+      const escala = escalaPorIndice.get(i)
+      if (escala) return escala
+    }
+    return destino
+  }
+}
+
+/** Nós que representam a encomenda andando, e não parada em algum lugar. */
+function ehDeslocamento(codigo: string): boolean {
+  return codigo === 'TRANSFERENCIA' || codigo === 'TRANSFERENCIA_FILIAL'
 }
 
 /** Ligação entre dois nós, pelos ids das instâncias. */

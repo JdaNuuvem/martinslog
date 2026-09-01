@@ -14,6 +14,7 @@ import {
   unidadeDistribuicao,
   unidadeTratamento,
 } from './unidades'
+import { escalasDaRota } from './corredor'
 
 const MINUTOS_POR_DIA = 1440
 
@@ -212,15 +213,34 @@ function espinha(entrada: EntradaRoteiro): Etapa[] {
     return inicio
   }
 
+  /*
+    Entre a origem e o destino existe o país inteiro. Uma transferência única
+    de Fortaleza para Porto Alegre descreve um teletransporte; as escalas
+    fazem a encomenda percorrer o caminho, parando em cidades que ficam
+    mesmo entre as duas pontas.
+
+    Duas escalas no máximo: o roteiro automático é a espinha curta, e quem
+    quiser um percurso detalhado monta o próprio fluxo. Trecho curto não
+    ganha nenhuma, e aí este bloco devolve a transferência única de antes.
+  */
+  const escalas = escalasDaRota(origem, destino, 2)
+  const paradas = [...escalas, destino]
+
+  // As transferências dividem igualmente o trecho entre 0.4 e 0.7, que é a
+  // janela que a etapa única ocupava.
+  const PRIMEIRA = 0.4
+  const ULTIMA = 0.7
+  const passo = paradas.length > 1 ? (ULTIMA - PRIMEIRA) / (paradas.length - 1) : 0
+
   return [
     ...inicio,
-    {
-      fracao: 0.55,
+    ...paradas.map((parada, indice): Etapa => ({
+      fracao: paradas.length > 1 ? PRIMEIRA + indice * passo : 0.55,
       codigo: 'TRANSFERENCIA',
-      unidadeOrigem: unidadeTratamento(origem),
-      unidadeDestino: unidadeTratamento(destino),
-      local: destino,
-    },
+      unidadeOrigem: unidadeTratamento(indice === 0 ? origem : paradas[indice - 1]!),
+      unidadeDestino: unidadeTratamento(parada),
+      local: parada,
+    })),
   ]
 }
 

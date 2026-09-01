@@ -209,3 +209,59 @@ describe('calcularOcorridoEm', () => {
     expect(() => calcularOcorridoEm(inicio, 60, -3)).toThrow()
   })
 })
+
+describe('escalas no caminho', () => {
+  const ceara = { cidade: 'Fortaleza', uf: 'CE' }
+  const gaucho = { cidade: 'Porto Alegre', uf: 'RS' }
+
+  it('atravessa o país parando em cidades que ficam entre a origem e o destino', () => {
+    const roteiro = gerarRoteiro({
+      cenario: 'ENTREGA_NORMAL',
+      prazoDias: 5,
+      origem: ceara,
+      destino: gaucho,
+    })
+
+    const cidadesDoMeio = roteiro
+      .filter((e) => e.codigo === 'TRANSFERENCIA')
+      .map((e) => `${e.cidade}/${e.uf}`)
+      .filter((local) => local !== 'Fortaleza/CE' && local !== 'Porto Alegre/RS')
+
+    expect(cidadesDoMeio.length).toBeGreaterThan(0)
+    expect(cidadesDoMeio).not.toContain('Manaus/AM')
+  })
+
+  it('as transferências acontecem em ordem crescente de tempo', () => {
+    const roteiro = gerarRoteiro({
+      cenario: 'ENTREGA_NORMAL',
+      prazoDias: 5,
+      origem: ceara,
+      destino: gaucho,
+    })
+
+    const offsets = roteiro.map((e) => e.offsetMinutos)
+    expect(offsets.every((o, i) => i === 0 || o >= offsets[i - 1]!)).toBe(true)
+  })
+
+  it('trecho curto continua com a transferência única de sempre', () => {
+    const roteiro = gerarRoteiro({
+      cenario: 'ENTREGA_NORMAL',
+      prazoDias: 2,
+      origem: { cidade: 'Santos', uf: 'SP' },
+      destino: { cidade: 'Campinas', uf: 'SP' },
+    })
+
+    expect(roteiro.every((e) => e.uf === 'SP')).toBe(true)
+  })
+
+  it('mesma cidade não ganha escala nenhuma', () => {
+    const roteiro = gerarRoteiro({
+      cenario: 'ENTREGA_NORMAL',
+      prazoDias: 1,
+      origem: { cidade: 'Campinas', uf: 'SP' },
+      destino: { cidade: 'Campinas', uf: 'SP' },
+    })
+
+    expect(roteiro.every((e) => e.cidade === 'Campinas')).toBe(true)
+  })
+})
