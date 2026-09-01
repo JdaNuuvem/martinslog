@@ -77,7 +77,9 @@ export function ConstrutorTemplateRastreio() {
       // personalizado quando a conta troca de modo, e um nó sem id não pode
       // ser ligado a outro.
       setPadraoDoFluxo(corpo.padrao.map((passo, i) => ({ ...passo, id: passo.id ?? `padrao-${i}` })))
-      setUsaTemplate(Boolean(corpo.template))
+      // Template salvo mas desligado é caminho padrão para todos os efeitos:
+      // é o roteiro automático que sai nas etiquetas.
+      setUsaTemplate(Boolean(corpo.template?.ativo))
       // Templates montados antes da repetição não têm id; atribui na leitura
       // para que dois nós do mesmo tipo não se confundam ao editar.
       const comId = (corpo.template?.passos ?? corpo.padrao).map((passo, indice) => ({
@@ -266,18 +268,28 @@ export function ConstrutorTemplateRastreio() {
     setAviso('Textos salvos. Envios novos usam estes textos na timeline.')
   }
 
+  /*
+    Voltar ao padrão desliga o template em vez de apagá-lo. Apagar cobrava
+    caro por uma troca de ideia — o percurso inteiro tinha de ser redesenhado
+    para voltar —, e o desenho guardado não custa nada enquanto está
+    desligado. Enquanto ele estiver assim, a home lembra que existe um
+    percurso pronto fora de uso (`ModalAtivarFluxo`).
+  */
   async function usarCaminhoPadrao() {
     setErro(null)
     setAviso(null)
-    const resposta = await fetch('/api/rastreio-template', { method: 'DELETE' })
-    if (!resposta.ok && resposta.status !== 204) {
+    const resposta = await fetch('/api/rastreio-template/ativar', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ativo: false }),
+    })
+    // 422 é "não havia template salvo" — o objetivo já estava cumprido.
+    if (!resposta.ok && resposta.status !== 422) {
       setErro('Não foi possível voltar ao caminho padrão.')
       return
     }
     setUsaTemplate(false)
-    setPassos(padraoDoFluxo.map((passo, i) => ({ ...passo, id: passo.id ?? `padrao-${i}` })))
-    setConexoes([])
-    setAviso('Voltou ao caminho padrão. Envios novos seguem a simulação por cenário.')
+    setAviso('Voltou ao caminho padrão. Seu fluxo personalizado fica guardado, desligado.')
   }
 
   const nosVisiveis = usaTemplate ? passos : padraoDoFluxo

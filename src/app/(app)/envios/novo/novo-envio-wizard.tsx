@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { EnderecoResposta } from '@/lib/endereco-schema'
 import { SeletorEndereco } from './endereco-seletor'
-import { CotacaoStep } from './cotacao-step'
+import { CotacaoStep, type MedidasCotacao, type OpcaoCotacaoResposta } from './cotacao-step'
+import { ResumoCotacao } from './resumo-cotacao'
 import { novaLinhaProduto, ProdutosStep, produtosParaEnvio, type ProdutoLinha } from './produtos-step'
 import { RevisaoStep } from './revisao-step'
 import { classeBotaoPrimario, classeBotaoSecundario } from './wizard-ui'
@@ -41,6 +42,57 @@ export function NovoEnvioWizard({
 
   const [quoteId, setQuoteId] = useState<string | null>(quoteIdInicial ?? null)
   const [servicoId, setServicoId] = useState<string | null>(servicoIdInicial ?? null)
+
+  /*
+    O que foi cotado na etapa 1 continua visível nas etapas seguintes: as
+    medidas e o serviço escolhido viram um resumo no topo, e os CEPs guiam a
+    escolha dos endereços. Quando o wizard já nasce com `quoteIdInicial`
+    (visitante que cotou na home), nada disso existe aqui — o resumo
+    simplesmente não aparece.
+  */
+  const [medidas, setMedidas] = useState<MedidasCotacao | null>(null)
+  const [opcao, setOpcao] = useState<OpcaoCotacaoResposta | null>(null)
+
+  /*
+    Quem chega com `quoteId` na URL pulou a etapa 1 aqui dentro — cotou na
+    home. A cotação é relida do servidor para que as etapas de endereço
+    saibam quais CEPs foram cotados e o resumo apareça do mesmo jeito. Se a
+    releitura falhar (cotação expirada, de outra sessão), o wizard segue sem
+    resumo: quem manda no preço continua sendo a revisão.
+  */
+  useEffect(() => {
+    if (!quoteIdInicial) return
+
+    let cancelado = false
+    void (async () => {
+      try {
+        const resposta = await fetch(`/api/cotacao?quoteId=${encodeURIComponent(quoteIdInicial)}`)
+        if (!resposta.ok || cancelado) return
+        const { cotacao } = (await resposta.json()) as {
+          cotacao: MedidasCotacao & { opcoes: OpcaoCotacaoResposta[] }
+        }
+        if (cancelado) return
+
+        setMedidas({
+          cepOrigem: cotacao.cepOrigem,
+          cepDestino: cotacao.cepDestino,
+          pesoG: cotacao.pesoG,
+          alturaCm: cotacao.alturaCm,
+          larguraCm: cotacao.larguraCm,
+          comprimentoCm: cotacao.comprimentoCm,
+          formato: cotacao.formato,
+        })
+        const escolhida = cotacao.opcoes.find((o) => o.servicoId === servicoIdInicial)
+        if (escolhida) setOpcao(escolhida)
+      } catch {
+        // Rede fora: sem resumo, o wizard ainda funciona.
+      }
+    })()
+
+    return () => {
+      cancelado = true
+    }
+  }, [quoteIdInicial, servicoIdInicial])
 
   const [remetente, setRemetente] = useState<EnderecoResposta | null>(null)
   const [destinatario, setDestinatario] = useState<EnderecoResposta | null>(null)
@@ -94,14 +146,25 @@ export function NovoEnvioWizard({
           quoteId={quoteId}
           servicoId={servicoId}
           onQuoteId={setQuoteId}
-          onServicoId={setServicoId}
+          onMedidas={setMedidas}
+          onOpcao={(escolhida) => {
+            setOpcao(escolhida)
+            setServicoId(escolhida.servicoId)
+          }}
           onContinuar={() => setEtapa('remetente')}
         />
       )}
 
       {etapa === 'remetente' && (
         <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
-          <SeletorEndereco tipo="REMETENTE" titulo="Remetente" selecionado={remetente} onSelecionar={setRemetente} />
+          <ResumoCotacao medidas={medidas} opcao={opcao} destaque="origem" />
+          <SeletorEndereco
+            tipo="REMETENTE"
+            titulo="Remetente"
+            selecionado={remetente}
+            onSelecionar={setRemetente}
+            cepCotado={medidas?.cepOrigem}
+          />
           <div className="flex justify-between">
             <button type="button" onClick={() => setEtapa('cotacao')} className={classeBotaoSecundario}>
               Voltar
@@ -120,11 +183,13 @@ export function NovoEnvioWizard({
 
       {etapa === 'destinatario' && (
         <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
+          <ResumoCotacao medidas={medidas} opcao={opcao} destaque="destino" />
           <SeletorEndereco
             tipo="DESTINATARIO"
             titulo="Destinatário"
             selecionado={destinatario}
             onSelecionar={setDestinatario}
+            cepCotado={medidas?.cepDestino}
           />
           <div className="flex justify-between">
             <button type="button" onClick={() => setEtapa('remetente')} className={classeBotaoSecundario}>

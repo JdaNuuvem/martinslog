@@ -4,7 +4,7 @@ import { prisma } from '@/infra/db/client'
 import { criarSessao, SESSION_COOKIE } from '@/server/auth/sessao'
 import { criarUsuarioComSaldo } from '@/test/factories'
 import { POST as CRIAR_ENVIO } from '@/app/api/envios/route'
-import { POST } from './route'
+import { GET, POST } from './route'
 
 const usuariosCriados: string[] = []
 
@@ -187,5 +187,51 @@ describe('POST /api/cotacao — cliente autenticado', () => {
     )
 
     expect(envioResponse.status).toBe(404)
+  })
+})
+
+describe('GET /api/cotacao', () => {
+  function criarRequestGet(quoteId: string | null, sessionId?: string | null): NextRequest {
+    const url = quoteId
+      ? `http://localhost/api/cotacao?quoteId=${encodeURIComponent(quoteId)}`
+      : 'http://localhost/api/cotacao'
+    const headers = new Headers()
+    if (sessionId) headers.set('cookie', `${SESSION_COOKIE}=${sessionId}`)
+    return new NextRequest(url, { method: 'GET', headers })
+  }
+
+  it('devolve rota, medidas e opções da própria cotação', async () => {
+    const user = await criarUsuarioDeTeste(50_000)
+    const sessionId = await criarSessionId(user.id)
+
+    const criada = await POST(criarRequest(corpoValido, sessionId))
+    const { quoteId } = await criada.json()
+
+    const response = await GET(criarRequestGet(quoteId, sessionId))
+    expect(response.status).toBe(200)
+
+    const { cotacao } = await response.json()
+    expect(cotacao.cepOrigem).toBe(corpoValido.cepOrigem)
+    expect(cotacao.cepDestino).toBe(corpoValido.cepDestino)
+    expect(cotacao.pesoG).toBe(corpoValido.pesoG)
+    expect(cotacao.alturaCm).toBe(corpoValido.alturaCm)
+    expect(cotacao.opcoes.length).toBeGreaterThan(0)
+  })
+
+  it('não entrega a cotação de outro usuário — responde como inexistente', async () => {
+    const dono = await criarUsuarioDeTeste(50_000)
+    const bisbilhoteiro = await criarUsuarioDeTeste(50_000)
+
+    const criada = await POST(criarRequest(corpoValido, await criarSessionId(dono.id)))
+    const { quoteId } = await criada.json()
+
+    const response = await GET(criarRequestGet(quoteId, await criarSessionId(bisbilhoteiro.id)))
+    expect(response.status).toBe(404)
+    expect((await response.json()).codigo).toBe('COTACAO_NAO_ENCONTRADA')
+  })
+
+  it('exige o quoteId', async () => {
+    const response = await GET(criarRequestGet(null))
+    expect(response.status).toBe(400)
   })
 })

@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { FormEvent, useId, useState } from 'react'
+import { FormEvent, useEffect, useId, useState } from 'react'
 import { enderecoRequestSchema, type EnderecoRequest, type EnderecoResposta } from '@/lib/endereco-schema'
 
 type Tipo = 'REMETENTE' | 'DESTINATARIO'
@@ -21,10 +21,10 @@ type EstadoFormulario = {
   telefone: string
 }
 
-function estadoInicial(endereco?: EnderecoResposta): EstadoFormulario {
+function estadoInicial(endereco?: EnderecoResposta, cepInicial?: string): EstadoFormulario {
   return {
     apelido: endereco?.apelido ?? '',
-    cep: endereco?.cep ?? '',
+    cep: endereco?.cep ?? cepInicial ?? '',
     logradouro: endereco?.logradouro ?? '',
     numero: endereco?.numero ?? '',
     complemento: endereco?.complemento ?? '',
@@ -47,18 +47,37 @@ const classeCampo =
 type EnderecoFormProps = {
   tipo: Tipo
   enderecoExistente?: EnderecoResposta
+  /**
+   * CEP com que o formulário começa quando é um cadastro novo (ex.: o CEP
+   * que o usuário acabou de cotar). Ignorado ao editar um endereço, que já
+   * tem o próprio CEP.
+   */
+  cepInicial?: string
   onSalvar: (endereco: EnderecoResposta) => void
   onCancelar: () => void
 }
 
-export function EnderecoForm({ tipo, enderecoExistente, onSalvar, onCancelar }: EnderecoFormProps) {
+export function EnderecoForm({ tipo, enderecoExistente, cepInicial, onSalvar, onCancelar }: EnderecoFormProps) {
   const idBase = useId()
-  const [form, setForm] = useState<EstadoFormulario>(estadoInicial(enderecoExistente))
+  const [form, setForm] = useState<EstadoFormulario>(estadoInicial(enderecoExistente, cepInicial))
   const [erros, setErros] = useState<ErrosCampo>({})
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   const [avisoCep, setAvisoCep] = useState<string | null>(null)
   const [buscandoCep, setBuscandoCep] = useState(false)
   const [salvando, setSalvando] = useState(false)
+
+  /*
+    Cadastro que já nasce com um CEP (ex.: o CEP que acabou de ser cotado)
+    busca o endereço sozinho: o usuário não digitou esse CEP aqui, então
+    esperar o `blur` do campo deixaria o formulário parado e vazio. Roda uma
+    vez, na montagem, e só para cadastro novo.
+  */
+  useEffect(() => {
+    if (!enderecoExistente && cepInicial) {
+      void buscarCep()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function atualizarCampo<K extends keyof EstadoFormulario>(campo: K, valor: EstadoFormulario[K]) {
     setForm((atual) => ({ ...atual, [campo]: valor }))

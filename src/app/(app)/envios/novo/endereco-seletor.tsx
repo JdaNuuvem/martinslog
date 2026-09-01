@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { EnderecoForm } from '@/components/endereco-form'
 import type { EnderecoResposta } from '@/lib/endereco-schema'
+import { formatarCep, mesmoCep } from './resumo-cotacao'
 import { classeBotaoSecundario } from './wizard-ui'
 
 /**
@@ -32,6 +33,14 @@ type SeletorEnderecoProps = {
   titulo: string
   selecionado: EnderecoResposta | null
   onSelecionar: (endereco: EnderecoResposta) => void
+  /**
+   * CEP que foi cotado para esta ponta da rota. Usado só como ajuda: o
+   * endereço salvo que bate com ele já vem escolhido, os que não batem
+   * ficam marcados, e o cadastro de um endereço novo começa com ele
+   * preenchido. Não bloqueia nada — quem quiser escolher outro CEP escolhe,
+   * e o preço da revisão continua vindo do servidor.
+   */
+  cepCotado?: string | null
 }
 
 /**
@@ -40,7 +49,7 @@ type SeletorEnderecoProps = {
  * persiste em `/api/enderecos` e segue o padrão de acessibilidade das
  * telas anteriores.
  */
-export function SeletorEndereco({ tipo, titulo, selecionado, onSelecionar }: SeletorEnderecoProps) {
+export function SeletorEndereco({ tipo, titulo, selecionado, onSelecionar, cepCotado }: SeletorEnderecoProps) {
   const [enderecos, setEnderecos] = useState<EnderecoResposta[] | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
@@ -56,7 +65,22 @@ export function SeletorEndereco({ tipo, titulo, selecionado, onSelecionar }: Sel
         return
       }
       const dados = (await resposta.json()) as { enderecos: EnderecoResposta[] }
-      setEnderecos(dados.enderecos.filter((e) => e.tipo === tipo))
+      const doTipo = dados.enderecos.filter((e) => e.tipo === tipo)
+      setEnderecos(doTipo)
+
+      // Já escolhe, sem pedir de novo, o endereço salvo que corresponde ao
+      // CEP cotado — é o que o usuário quase sempre quer depois de cotar.
+      if (!selecionado) {
+        const correspondente = doTipo.find((e) => mesmoCep(e.cep, cepCotado))
+        if (correspondente) {
+          onSelecionar(correspondente)
+        } else if (cepCotado) {
+          // Nenhum endereço salvo para o CEP cotado: já abre o cadastro com
+          // ele preenchido, e o formulário busca logradouro/bairro/cidade/UF
+          // sozinho. Sobra ao usuário o que só ele sabe — número e nome.
+          setMostrarFormulario(true)
+        }
+      }
     } catch {
       setErro('Não foi possível conectar ao servidor.')
     } finally {
@@ -101,13 +125,26 @@ export function SeletorEndereco({ tipo, titulo, selecionado, onSelecionar }: Sel
                 <span className="font-semibold text-texto-principal">
                   {endereco.apelido || endereco.nome || 'Endereço sem apelido'}
                 </span>
+                {mesmoCep(endereco.cep, cepCotado) && (
+                  <span className="rounded-pilula bg-brand-bg px-2 py-0.5 text-xs font-semibold text-brand">
+                    CEP cotado
+                  </span>
+                )}
               </span>
               <span className="pl-6 text-texto-secundario">
-                {endereco.logradouro}, {endereco.numero} — {endereco.bairro}, {endereco.cidade}/{endereco.uf}
+                {endereco.logradouro}, {endereco.numero} — {endereco.bairro}, {endereco.cidade}/{endereco.uf} ·{' '}
+                {formatarCep(endereco.cep)}
               </span>
             </label>
           ))}
         </div>
+      )}
+
+      {selecionado && cepCotado && !mesmoCep(selecionado.cep, cepCotado) && (
+        <p role="status" className="text-sm text-texto-secundario">
+          Este endereço usa o CEP {formatarCep(selecionado.cep)}, diferente do {formatarCep(cepCotado)} que foi
+          cotado. O preço pode mudar — a revisão recalcula com o servidor antes de você pagar.
+        </p>
       )}
 
       {enderecos && enderecos.length === 0 && !mostrarFormulario && (
@@ -122,6 +159,7 @@ export function SeletorEndereco({ tipo, titulo, selecionado, onSelecionar }: Sel
         <div className="rounded-lg border border-borda-campo p-4">
           <EnderecoForm
             tipo={tipo}
+            cepInicial={cepCotado ?? undefined}
             onCancelar={() => setMostrarFormulario(false)}
             onSalvar={(endereco) => {
               setMostrarFormulario(false)

@@ -1,12 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { DomainError } from '@/domain/errors'
-import { gerarCotacao } from '@/server/cotacao-service'
+import { gerarCotacao, obterCotacao } from '@/server/cotacao-service'
 import { cotacaoRequestSchema } from '@/lib/cotacao-schema'
 import { lerSessao } from '@/server/auth/sessao'
 
 const ANON_SESSION_COOKIE = 'anon_session_id'
 
 const schema = cotacaoRequestSchema
+
+/**
+ * Relê uma cotação já feita (`?quoteId=`), para o wizard de novo envio
+ * recuperar rota e medidas de quem cotou antes de entrar nele. Devolve só a
+ * cotação de quem a criou — ver `obterCotacao`.
+ */
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  const quoteId = request.nextUrl.searchParams.get('quoteId')
+  if (!quoteId) {
+    return NextResponse.json(
+      { codigo: 'CORPO_INVALIDO', mensagem: 'Informe o quoteId da cotação.' },
+      { status: 400 },
+    )
+  }
+
+  try {
+    const sessao = await lerSessao(request)
+    const cotacao = await obterCotacao(quoteId, {
+      userId: sessao?.userId ?? null,
+      anonSessionId: request.cookies.get(ANON_SESSION_COOKIE)?.value ?? null,
+    })
+    return NextResponse.json({ cotacao }, { status: 200 })
+  } catch (error) {
+    if (error instanceof DomainError) {
+      const status = error.codigo === 'COTACAO_NAO_ENCONTRADA' ? 404 : 410
+      return NextResponse.json({ codigo: error.codigo, mensagem: error.message }, { status })
+    }
+
+    console.error('Erro inesperado ao reler cotação', { cause: error })
+    return NextResponse.json(
+      { codigo: 'ERRO_INTERNO', mensagem: 'Erro inesperado ao consultar a cotação.' },
+      { status: 500 },
+    )
+  }
+}
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   let corpo: unknown
