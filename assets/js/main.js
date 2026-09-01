@@ -221,7 +221,41 @@
   /* Mapeia o texto de status vindo da API para etapa e cor do selo.
      Comparação sem acento e em minúsculas porque cada backend escreve
      de um jeito ("EM_TRANSITO", "Em Trânsito", "in_transit"). */
+  /**
+   * Vocabulário da plataforma da Martins Log — estados do envio e códigos de
+   * evento. Traduzido aqui porque a API devolve o token cru: sem esta tabela
+   * o cliente lia "GENERATED" no selo da própria encomenda.
+   *
+   * A busca por tabela vem antes das expressões regulares abaixo, que
+   * seguem valendo para qualquer outro backend.
+   */
+  var MAPA_STATUS = {
+    // Antes de a carga existir fisicamente.
+    PENDING:            { etapa: 0, badge: 'pendente', rotulo: 'Aguardando pagamento' },
+    RELEASED:           { etapa: 0, badge: 'pendente', rotulo: 'Aguardando postagem' },
+    GENERATED:          { etapa: 0, badge: 'pendente', rotulo: 'Aguardando postagem' },
+    ETIQUETA_EMITIDA:   { etapa: 0, badge: 'pendente', rotulo: 'Etiqueta emitida' },
+    // A partir daqui a encomenda está em movimento.
+    POSTED:             { etapa: 0, badge: 'transito', rotulo: 'Postado' },
+    POSTADO:            { etapa: 0, badge: 'transito', rotulo: 'Postado' },
+    TRANSFERENCIA:      { etapa: 1, badge: 'transito', rotulo: 'Em trânsito' },
+    AGUARDANDO_TRATAMENTO: { etapa: 1, badge: 'transito', rotulo: 'Em tratamento' },
+    SAIU_PARA_ENTREGA:  { etapa: 2, badge: 'rota', rotulo: 'Saiu para entrega' },
+    ENTREGUE:           { etapa: 3, badge: 'entregue', rotulo: 'Entregue' },
+    DELIVERED:          { etapa: 3, badge: 'entregue', rotulo: 'Entregue' },
+    // Desvios: a barra de progresso some e o aviso toma o lugar dela.
+    TENTATIVA_FRUSTRADA: { etapa: 2, badge: 'pendente', rotulo: 'Tentativa de entrega frustrada' },
+    AGUARDANDO_RETIRADA: { etapa: 2, badge: 'pendente', rotulo: 'Aguardando retirada' },
+    LOST:               { etapa: 2, badge: 'rota', rotulo: 'Extraviado' },
+    CANCELLED:          { etapa: 0, badge: 'pendente', rotulo: 'Cancelado' }
+  };
+
   function classificarStatus(texto) {
+    var bruto = String(texto || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    if (Object.prototype.hasOwnProperty.call(MAPA_STATUS, bruto)) {
+      return MAPA_STATUS[bruto];
+    }
+
     var s = String(texto || '')
       .normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]', 'g'), '')
       .toLowerCase().replace(/[_-]+/g, ' ').trim();
