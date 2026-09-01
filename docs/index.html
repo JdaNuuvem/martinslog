@@ -649,19 +649,30 @@ curl https://app.martinslog.net/api/v0/order/info/shp_abc \
               <td>Responde <strong>200</strong> e mostra erro</td>
               <td>Abre o rastreio</td>
             </tr>
-            <tr><td>Webhook</td><td>Sai com <code>"sandbox": true</code></td><td>Sem esse campo</td></tr>
+            <tr>
+              <td>Webhook</td>
+              <td><code>"sandbox": true</code> — <strong>só em <code>order.created</code> e <code>order.released</code></strong></td>
+              <td>Sem esse campo</td>
+            </tr>
             <tr><td>Campo <code>charged</code></td><td>Sempre <code>false</code></td><td><code>true</code> após o pagamento</td></tr>
           </tbody>
         </table>
       </div>
 
       <div class="aviso grave">
-        <span class="rotulo">Não trate teste como venda</span>
+        <span class="rotulo">Não confie só no campo sandbox do webhook</span>
         <p>
-          O <code>sandbox: true</code> do webhook existe para isso. Sem checá-lo, um
-          pedido de teste entra no seu sistema como venda real — e o código
-          <code>SANDBOX…</code> não abre na página pública, então o seu cliente
-          receberia um link morto.
+          Ele <strong>não vem em todos os eventos</strong>. Só <code>order.created</code> e
+          <code>order.released</code> são marcados. Um <code>order.generated</code>,
+          <code>order.posted</code> ou <code>order.delivered</code> de um envio de teste
+          chega <strong>idêntico</strong> a um real — e quem filtra teste por esse campo
+          registra a entrega de um pedido que nunca existiu.
+        </p>
+        <p>
+          Duas formas seguras: <strong>guarde o envio como teste</strong> quando o
+          <code>order.created</code> chegar marcado, ou consulte
+          <code>GET /api/v0/order/info/:id</code>, que traz <code>sandbox</code> sempre,
+          em qualquer estado.
         </p>
       </div>
     </section>
@@ -670,14 +681,20 @@ curl https://app.martinslog.net/api/v0/order/info/shp_abc \
     <section id="limites">
       <h2>Limite de requisições</h2>
       <p>
-        <strong>60 requisições por minuto, por token.</strong> A janela é deslizante
-        e a contagem é por token, não por IP — uma loja não derruba a cota de
-        outra que esteja atrás do mesmo servidor.
+        <strong>60 requisições por minuto, por token.</strong> A contagem é por token,
+        não por IP — uma loja não derruba a cota de outra que esteja atrás do mesmo
+        servidor.
+      </p>
+      <p>
+        A janela é <strong>fixa, não deslizante</strong>: ela abre na primeira
+        requisição e vale um minuto inteiro. Estourar no segundo 5 bloqueia os
+        <strong>55 segundos restantes</strong> — a cota não vai se liberando aos poucos.
+        Distribua as chamadas em vez de disparar tudo de uma vez.
       </p>
       <p>
         Estourando, a resposta é <span class="chip er">429 LIMITE_REQUISICOES_EXCEDIDO</span>
-        com o cabeçalho <code>Retry-After: 60</code> e o tempo em segundos na
-        mensagem. Respeite o cabeçalho em vez de repetir imediatamente.
+        com o cabeçalho <code>Retry-After: 60</code> e o tempo real que falta, em
+        segundos, na mensagem. Respeite o cabeçalho em vez de repetir imediatamente.
       </p>
       <p>
         Uma venda consome 3 ou 4 chamadas. O teto prático é de
@@ -830,7 +847,13 @@ curl https://app.martinslog.net/api/v0/order/info/shp_abc \
 
       <ul>
         <li><code>id</code> — no formato <code>quoteId:servicoId</code>. É o que vai no <code>service</code> do passo 2, inteiro e sem alterações.</li>
-        <li><code>delivery_time</code> — prazo em <strong>dias úteis</strong>, contado da postagem.</li>
+        <li>
+          <code>delivery_time</code> — prazo em <strong>dias corridos</strong>, e a contagem
+          começa na <strong>emissão da etiqueta</strong> (o evento
+          <code>order.generated</code>), não na postagem nem na compra. Sábado, domingo e
+          feriado contam. Se a sua loja anuncia o prazo em dias úteis, converta antes de
+          mostrar ao comprador — são números diferentes.
+        </li>
         <li>Serviços indisponíveis para a rota não aparecem. <strong>Lista vazia é resposta válida</strong> e significa "não atendemos esse trecho" — trate na sua tela, não como erro.</li>
       </ul>
     </section>
@@ -982,6 +1005,7 @@ curl https://app.martinslog.net/api/v0/order/info/shp_abc \
   <span class="k">"label_fee"</span>: <span class="s">"1.00"</span>,
   <span class="k">"charged"</span>: true,
   <span class="k">"sandbox"</span>: false,
+  <span class="k">"returned_at"</span>: null,               <span class="c">// preenchido = voltou ao remetente</span>
   <span class="k">"created_at"</span>: <span class="s">"2026-09-01T10:00:00.000Z"</span>
 }</pre>
 
@@ -1027,10 +1051,24 @@ curl https://app.martinslog.net/api/v0/order/info/shp_abc \
       <p>
         Cancelamento só é possível até <code>GENERATED</code>. Depois de
         <code>POSTED</code> a carga está na rua e não há mais o que cancelar.
-        <code>LOST</code> não tem webhook próprio — apareceria como
-        <code>order.cancelled</code>. Se o extravio importa para você, consulte o
-        status.
       </p>
+
+      <div class="aviso">
+        <span class="rotulo">Dois casos que o webhook não distingue</span>
+        <p>
+          <strong><code>LOST</code> não dispara evento nenhum.</strong> Extravio não é
+          cancelamento, e mandar <code>order.cancelled</code> descreveria errado o que
+          houve com a carga. Se o extravio importa para você, consulte o status.
+        </p>
+        <p>
+          <strong>Devolução ao remetente também chega como <code>order.delivered</code>.</strong>
+          A carga foi entregue — de volta a quem despachou. Pelo webhook os dois casos são
+          idênticos: confirme em <code>GET /api/v0/order/info/:id</code>, onde
+          <code>returned_at</code> preenchido significa que o pacote voltou. Sem essa
+          conferência, a loja marca como entregue ao comprador um pacote que está de volta
+          no estoque dela.
+        </p>
+      </div>
     </section>
 
     <!-- ============================================================ -->
@@ -1088,9 +1126,12 @@ curl https://app.martinslog.net/api/v0/order/info/shp_abc \
     <span class="k">"price"</span>: <span class="s">"12.30"</span>,                     <span class="c">// string, em reais</span>
     <span class="k">"created_at"</span>: <span class="s">"2026-09-01T10:00:00.000Z"</span>
   },
-  <span class="k">"sent_at"</span>: <span class="s">"2026-09-01T10:00:01.000Z"</span>,
-  <span class="k">"sandbox"</span>: true                          <span class="c">// só existe em sandbox</span>
-}</pre>
+  <span class="k">"sent_at"</span>: <span class="s">"2026-09-01T10:00:01.000Z"</span>
+}
+
+<span class="c">// `sandbox: true` entra no mesmo nível de `event` — mas SÓ em</span>
+<span class="c">// order.created e order.released. Este exemplo é order.generated,</span>
+<span class="c">// que nunca traz o campo, nem quando o envio é de teste.</span></pre>
 
       <h4>Entrega e retentativa</h4>
       <div class="rolagem">
