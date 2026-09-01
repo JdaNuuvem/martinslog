@@ -22,10 +22,31 @@ describe('cifrar e decifrar', () => {
   it('recusa valor adulterado em vez de devolver lixo', () => {
     const cifrado = cifrar('re_original')
     const partes = cifrado.split(':')
-    const conteudoTrocado = partes[3]!.replace(/^../, '00')
-    const adulterado = [partes[0], partes[1], partes[2], conteudoTrocado].join(':')
+
+    // Inverte os bits do primeiro byte em vez de trocá-lo por um valor fixo.
+    // Com um valor fixo, quando o byte já era aquele a "adulteração" não
+    // adulterava nada, o texto decifrava e o teste falhava sem regressão
+    // nenhuma — instabilidade de 1 em 256, que apareceu na prática.
+    const primeiroByte = Number.parseInt(partes[3]!.slice(0, 2), 16)
+    const invertido = (primeiroByte ^ 0xff).toString(16).padStart(2, '0')
+    const adulterado = [
+      partes[0],
+      partes[1],
+      partes[2],
+      `${invertido}${partes[3]!.slice(2)}`,
+    ].join(':')
 
     expect(() => decifrar(adulterado)).toThrow()
+  })
+
+  it('recusa tag de autenticação trocada', () => {
+    // O outro lado da mesma garantia: adulterar a tag, e não o conteúdo,
+    // também precisa falhar — senão o GCM estaria autenticando pela metade.
+    const partes = cifrar('re_original').split(':')
+    const tag = Number.parseInt(partes[2]!.slice(0, 2), 16)
+    const tagTrocada = ((tag ^ 0xff).toString(16).padStart(2, '0') + partes[2]!.slice(2))
+
+    expect(() => decifrar([partes[0], partes[1], tagTrocada, partes[3]].join(':'))).toThrow()
   })
 
   it('recusa formato inválido', () => {
