@@ -37,6 +37,9 @@ export default defineConfig({
       DATABASE_URL:
         process.env.DATABASE_URL_TEST ?? 'postgresql://frete:frete@localhost:5433/frete_test',
       SESSION_SECRET: 'x'.repeat(32),
+      // Chave mestra da cifra de segredos de terceiros. Valor só de teste;
+      // em produção vem do ambiente e não tem padrão nenhum.
+      SECRET_ENCRYPTION_KEY: 'y'.repeat(48),
       NODE_ENV: 'test',
     },
     coverage: {

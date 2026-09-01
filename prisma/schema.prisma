@@ -85,6 +85,8 @@ model User {
   statusRastreios  StatusRastreio[]
   rastreioTemplate RastreioTemplate?
   apiTokens        ApiToken[]
+  emailConfig      EmailConfig?
+  emailDeliveries  EmailDelivery[]
 
   @@map("users")
 }
@@ -487,4 +489,42 @@ model ApiToken {
 
   @@index([userId])
   @@map("api_tokens")
+}
+
+/// Conexão de e-mail da conta. A chave de API fica cifrada; `dicaChave`
+/// existe para a tela confirmar qual chave está conectada sem devolvê-la.
+model EmailConfig {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  provedor      String   @default("RESEND")
+  apiKeyCifrada String
+  dicaChave     String
+  remetente     String
+  ativo         Boolean  @default(true)
+  criadoEm      DateTime @default(now())
+  atualizadoEm  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_configs")
+}
+
+/// Histórico de envios. Sem ele, "o e-mail nao chegou" nao tem como ser
+/// investigado.
+model EmailDelivery {
+  id         String   @id @default(cuid())
+  userId     String
+  shipmentId String?
+  para       String
+  assunto    String
+  evento     String
+  status     String
+  erro       String?
+  idExterno  String?
+  criadoEm   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, criadoEm])
+  @@map("email_deliveries")
 }

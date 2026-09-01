@@ -1,4 +1,5 @@
 import { ApiTokensForm } from '@/components/api-tokens-form'
+import { ConexaoEmail } from '@/components/conexao-email'
 import { WebhooksForm } from '@/components/webhooks-form'
 
 export default function PaginaIntegracoes() {
@@ -12,6 +13,7 @@ export default function PaginaIntegracoes() {
       </div>
 
       <ApiTokensForm />
+      <ConexaoEmail />
       <WebhooksForm />
     </div>
   )

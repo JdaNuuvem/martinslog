@@ -7,6 +7,7 @@ import {
   type StatusShipment,
 } from '@/domain/shipment/estados'
 import { statusDoEvento } from '@/domain/simulacao/roteiro'
+import { enviarAtualizacao } from './email-service'
 
 /**
  * Sincronização do status do envio com o relógio da simulação.
@@ -163,6 +164,14 @@ export async function sincronizarEnvio(
 
     status = alvo
 
+    // Aviso ao destinatário, quando a conta tem e-mail conectado. Fica fora
+    // de qualquer transação e nunca lança: e-mail é um extra do envio, e uma
+    // falha aqui não pode impedir o status de avançar nem derrubar a
+    // consulta que disparou a sincronização.
+    void avisarPorEmail(envio.id, evento.codigo).catch((error) => {
+      console.error('Falha ao enviar aviso de status por e-mail', { cause: error })
+    })
+
     if (estadoTerminal(status)) {
       break
     }
@@ -231,4 +240,60 @@ export async function sincronizarEnviosPendentesDoUsuario(
   }
 
   return sincronizados
+}
+
+/**
+ * Monta e dispara o aviso de mudança de status por e-mail.
+ *
+ * Lê os dados do envio numa consulta própria, em vez de carregá-los junto na
+ * sincronização: quem não tem e-mail conectado — a maioria — não paga por
+ * campos que nunca serão usados.
+ *
+ * O destinatário só recebe se tiver e-mail cadastrado no endereço. Sem ele
+ * não há para quem avisar, e isso não é erro.
+ */
+async function avisarPorEmail(shipmentId: string, codigoEvento: string): Promise<void> {
+  const envio = await prisma.shipment.findUnique({
+    where: { id: shipmentId },
+    select: {
+      id: true,
+      userId: true,
+      codigoRastreio: true,
+      destinatario: true,
+    },
+  })
+
+  if (!envio?.codigoRastreio) return
+
+  const destinatario = envio.destinatario as {
+    email?: string
+    cidade?: string
+    uf?: string
+  } | null
+
+  const email = destinatario?.email?.trim()
+  if (!email) return
+
+  const evento = await prisma.trackingEvent.findFirst({
+    where: { shipmentId, codigo: codigoEvento },
+    orderBy: { sequencia: 'desc' },
+    select: { titulo: true, descricao: true, cidade: true, uf: true },
+  })
+
+  if (!evento) return
+
+  const base = process.env.APP_URL ?? 'http://localhost:3000'
+
+  await enviarAtualizacao({
+    userId: envio.userId,
+    shipmentId: envio.id,
+    destinatarioEmail: email,
+    codigoRastreio: envio.codigoRastreio,
+    evento: codigoEvento,
+    titulo: evento.titulo,
+    descricao: evento.descricao,
+    cidade: evento.cidade ?? destinatario?.cidade ?? '',
+    uf: evento.uf ?? destinatario?.uf ?? '',
+    urlRastreio: `${base}/r/${envio.codigoRastreio}`,
+  })
 }
