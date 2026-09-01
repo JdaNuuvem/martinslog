@@ -12,6 +12,7 @@ import type { NextConfig } from 'next'
  * Mesmo padrão já adotado em `DATABASE_URL_TEST` e `PLAYWRIGHT_PORT`.
  */
 const nextConfig: NextConfig = {
+  output: 'standalone',
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
 }
 

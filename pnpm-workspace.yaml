@@ -1,0 +1,7 @@
+onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - '@node-rs/argon2'
+  - prisma
+  - esbuild
+  - unrs-resolver
