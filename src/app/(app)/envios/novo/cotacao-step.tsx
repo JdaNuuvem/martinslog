@@ -15,11 +15,27 @@ export type OpcaoCotacaoResposta = {
   prazoDias: number
 }
 
+/**
+ * O que foi cotado: os dados que o usuário digitou nesta etapa. As etapas
+ * seguintes precisam deles para mostrar o resumo do que está sendo enviado
+ * e para conferir se o endereço escolhido bate com o CEP cotado.
+ */
+export type MedidasCotacao = {
+  cepOrigem: string
+  cepDestino: string
+  pesoG: number
+  alturaCm: number
+  larguraCm: number
+  comprimentoCm: number
+  formato: 'CAIXA' | 'ROLO' | 'ENVELOPE'
+}
+
 type Props = {
   quoteId: string | null
   servicoId: string | null
   onQuoteId: (quoteId: string) => void
-  onServicoId: (servicoId: string) => void
+  onMedidas: (medidas: MedidasCotacao) => void
+  onOpcao: (opcao: OpcaoCotacaoResposta) => void
   onContinuar: () => void
 }
 
@@ -29,7 +45,7 @@ type Props = {
  * deles; o formulário de cotação e a lista de opções em si são só desta
  * etapa.
  */
-export function CotacaoStep({ quoteId, servicoId, onQuoteId, onServicoId, onContinuar }: Props) {
+export function CotacaoStep({ quoteId, servicoId, onQuoteId, onMedidas, onOpcao, onContinuar }: Props) {
   const idBase = useId()
   const [opcoes, setOpcoes] = useState<OpcaoCotacaoResposta[] | null>(null)
   const [formCotacao, setFormCotacao] = useState({
@@ -48,19 +64,20 @@ export function CotacaoStep({ quoteId, servicoId, onQuoteId, onServicoId, onCont
     evento.preventDefault()
     setErroCotacao(null)
     setCotando(true)
+    const medidas: MedidasCotacao = {
+      cepOrigem: formCotacao.cepOrigem,
+      cepDestino: formCotacao.cepDestino,
+      pesoG: Number(formCotacao.pesoG),
+      alturaCm: Number(formCotacao.alturaCm),
+      larguraCm: Number(formCotacao.larguraCm),
+      comprimentoCm: Number(formCotacao.comprimentoCm),
+      formato: formCotacao.formato,
+    }
     try {
       const resposta = await fetch('/api/cotacao', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          cepOrigem: formCotacao.cepOrigem,
-          cepDestino: formCotacao.cepDestino,
-          pesoG: Number(formCotacao.pesoG),
-          alturaCm: Number(formCotacao.alturaCm),
-          larguraCm: Number(formCotacao.larguraCm),
-          comprimentoCm: Number(formCotacao.comprimentoCm),
-          formato: formCotacao.formato,
-        }),
+        body: JSON.stringify(medidas),
       })
       const corpo: unknown = await resposta.json()
       if (!resposta.ok) {
@@ -70,6 +87,7 @@ export function CotacaoStep({ quoteId, servicoId, onQuoteId, onServicoId, onCont
       }
       const dados = corpo as { quoteId: string; opcoes: OpcaoCotacaoResposta[] }
       onQuoteId(dados.quoteId)
+      onMedidas(medidas)
       setOpcoes(dados.opcoes)
     } catch {
       setErroCotacao('Não foi possível conectar ao servidor.')
@@ -215,7 +233,7 @@ export function CotacaoStep({ quoteId, servicoId, onQuoteId, onServicoId, onCont
                     type="radio"
                     name="servico"
                     checked={servicoId === opcao.servicoId}
-                    onChange={() => onServicoId(opcao.servicoId)}
+                    onChange={() => onOpcao(opcao)}
                   />
                   <span>
                     <span className="block font-semibold text-texto-principal">
