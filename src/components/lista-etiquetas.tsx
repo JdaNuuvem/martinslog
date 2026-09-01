@@ -160,81 +160,96 @@ export function ListaEtiquetas() {
   const etiquetas = dados?.etiquetas ?? []
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Situação das etiquetas">
-        {ABAS.map((chave) => (
-          <button
-            key={chave}
-            type="button"
-            role="tab"
-            aria-selected={aba === chave}
-            onClick={() => setAba(chave)}
-            className={`rounded-pilula px-4 py-2 text-sm font-medium focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand ${
-              aba === chave
-                ? 'bg-brand text-white'
-                : 'bg-superficie-card text-texto-principal'
-            }`}
-          >
-            {ROTULOS_ABA[chave]}
-            {dados ? ` (${dados.contagem[chave]})` : ''}
-          </button>
-        ))}
+    // Duas distâncias, não uma: os filtros são um bloco só (abas e busca
+    // coladas, porque fazem a mesma coisa) e os resultados vêm a `bloco` de
+    // distância. Com o `gap-4` uniforme de antes, a busca parecia tão
+    // desligada das abas quanto a lista inteira.
+    <div className="flex flex-col gap-bloco">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Situação das etiquetas">
+          {ABAS.map((chave) => (
+            <button
+              key={chave}
+              type="button"
+              role="tab"
+              aria-selected={aba === chave}
+              onClick={() => setAba(chave)}
+              className={`rounded-pilula px-4 py-2 text-dado font-medium focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand ${
+                aba === chave ? 'bg-brand text-white' : 'bg-superficie-card text-texto-principal'
+              }`}
+            >
+              {ROTULOS_ABA[chave]}
+              {dados ? ` (${dados.contagem[chave]})` : ''}
+            </button>
+          ))}
+        </div>
+
+        <label className="flex flex-col gap-1 text-dado">
+          <span className="text-texto-secundario">Buscar por código ou destinatário</span>
+          <input
+            type="search"
+            value={busca}
+            onChange={(evento) => setBusca(evento.target.value)}
+            placeholder="FR000000000BR ou nome do destinatário"
+            className="w-full max-w-md rounded-campo border border-borda-campo bg-superficie-card px-3 py-2 text-texto-principal focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+          />
+        </label>
       </div>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-texto-secundario">Buscar por código ou destinatário</span>
-        <input
-          type="search"
-          value={busca}
-          onChange={(evento) => setBusca(evento.target.value)}
-          placeholder="FR000000000BR ou nome do destinatário"
-          className="w-full max-w-md rounded-lg border border-borda-campo bg-superficie-card px-3 py-2 text-texto-principal focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
-        />
-      </label>
-
       {erro ? (
-        <p role="alert" className="rounded-lg bg-erro-fundo p-4 text-sm text-erro">
+        <p role="alert" className="rounded-campo bg-erro-fundo p-4 text-dado text-erro">
           {erro}
         </p>
       ) : null}
 
       {carregando && !dados ? (
-        <p className="text-sm text-texto-secundario">Carregando…</p>
+        <p className="text-dado text-texto-secundario">Carregando…</p>
       ) : etiquetas.length === 0 ? (
-        <p className="rounded-xl bg-superficie-card p-6 text-sm text-texto-secundario">
+        <p className="rounded-cartao bg-superficie-card p-6 text-dado text-texto-secundario">
           {busca
             ? 'Nenhuma etiqueta encontrada para esta busca.'
             : 'Nenhuma etiqueta nesta situação.'}
         </p>
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className="flex flex-col gap-4">
           {etiquetas.map((etiqueta) => (
-            <li key={etiqueta.id} className="flex flex-col gap-3 rounded-xl bg-superficie-card p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex flex-col gap-1">
-                  <p className="font-medium text-texto-principal">{etiqueta.destinatarioNome}</p>
-                  <p className="text-sm text-texto-secundario">
-                    {etiqueta.destinoCidade ? `${etiqueta.destinoCidade}/${etiqueta.destinoUf}` : '—'}
-                    {' · '}
-                    {etiqueta.servico}
-                  </p>
-                  <p className="font-mono text-xs text-texto-secundario">
-                    {etiqueta.codigoRastreio ?? 'sem código'}
-                  </p>
+            /*
+              Três distâncias dentro do cartão, e é isso que dá a leitura:
+              4px entre as linhas de um mesmo dado (nome, destino, código),
+              12px entre os dados e a situação atual do envio, 20px antes das
+              ações. Com tudo a 12px, como estava, o botão "Cancelar" parecia
+              tão ligado ao código de rastreio quanto o código ao nome.
+            */
+            <li key={etiqueta.id} className="flex flex-col gap-5 rounded-cartao bg-superficie-card p-5">
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                  <div className="flex flex-col gap-1">
+                    <p className="font-medium text-texto-principal">{etiqueta.destinatarioNome}</p>
+                    <p className="text-dado text-texto-secundario">
+                      {etiqueta.destinoCidade
+                        ? `${etiqueta.destinoCidade}/${etiqueta.destinoUf}`
+                        : '—'}
+                      {' · '}
+                      {etiqueta.servico}
+                    </p>
+                    <p className="font-mono text-xs text-texto-secundario">
+                      {etiqueta.codigoRastreio ?? 'sem código'}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col items-end gap-1">
+                    <Selo status={etiqueta.status} />
+                    <p className="text-dado font-medium text-texto-principal">
+                      {reais(etiqueta.valorCentavos)}
+                    </p>
+                    <p className="text-xs text-texto-secundario">{dataHora(etiqueta.ocorridoEm)}</p>
+                  </div>
                 </div>
 
-                <div className="flex flex-col items-end gap-1">
-                  <Selo status={etiqueta.status} />
-                  <p className="text-sm font-medium text-texto-principal">
-                    {reais(etiqueta.valorCentavos)}
-                  </p>
-                  <p className="text-xs text-texto-secundario">{dataHora(etiqueta.ocorridoEm)}</p>
-                </div>
+                {etiqueta.ultimoEvento ? (
+                  <p className="text-dado text-texto-secundario">{etiqueta.ultimoEvento}</p>
+                ) : null}
               </div>
-
-              {etiqueta.ultimoEvento ? (
-                <p className="text-sm text-texto-secundario">{etiqueta.ultimoEvento}</p>
-              ) : null}
 
               {confirmandoId === etiqueta.id ? (
                 <ConfirmarCancelamento

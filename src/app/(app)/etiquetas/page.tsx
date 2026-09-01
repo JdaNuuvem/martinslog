@@ -10,8 +10,8 @@ import { ListaEtiquetas } from '@/components/lista-etiquetas'
  */
 export default function PaginaEtiquetas() {
   return (
-    <div className="flex flex-col gap-6">
-      <div>
+    <div className="flex flex-col gap-secao">
+      <div className="flex flex-col gap-1">
         <h1 className="text-titulo font-bold text-texto-principal">Etiquetas</h1>
         <p className="max-w-leitura text-corpo text-texto-secundario">
           Seus envios, por situação. O cancelamento é possível até a postagem e não devolve o

@@ -65,7 +65,7 @@ export default async function PaginaEtiqueta({ params }: { params: Promise<{ id:
   )
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-secao">
       <div className="flex flex-col gap-1">
         <Link
           href="/etiquetas"
@@ -78,7 +78,7 @@ export default async function PaginaEtiqueta({ params }: { params: Promise<{ id:
         </h1>
       </div>
 
-      <section className="grid grid-cols-2 gap-4 rounded-xl bg-superficie-card p-6 sm:grid-cols-3">
+      <section className="grid grid-cols-2 gap-4 rounded-cartao bg-superficie-card p-6 sm:grid-cols-3">
         {resumo.map((item) => (
           <div key={item.rotulo}>
             <p className="text-rotulo uppercase text-texto-secundario">{item.rotulo}</p>
@@ -87,12 +87,12 @@ export default async function PaginaEtiqueta({ params }: { params: Promise<{ id:
         ))}
       </section>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-bloco sm:grid-cols-2">
         {[
           { titulo: 'Remetente', endereco: etiqueta.remetente },
           { titulo: 'Destinatário', endereco: etiqueta.destinatario },
         ].map(({ titulo, endereco }) => (
-          <section key={titulo} className="flex flex-col gap-1 rounded-xl bg-superficie-card p-6">
+          <section key={titulo} className="flex flex-col gap-1 rounded-cartao bg-superficie-card p-6">
             <h2 className="text-subtitulo font-semibold text-texto-principal">{titulo}</h2>
             <p className="text-sm font-medium text-texto-principal">{endereco.nome ?? '—'}</p>
             <p className="text-sm text-texto-secundario">
@@ -109,7 +109,7 @@ export default async function PaginaEtiqueta({ params }: { params: Promise<{ id:
         ))}
       </div>
 
-      <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
+      <section className="flex flex-col gap-4 rounded-cartao bg-superficie-card p-6">
         <h2 className="text-subtitulo font-semibold text-texto-principal">Declaração de conteúdo</h2>
 
         {etiqueta.produtos.length === 0 ? (
@@ -148,7 +148,7 @@ export default async function PaginaEtiqueta({ params }: { params: Promise<{ id:
         )}
       </section>
 
-      <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
+      <section className="flex flex-col gap-4 rounded-cartao bg-superficie-card p-6">
         <h2 className="text-subtitulo font-semibold text-texto-principal">Movimentações</h2>
         <p className="text-sm text-texto-secundario">
           Só aparecem movimentações que já aconteceram.
