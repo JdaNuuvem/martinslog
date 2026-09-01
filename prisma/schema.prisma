@@ -73,6 +73,20 @@ model User {
   telefone          String?
   emailVerificadoEm DateTime?
   cepOrigemPadrao   String?
+  /**
+   * Conta isenta da taxa por etiqueta.
+   *
+   * Emite etiqueta sem saldo e **sem lançamento no livro-caixa** — não é
+   * saldo infinito. A diferença importa: dar crédito de mentira à carteira
+   * criaria receita que nunca existiu no extrato, e o financeiro passaria a
+   * somar dinheiro que ninguém pagou. Sem lançamento, `charged` responde
+   * falso na API e o número continua verdadeiro.
+   *
+   * Existe para as contas de parceiro e de teste da própria plataforma. Não
+   * é plano comercial: é exceção nominal, ligada uma a uma, e por isso o
+   * padrão é `false` e nada na interface a concede.
+   */
+  isentoCobranca    Boolean   @default(false)
   criadoEm          DateTime  @default(now())
 
   sessions         Session[]

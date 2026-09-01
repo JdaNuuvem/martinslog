@@ -321,6 +321,12 @@ export async function pagarEnvio(userId: string, shipmentId: string): Promise<vo
       throw new CarteiraNaoEncontradaError(`Carteira não encontrada para o usuário ${userId}.`)
     }
 
+    const dono = await tx.user.findUnique({
+      where: { id: userId },
+      select: { isentoCobranca: true },
+    })
+    const isento = dono?.isentoCobranca === true
+
     const envio = await tx.shipment.findUnique({ where: { id: shipmentId } })
     if (!envio) {
       throw new EnvioNaoEncontradoError(`Envio não encontrado: ${shipmentId}`)
@@ -351,24 +357,38 @@ export async function pagarEnvio(userId: string, shipmentId: string): Promise<vo
       }
     }
 
-    const lancamento = aplicarDebito(carteira.saldoCentavos, envio.precoCobradoCentavos)
+    /*
+      Conta isenta não paga e não gera lançamento.
 
-    await tx.ledgerEntry.create({
-      data: {
-        walletId: carteira.id,
-        tipo: lancamento.tipo,
-        valorCentavos: lancamento.valorCentavos,
-        saldoAposCentavos: lancamento.saldoAposCentavos,
-        refTipo: 'SHIPMENT',
-        refId: envio.id,
-        descricao: `Pagamento do envio ${envio.id}`,
-      },
-    })
+      Não é saldo infinito: creditar a carteira de mentira inventaria
+      receita no extrato, e o financeiro passaria a somar dinheiro que
+      ninguém pagou. Sem lançamento, `houveCobranca` responde falso e a API
+      devolve `charged: false` — que é a verdade.
 
-    await tx.wallet.update({
-      where: { id: carteira.id },
-      data: { saldoCentavos: lancamento.saldoAposCentavos },
-    })
+      Tudo o mais é idêntico ao caminho pago: posse, recusa de sandbox,
+      cotação vencida, transição e emissão da etiqueta. A isenção tira o
+      dinheiro do caminho, não as regras.
+    */
+    if (!isento) {
+      const lancamento = aplicarDebito(carteira.saldoCentavos, envio.precoCobradoCentavos)
+
+      await tx.ledgerEntry.create({
+        data: {
+          walletId: carteira.id,
+          tipo: lancamento.tipo,
+          valorCentavos: lancamento.valorCentavos,
+          saldoAposCentavos: lancamento.saldoAposCentavos,
+          refTipo: 'SHIPMENT',
+          refId: envio.id,
+          descricao: `Pagamento do envio ${envio.id}`,
+        },
+      })
+
+      await tx.wallet.update({
+        where: { id: carteira.id },
+        data: { saldoCentavos: lancamento.saldoAposCentavos },
+      })
+    }
 
     const resultado = await tx.shipment.updateMany({
       where: { id: envio.id, status: 'PENDING' },
