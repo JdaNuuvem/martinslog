@@ -588,6 +588,25 @@
         });
     }
 
+    /**
+     * Leva a pessoa para a página de rastreio daquele código, na plataforma.
+     *
+     * A landing não desenha mais a rota: o acompanhamento tem endereço
+     * próprio (`{rastreioPagina}/{codigo}`), e endereço é o que se copia,
+     * salva nos favoritos, manda no WhatsApp e reabre depois. O resultado
+     * desenhado aqui morria no recarregar da página e não tinha como ser
+     * compartilhado — a mesma consulta precisava ser digitada de novo.
+     *
+     * O botão fica em estado de carregamento antes de navegar: entre o
+     * clique e a página nova existe uma espera de rede, e sem sinal nenhum
+     * ela parece um clique que não funcionou.
+     */
+    function irParaRastreio(codigo) {
+      var base = String(cfg.rastreioPagina || '').replace(/\/+$/, '');
+      carregando(true);
+      window.location.assign(base + '/' + encodeURIComponent(codigo));
+    }
+
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var codigo = input.value.replace(/\s+/g, '').trim().toUpperCase();
@@ -599,7 +618,18 @@
         return;
       }
       limparErroCampo();
-      consultar(codigo);
+
+      /*
+        Consulta embutida sobrevive em dois casos: `?demo=1`, que existe para
+        mostrar o desenho do resultado sem backend, e a ausência de
+        `rastreioPagina` na configuração — sem destino para onde ir, cair no
+        comportamento antigo é melhor que um clique que não faz nada.
+      */
+      if (MODO_DEMO || !cfg.rastreioPagina) {
+        consultar(codigo);
+        return;
+      }
+      irParaRastreio(codigo);
     });
 
     input.addEventListener('input', function () {

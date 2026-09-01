@@ -184,5 +184,53 @@ try {
 }
 conferir('main.js compila' + (erroMain ? ' — ' + erroMain : ''), erroMain === null);
 
+/* ============================================================
+   4. Destino do formulário de rastreio
+   ============================================================ */
+console.log('\n— destino do rastreio —');
+
+// A função navega de verdade no navegador; aqui `window` e `cfg` são dublês,
+// para observar só o endereço que ela monta.
+function destinoPara(codigo, pagina) {
+  let destino = null;
+  const executar = new Function(
+    'cfg',
+    'window',
+    'carregando',
+    extrairFuncao('irParaRastreio') + '; return irParaRastreio;',
+  )({ rastreioPagina: pagina }, { location: { assign: (u) => (destino = u) } }, () => {});
+  executar(codigo);
+  return destino;
+}
+
+conferir(
+  'monta o endereço da página de rastreio do código',
+  destinoPara('EC000000014BR', 'https://app.martinslog.net/r') ===
+    'https://app.martinslog.net/r/EC000000014BR',
+);
+
+conferir(
+  'barra sobrando na configuração não vira barra dupla',
+  destinoPara('EC000000014BR', 'https://app.martinslog.net/r/') ===
+    'https://app.martinslog.net/r/EC000000014BR',
+);
+
+// O código vem do campo de texto, ou seja, de fora: sem escapar, um valor com
+// barra ou interrogação mudaria a rota de destino.
+conferir(
+  'escapa o código antes de pôr na URL',
+  destinoPara('AB/1?2', 'https://app.martinslog.net/r') ===
+    'https://app.martinslog.net/r/AB%2F1%3F2',
+);
+
+// A configuração precisa existir no HTML publicado: sem ela, o formulário
+// volta silenciosamente a desenhar o resultado na própria landing.
+conferir(
+  'index.html declara rastreioPagina',
+  /rastreioPagina:\s*'https?:\/\//.test(
+    fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'),
+  ),
+);
+
 console.log(falhas === 0 ? '\nTUDO PASSOU\n' : '\n' + falhas + ' FALHA(S)\n');
 process.exit(falhas === 0 ? 0 : 1);
