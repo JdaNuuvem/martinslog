@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { cadastroRequestSchema } from '@/lib/auth-schema'
+import { destinoSeguro } from '@/lib/destino-seguro'
 
 type EstadoFormulario = {
   nome: string
@@ -48,6 +49,15 @@ export function ModalCadastro({
   aoFechar: () => void
 }) {
   const idBase = useId()
+  /*
+    O destino é montado aqui dentro do produto, não vem de parâmetro de URL —
+    mas passa pela mesma peneira do login mesmo assim. É o caminho de
+    navegação logo após criar conta, o instante em que a pessoa mais confia
+    na tela; se um dia alguém montar este diálogo com um destino vindo de
+    fora, a checagem já está no lugar em vez de depender de quem escreveu a
+    chamada ter lembrado.
+  */
+  const destinoConferido = destinoSeguro(destino)
   const dialogo = useRef<HTMLDialogElement>(null)
 
   const [form, setForm] = useState<EstadoFormulario>(ESTADO_INICIAL)
@@ -119,7 +129,7 @@ export function ModalCadastro({
       // ter em cache o redirecionamento para o login feito antes de a conta
       // existir, e o recém-cadastrado voltaria para o formulário sem
       // explicação. Recarregar faz o servidor decidir com o cookie novo.
-      window.location.assign(destino)
+      window.location.assign(destinoConferido)
     } catch {
       setErroGeral('Não foi possível conectar ao servidor. Verifique sua conexão.')
     } finally {
@@ -205,7 +215,7 @@ export function ModalCadastro({
             em vez de largá-la na home para recomeçar.
           */}
           <Link
-            href={`/login?destino=${encodeURIComponent(destino)}`}
+            href={`/login?destino=${encodeURIComponent(destinoConferido)}`}
             className="font-medium text-brand-texto underline underline-offset-2"
           >
             Já tenho conta
