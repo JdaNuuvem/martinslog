@@ -58,6 +58,7 @@ export function ConstrutorTemplateRastreio() {
     achando que já trocou.
   */
   const [ativoNoServidor, setAtivoNoServidor] = useState(false)
+  const [reaplicando, setReaplicando] = useState(false)
   const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
@@ -244,6 +245,59 @@ export function ConstrutorTemplateRastreio() {
       setErro('Não foi possível conectar ao servidor. Tente novamente.')
     } finally {
       setSalvando(false)
+    }
+  }
+
+  /*
+    Aplica o fluxo aos envios que já saíram.
+
+    A linha do tempo nasce inteira na emissão: ligar o fluxo vale para as
+    etiquetas seguintes, e as anteriores continuam com o percurso que tinham
+    quando foram emitidas. Quem acabou de montar o fluxo costuma testá-lo numa
+    etiqueta antiga e conclui que "não funcionou" — daí este botão, que
+    reescreve o passado de propósito e diz isso antes.
+  */
+  async function aplicarNosEmitidos() {
+    if (
+      !window.confirm(
+        'Reescrever a linha do tempo dos envios que você já emitiu com este fluxo?\n\n' +
+          'Rastreios que seus clientes já consultaram podem passar a mostrar outras etapas. ' +
+          'Envios cancelados não mudam.',
+      )
+    ) {
+      return
+    }
+
+    setErro(null)
+    setAviso(null)
+    setReaplicando(true)
+    try {
+      const resposta = await fetch('/api/rastreio-template/ativar', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ativo: true, reaplicarNosEnvios: true }),
+      })
+      const corpo = (await resposta.json().catch(() => ({}))) as {
+        mensagem?: string
+        enviosAtualizados?: number
+      }
+
+      if (!resposta.ok) {
+        setErro(corpo.mensagem ?? 'Não foi possível aplicar o fluxo aos envios já emitidos.')
+        return
+      }
+
+      const total = corpo.enviosAtualizados ?? 0
+      setAtivoNoServidor(true)
+      setAviso(
+        total === 0
+          ? 'Nenhum envio anterior precisou ser reescrito.'
+          : `${total} envio${total > 1 ? 's já emitidos foram reescritos' : ' já emitido foi reescrito'} com este fluxo.`,
+      )
+    } catch {
+      setErro('Não foi possível conectar ao servidor. Tente novamente.')
+    } finally {
+      setReaplicando(false)
     }
   }
 
@@ -462,14 +516,35 @@ export function ConstrutorTemplateRastreio() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={salvar}
-            disabled={salvando || passos.length === 0}
-            className="self-start rounded-pilula bg-brand px-6 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {salvando ? 'Salvando…' : 'Salvar fluxo'}
-          </button>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={salvar}
+                disabled={salvando || passos.length === 0}
+                className="rounded-pilula bg-brand px-6 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {salvando ? 'Salvando…' : 'Salvar fluxo'}
+              </button>
+
+              {ativoNoServidor ? (
+                <button
+                  type="button"
+                  onClick={aplicarNosEmitidos}
+                  disabled={reaplicando}
+                  className="rounded-pilula border border-borda-campo px-6 py-2 text-sm font-medium text-texto-principal hover:bg-superficie-bloco disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {reaplicando ? 'Aplicando…' : 'Aplicar aos envios já emitidos'}
+                </button>
+              ) : null}
+            </div>
+
+            <p className="text-xs text-texto-secundario">
+              Salvar vale para as etiquetas emitidas daqui em diante. As que já saíram mantêm o
+              percurso que tinham na emissão — para trocá-lo, use “Aplicar aos envios já
+              emitidos”.
+            </p>
+          </div>
         </>
       ) : null}
     </section>
