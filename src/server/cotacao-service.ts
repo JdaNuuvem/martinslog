@@ -1,7 +1,8 @@
 import { prisma } from '@/infra/db/client'
 import { cotar, EntradaCotacao, ItemCatalogo, ResultadoCotacao } from '@/domain/pricing/cotacao'
 import { geoProvider as geoProviderPadrao, GeoProvider } from '@/infra/geo'
-import { CepInvalidoError } from '@/domain/errors'
+import { CotacaoExpiradaError, CepInvalidoError, CotacaoNaoEncontradaError } from '@/domain/errors'
+import type { OpcaoCotacaoResposta } from '@/lib/cotacao-schema'
 
 const VALIDADE_COTACAO_MS = 24 * 60 * 60 * 1000
 
@@ -154,4 +155,59 @@ export async function gerarCotacao(
   })
 
   return { ...resultado, quoteId: quote.id, anonSessionId }
+}
+
+export type CotacaoSalva = {
+  quoteId: string
+  cepOrigem: string
+  cepDestino: string
+  formato: FormatoEmbalagem
+  pesoG: number
+  alturaCm: number
+  larguraCm: number
+  comprimentoCm: number
+  opcoes: OpcaoCotacaoResposta[]
+}
+
+/**
+ * Relê uma cotação já gerada, para quem chega ao wizard com o `quoteId` na
+ * URL (cotou na home antes de entrar). Sem isso, as etapas seguintes não
+ * sabem nem qual CEP foi cotado.
+ *
+ * Só devolve a cotação de quem a criou: a do usuário logado, ou — para quem
+ * cotou como visitante e depois criou conta — a da sessão anônima que ainda
+ * está no cookie. Um `quoteId` de terceiro responde como inexistente, e não
+ * como proibido, para não confirmar que o id existe.
+ */
+export async function obterCotacao(
+  quoteId: string,
+  contexto: ContextoSessao,
+): Promise<CotacaoSalva> {
+  const quote = await prisma.quote.findUnique({ where: { id: quoteId } })
+
+  const dono =
+    (contexto.userId !== null && quote?.userId === contexto.userId) ||
+    (contexto.anonSessionId !== null && quote?.anonSessionId === contexto.anonSessionId)
+
+  if (!quote || !dono) {
+    throw new CotacaoNaoEncontradaError(`Cotação não encontrada: ${quoteId}`)
+  }
+
+  if (quote.expiraEm.getTime() <= Date.now()) {
+    throw new CotacaoExpiradaError('Esta cotação expirou. Faça uma nova.')
+  }
+
+  return {
+    quoteId: quote.id,
+    cepOrigem: quote.cepOrigem,
+    cepDestino: quote.cepDestino,
+    formato: quote.formato as FormatoEmbalagem,
+    pesoG: quote.pesoG,
+    alturaCm: quote.altura,
+    larguraCm: quote.largura,
+    comprimentoCm: quote.comprimento,
+    // `opcoes` é o JSON gravado na geração — a mesma lista que o cliente já
+    // viu, sem recalcular preço aqui.
+    opcoes: quote.opcoes as unknown as OpcaoCotacaoResposta[],
+  }
 }
