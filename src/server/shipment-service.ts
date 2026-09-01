@@ -56,6 +56,13 @@ export type EntradaEnvio = {
   remetente: EnderecoEnvio
   destinatario: EnderecoEnvio
   produtos: ProdutoDeclarado[]
+  /**
+   * `true` para envios criados pela API pública com um `ApiToken` de
+   * ambiente SANDBOX (ver `src/server/api-publica-service.ts`). Só marca a
+   * linha — não muda nenhum cálculo de preço nem a validação de endereço.
+   * Default `false`: o fluxo do painel nunca passa este campo.
+   */
+  sandbox?: boolean
 }
 
 export type EnvioCriado = {
@@ -65,6 +72,7 @@ export type EnvioCriado = {
   precoCobradoCentavos: number
   descontoCentavos: number
   valorDeclaradoCentavos: number
+  sandbox: boolean
 }
 
 export type PreviaEnvio = {
@@ -198,6 +206,7 @@ export async function criarEnvio(userId: string, entrada: EntradaEnvio): Promise
         opcionais: {},
         valorDeclaradoCentavos,
         produtos: entrada.produtos as unknown as Prisma.InputJsonValue,
+        sandbox: entrada.sandbox ?? false,
       },
     })
 
@@ -216,6 +225,7 @@ export async function criarEnvio(userId: string, entrada: EntradaEnvio): Promise
     precoCobradoCentavos: envio.precoCobradoCentavos,
     descontoCentavos: envio.descontoCentavos,
     valorDeclaradoCentavos: envio.valorDeclaradoCentavos,
+    sandbox: envio.sandbox,
   }
 }
 
@@ -297,6 +307,17 @@ export async function pagarEnvio(userId: string, shipmentId: string): Promise<vo
     }
 
     garantirTransicao(envio.status, 'RELEASED')
+
+    // Envio sandbox nunca paga pelo caminho real de dinheiro: quem cria um
+    // envio de teste pela API pública usa `pagarEnvioSandbox`
+    // (`api-publica-service.ts`), que nem toca a `Wallet`. Se este caminho
+    // fosse chamado por engano sobre um envio sandbox, ele recusa aqui em
+    // vez de debitar saldo real por um pedido de teste.
+    if (envio.sandbox) {
+      throw new TransicaoInvalidaError(
+        `Envio ${envio.id} é sandbox e não pode ser pago pelo fluxo real de carteira.`,
+      )
+    }
 
     if (envio.quoteId) {
       const quote = await tx.quote.findUnique({ where: { id: envio.quoteId } })

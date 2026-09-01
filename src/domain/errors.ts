@@ -84,3 +84,9 @@ export class UltimoAdminError extends DomainError {
 export class UsuarioNaoEncontradoError extends DomainError {
   readonly codigo = 'USUARIO_NAO_ENCONTRADO'
 }
+export class TokenInvalidoError extends DomainError {
+  readonly codigo = 'TOKEN_INVALIDO'
+}
+export class LimiteRequisicoesExcedidoError extends DomainError {
+  readonly codigo = 'LIMITE_REQUISICOES_EXCEDIDO'
+}
