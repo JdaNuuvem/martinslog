@@ -76,6 +76,19 @@ export function IconeRastreio(props: IconeProps) {
   )
 }
 
+/** Nós ligados: o desenho do construtor de fluxo. */
+export function IconeFluxo(props: IconeProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="2" y="4" width="7" height="5" rx="1" />
+      <rect x="15" y="15" width="7" height="5" rx="1" />
+      <rect x="2" y="15" width="7" height="5" rx="1" />
+      <path d="M9 6.5h4a2 2 0 0 1 2 2v9" />
+      <path d="M9 17.5h6" />
+    </svg>
+  )
+}
+
 export function IconeAjuda(props: IconeProps) {
   return (
     <svg {...base} {...props}>

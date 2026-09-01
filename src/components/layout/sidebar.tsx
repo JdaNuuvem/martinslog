@@ -9,6 +9,7 @@ import {
   IconeConvide,
   IconeEtiquetas,
   IconeFechar,
+  IconeFluxo,
   IconeIntegracoes,
   IconePerfil,
   IconeRastreio,
@@ -22,6 +23,7 @@ const ITENS = [
   { rotulo: 'Calcular', href: '/', Icone: IconeCalcular },
   { rotulo: 'Etiquetas', href: '/etiquetas', Icone: IconeEtiquetas },
   { rotulo: 'Rastreio', href: '/rastreio', Icone: IconeRastreio },
+  { rotulo: 'Fluxo do rastreio', href: '/rastreio/status', Icone: IconeFluxo },
   { rotulo: 'Ajuda', href: '/ajuda', Icone: IconeAjuda },
   { rotulo: 'Integrações', href: '/integracoes', Icone: IconeIntegracoes },
   { rotulo: 'Convide e ganhe', href: '/convide', Icone: IconeConvide },
@@ -45,6 +47,20 @@ type SidebarProps = {
  */
 export function Sidebar({ aberta, onFechar, botaoMenuRef, autenticado }: SidebarProps) {
   const pathname = usePathname()
+
+  /**
+   * Item destacado: o de rota mais específica que casa com a página atual.
+   *
+   * Um `startsWith` por item destacaria dois de uma vez desde que existem
+   * rotas aninhadas — em `/rastreio/status`, tanto "Rastreio" quanto "Fluxo
+   * do rastreio" casariam, e a navegação diria ao usuário que ele está em
+   * dois lugares.
+   */
+  const hrefAtivo = ITENS.map((item) => item.href)
+    .filter((href) =>
+      href === '/' ? pathname === '/' : pathname === href || pathname?.startsWith(`${href}/`),
+    )
+    .sort((a, b) => b.length - a.length)[0]
   const navRef = useRef<HTMLElement>(null)
   const estavaAberta = useRef(false)
   const { sair, saindo } = useLogout()
@@ -123,7 +139,7 @@ export function Sidebar({ aberta, onFechar, botaoMenuRef, autenticado }: Sidebar
           </div>
 
           {ITENS.map(({ rotulo, href, Icone }) => {
-            const ativo = href === '/' ? pathname === '/' : pathname?.startsWith(href)
+            const ativo = href === hrefAtivo
             return (
               <Link
                 key={href}

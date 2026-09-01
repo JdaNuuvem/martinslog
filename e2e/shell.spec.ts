@@ -10,7 +10,7 @@ test('topbar mostra saldo em verde, sublinhado e clicável para /carteira', asyn
   await expect(page.getByRole('heading', { name: 'Carteira' })).toBeVisible()
 })
 
-test('sidebar mostra os sete itens na ordem e destaca o item ativo', async ({ page }) => {
+test('sidebar mostra os itens na ordem e destaca o item ativo', async ({ page }) => {
   await page.goto('/')
   const nav = page.getByRole('navigation', { name: 'Navegação principal' })
   const itens = nav.getByRole('link')
@@ -18,6 +18,9 @@ test('sidebar mostra os sete itens na ordem e destaca o item ativo', async ({ pa
     'Calcular',
     'Etiquetas',
     'Rastreio',
+    // Atalho para o construtor de fluxo, acrescentado depois: a tela existia
+    // e não tinha caminho até ela na navegação.
+    'Fluxo do rastreio',
     'Ajuda',
     'Integrações',
     'Convide e ganhe',
