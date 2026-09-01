@@ -44,7 +44,17 @@
   /* Pontos de integração, fáceis de trocar. */
   window.MARTINS_CONFIG = {
     rastreioEndpoint: '/api/rastreio',  // GET {base}/{codigo} — só o modo demo usa
-    rastreioPagina:   'https://app.martinslog.net/r'  // {base}/{codigo}
+    rastreioPagina:   'https://app.martinslog.net/r',  // {base}/{codigo}
+
+    /* Canais oferecidos quando a Central de Ajuda não sabe responder.
+       `whatsapp` fica vazio de propósito: o botão só nasce quando houver um
+       número de verdade. Formato esperado: 5511999999999, sem sinais. */
+    ajudaContato: {
+      whatsapp: '',
+      telefone: '+551198376392',
+      telefoneRotulo: '(11) 9837-6392',
+      email: 'contato@martinslog.net'
+    }
   };
 </script>
 
@@ -115,14 +125,15 @@
         <li><a href="#rastreio">Rastreio</a></li>
         <li><a href="#sobre">Sobre</a></li>
         <li><a href="#cobertura">Cobertura</a></li>
+        <li><a href="#ajuda">Ajuda</a></li>
       </ul>
 
       <div class="menu__acoes">
-        <a class="menu__fone" href="tel:+551198376392">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2Z"/></svg>
+        <a class="menu__fone" href="#ajuda">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a10 10 0 1 0-8.7-5L2 22l5-1.3A10 10 0 0 0 12 22Z"/><path d="M9.1 9.4a3 3 0 0 1 5.8 1c0 2-3 2.6-3 2.6"/><path d="M12 17h.01"/></svg>
           <span>
-            <small>Fale agora</small>
-            (11) 9837-6392
+            <small>Tire sua dúvida</small>
+            Central de Ajuda
           </span>
         </a>
       </div>
@@ -136,9 +147,9 @@
     </nav>
 
     <div class="cabecalho__acoes">
-      <a class="cabecalho__fone" href="tel:+551198376392">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2Z"/></svg>
-        <span>(11) 9837-6392</span>
+      <a class="cabecalho__fone" href="#ajuda">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a10 10 0 1 0-8.7-5L2 22l5-1.3A10 10 0 0 0 12 22Z"/><path d="M9.1 9.4a3 3 0 0 1 5.8 1c0 2-3 2.6-3 2.6"/><path d="M12 17h.01"/></svg>
+        <span>Central de Ajuda</span>
       </a>
       <button class="hamburguer" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="menu">
         <span></span><span></span><span></span>
@@ -171,9 +182,9 @@
           Frota própria, motoristas da casa e rastreamento em tempo real do
           embarque à entrega. Você acompanha cada quilômetro sem precisar ligar.
         </p>
-        <a class="botao botao--primario botao--grande" href="tel:+551198376392">
-          <svg class="botao__icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2Z"/></svg>
-          (11) 9837-6392
+        <a class="botao botao--primario botao--grande" href="#ajuda">
+          <svg class="botao__icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a10 10 0 1 0-8.7-5L2 22l5-1.3A10 10 0 0 0 12 22Z"/><path d="M9.1 9.4a3 3 0 0 1 5.8 1c0 2-3 2.6-3 2.6"/><path d="M12 17h.01"/></svg>
+          Tirar uma dúvida
         </a>
       </div>
 
@@ -418,6 +429,65 @@
 </main>
 
 <!-- ===== FOOTER ===== -->
+  <!-- ===== CENTRAL DE AJUDA ===== -->
+  <section class="secao secao--cinza ajuda" id="ajuda">
+    <div class="container">
+      <header class="secao__cabecalho revelar">
+        <p class="eyebrow">Central de Ajuda</p>
+        <h2 class="secao__titulo">Sua dúvida provavelmente já tem resposta aqui</h2>
+        <span class="secao__linha" aria-hidden="true"></span>
+        <p class="secao__apoio">
+          Pergunte com suas palavras ou escolha um dos atalhos. As respostas
+          são as mesmas que a nossa equipe daria — sem fila e a qualquer hora.
+        </p>
+      </header>
+
+      <div class="ajuda__painel revelar">
+        <div class="ajuda__topo">
+          <span class="ajuda__avatar" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 22a10 10 0 1 0-8.7-5L2 22l5-1.3A10 10 0 0 0 12 22Z"/><path d="M9.1 9.4a3 3 0 0 1 5.8 1c0 2-3 2.6-3 2.6"/><path d="M12 17h.01"/></svg>
+          </span>
+          <span class="ajuda__identidade">
+            <strong>Assistente Martins Log</strong>
+            <small>Respostas imediatas · 24 horas por dia</small>
+          </span>
+        </div>
+
+        <!-- `aria-live` porque a resposta nasce sem mudar o foco: sem isso o
+             leitor de tela anuncia o clique e mais nada. -->
+        <div class="ajuda__conversa" id="ajuda-conversa" role="log" aria-live="polite" aria-label="Conversa da Central de Ajuda">
+          <div class="ajuda__linha ajuda__linha--sistema">
+            <div class="ajuda__bolha">
+              <p class="ajuda__titulo">Olá! Como posso ajudar?</p>
+              <p>
+                Escolha uma das perguntas abaixo ou escreva a sua. Se você já tem
+                o código de rastreio em mãos, é só colar aqui que eu levo você
+                direto para a consulta.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="ajuda__atalhos" id="ajuda-atalhos"></div>
+
+        <form class="ajuda__form" id="form-ajuda" novalidate>
+          <label class="sr-only" for="ajuda-pergunta">Escreva sua dúvida</label>
+          <input id="ajuda-pergunta" name="pergunta" type="text" autocomplete="off"
+                 placeholder="Escreva sua dúvida…">
+          <button class="botao botao--primario" type="submit">
+            <span>Perguntar</span>
+            <svg class="botao__icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4 20-7Z"/></svg>
+          </button>
+        </form>
+
+        <p class="ajuda__rodape">
+          Não achou o que precisava? A resposta oferece o contato da equipe,
+          de segunda a sexta, das 8h às 18h.
+        </p>
+      </div>
+    </div>
+  </section>
+
 <footer class="rodape" id="contato">
   <div class="rodape__estrada" aria-hidden="true">
     <svg viewBox="0 0 1440 400" preserveAspectRatio="none">
@@ -456,6 +526,7 @@
         <li><a href="#sobre">Sobre a empresa</a></li>
         <li><a href="#cobertura">Área de cobertura</a></li>
         <li><a href="#rastreio">Rastrear encomenda</a></li>
+        <li><a href="#ajuda">Central de Ajuda</a></li>
       </ul>
     </div>
 

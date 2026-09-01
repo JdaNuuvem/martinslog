@@ -1,7 +1,7 @@
 /* =========================================================================
    MARTINS LOG — comportamento da página
    Módulos: config → utilitários → cabeçalho → revelações → contadores →
-            cobertura → rastreio
+            cobertura → rastreio → ajuda
    JavaScript puro, sem dependências.
    ========================================================================= */
 
@@ -646,5 +646,472 @@
         form.dispatchEvent(new Event('submit', { cancelable: true }));
       });
     }
+  })();
+
+  /* =========================================================================
+     CENTRAL DE AJUDA
+
+     Busca por palavra-chave sobre uma base de respostas escritas à mão — não
+     é um modelo de linguagem. A escolha é deliberada: as perguntas que mais
+     chegam são sobre prazo, e um gerador de texto responderia "de 3 a 5 dias"
+     com a mesma confiança com que responderia o prazo certo. Uma promessa de
+     entrega errada dita pela transportadora vira reclamação, não atendimento.
+
+     Aqui cada resposta é fixa, revisável e testada (teste/ajuda.test.js).
+     Quando nada casa, a conversa não inventa: oferece o canal humano.
+     ========================================================================= */
+
+  /**
+   * Base de respostas.
+   *
+   * `termos` são os gatilhos de busca, já sem acento e em minúsculas — é
+   * assim que a pergunta chega em `pontuar`. Escrever "codigo" com acento
+   * aqui criaria um gatilho que nunca casa, em silêncio; o teste cobre isso.
+   *
+   * `chip` é o atalho clicável. Só os primeiros viram botão na tela: uma
+   * grade com dezesseis opções é um índice, não um atendimento.
+   */
+  var BASE_AJUDA = [
+    {
+      id: 'prazo',
+      chip: 'Quanto tempo leva para chegar?',
+      titulo: 'Prazo de entrega',
+      termos: [
+        'prazo', 'quanto tempo', 'demora', 'quando chega', 'quando vai chegar',
+        'tempo de entrega', 'quantos dias', 'dias uteis', 'previsao', 'chega quando'
+      ],
+      resposta: [
+        'O prazo é de <strong>até 10 dias úteis</strong> a partir da postagem — não a partir da compra.',
+        'Dias úteis não contam sábado, domingo nem feriado. Um pedido postado numa sexta-feira, por exemplo, começa a contar na segunda.',
+        'Enquanto a loja não despacha o pacote, o prazo ainda não começou. É por isso que o rastreio pode ficar alguns dias sem movimento logo no começo.'
+      ]
+    },
+    {
+      id: 'rastrear',
+      chip: 'Como rastreio meu pedido?',
+      titulo: 'Como rastrear',
+      termos: [
+        'rastrear', 'rastreio', 'rastreamento', 'acompanhar', 'onde esta',
+        'cade meu pedido', 'localizar', 'status do pedido', 'ver o pedido'
+      ],
+      resposta: [
+        'É só informar o código de rastreio no campo de consulta desta página. Ele mostra todo o caminho do pacote, do embarque à entrega, atualizado em tempo real.',
+        'O código tem o formato <strong>EC000000000BR</strong> — duas letras, números e mais duas letras no fim.'
+      ],
+      acao: { rotulo: 'Abrir o rastreio', href: '#rastreio' }
+    },
+    {
+      id: 'sem-codigo',
+      chip: 'Não recebi o código de rastreio',
+      titulo: 'Código de rastreio não chegou',
+      termos: [
+        'nao recebi o codigo', 'sem codigo', 'nao tenho o codigo', 'perdi o codigo',
+        'nao chegou o codigo', 'cade o codigo', 'onde pego o codigo'
+      ],
+      resposta: [
+        'Quem gera e envia o código é a <strong>loja onde você comprou</strong>, assim que despacha o pacote. Ele costuma chegar por e-mail ou WhatsApp — vale conferir a caixa de spam.',
+        'Nós transportamos a carga, mas não temos acesso à lista de pedidos da loja: sem o código, não conseguimos localizar a encomenda pelo seu nome ou CPF.',
+        'Se já se passaram alguns dias desde a confirmação do pagamento e nada chegou, fale com a loja.'
+      ]
+    },
+    {
+      id: 'codigo-sem-info',
+      chip: 'O código não mostra nada ainda',
+      titulo: 'Código sem informação',
+      termos: [
+        'nao aparece nada', 'sem informacao', 'codigo invalido', 'nao encontrado',
+        'nao reconhece', 'codigo nao funciona', 'nao acha o codigo', 'sem movimentacao'
+      ],
+      resposta: [
+        'Um código recém-criado leva algumas horas para aparecer no sistema. Isso é normal: a etiqueta foi emitida, mas o pacote ainda não passou pela primeira leitura na unidade.',
+        'Se depois de <strong>24 horas úteis</strong> continuar sem nada, confira se o código foi digitado inteiro e sem espaços. Persistindo, o problema é na postagem — a loja precisa verificar.'
+      ]
+    },
+    {
+      id: 'parado',
+      chip: 'O rastreio está parado há dias',
+      titulo: 'Rastreio sem atualização',
+      termos: [
+        'parado', 'nao atualiza', 'sem atualizacao', 'travado', 'mesma situacao',
+        'nao anda', 'ha dias', 'dias sem'
+      ],
+      resposta: [
+        'Entre uma cidade e outra o pacote viaja sem novas leituras — em trechos longos, dois ou três dias sem registro são esperados. O rastreio só marca quando a carga chega a uma unidade.',
+        'A situação <strong>Em transferência</strong> é justamente essa: está em movimento, mesmo sem aparecer nada novo.',
+        'Passando de cinco dias úteis sem nenhum registro, aí sim vale falar com a gente.'
+      ]
+    },
+    {
+      id: 'atrasado',
+      chip: 'Passou do prazo e não chegou',
+      titulo: 'Entrega fora do prazo',
+      termos: [
+        'atrasado', 'atraso', 'passou do prazo', 'fora do prazo', 'estourou o prazo',
+        'venceu o prazo', 'nao chegou ainda', 'ja passou'
+      ],
+      resposta: [
+        'Antes de tudo, confira a data de <strong>postagem</strong> no rastreio: a contagem começa ali, e não no dia da compra. É a confusão mais comum.',
+        'Se o prazo realmente venceu, fale com a gente com o código em mãos que rastreamos a carga internamente e damos uma posição.',
+        'Se a última situação for uma tentativa de entrega frustrada ou aguardando retirada, o prazo fica suspenso até você agir — veja as perguntas sobre esses casos.'
+      ]
+    },
+    {
+      id: 'tentativa',
+      chip: 'Tentaram entregar e eu não estava',
+      titulo: 'Tentativa de entrega frustrada',
+      termos: [
+        'nao estava em casa', 'tentativa frustrada', 'nao me encontraram',
+        'perdi a entrega', 'passou e nao entregou', 'ninguem em casa', 'ausente'
+      ],
+      resposta: [
+        'São feitas <strong>até 3 tentativas</strong> em dias diferentes, sem custo extra. Não precisa fazer nada: a próxima acontece automaticamente no dia útil seguinte.',
+        'Depois da terceira tentativa sem sucesso, o pacote fica disponível para retirada na unidade mais próxima por 7 dias corridos. Passado esse prazo, volta para a loja.'
+      ]
+    },
+    {
+      id: 'retirada',
+      chip: 'Está aguardando retirada',
+      titulo: 'Aguardando retirada na unidade',
+      termos: [
+        'aguardando retirada', 'retirar', 'buscar na unidade', 'ir buscar',
+        'disponivel para retirada', 'retirada'
+      ],
+      resposta: [
+        'Leve um <strong>documento com foto</strong> no mesmo nome do destinatário. Se for outra pessoa retirando, ela precisa de uma autorização assinada por você, junto com cópia do seu documento.',
+        'O pacote fica guardado por <strong>7 dias corridos</strong>. Depois disso volta para a loja, e a devolução do valor passa a ser tratada com ela.',
+        'O endereço da unidade aparece na própria consulta de rastreio.'
+      ]
+    },
+    {
+      id: 'quem-recebe',
+      chip: 'Preciso estar em casa para receber?',
+      titulo: 'Quem pode receber',
+      termos: [
+        'quem pode receber', 'preciso estar', 'outra pessoa', 'vizinho', 'porteiro',
+        'receber por mim', 'assinar', 'estar em casa'
+      ],
+      resposta: [
+        'Não precisa ser você. Qualquer pessoa maior de idade no endereço pode receber, apresentando documento e assinando o comprovante — inclusive porteiro ou zelador, em prédios.',
+        'A entrega acontece em <strong>dias úteis, das 8h às 18h</strong>. Não entregamos aos sábados, domingos e feriados.'
+      ]
+    },
+    {
+      id: 'endereco',
+      chip: 'Errei o endereço, dá para mudar?',
+      titulo: 'Endereço errado ou incompleto',
+      termos: [
+        'endereco errado', 'mudar o endereco', 'trocar o endereco', 'alterar endereco',
+        'endereco incompleto', 'numero errado', 'cep errado', 'me mudei'
+      ],
+      resposta: [
+        'O endereço vem da loja junto com o pedido, e é ela que precisa solicitar a correção — nós não alteramos o destino por conta própria.',
+        'Fale com a loja o quanto antes: <strong>enquanto o pacote não sair para entrega</strong>, a mudança costuma ser possível. Depois disso, só depois da tentativa frustrada.'
+      ]
+    },
+    {
+      id: 'taxa',
+      chip: 'Recebi cobrança de taxa. É golpe?',
+      titulo: 'Cobrança de taxa por mensagem',
+      termos: [
+        'taxa', 'cobranca', 'pagar', 'pagamento', 'golpe', 'sms', 'link de pagamento',
+        'pix', 'boleto', 'me pediram', 'tarifa', 'liberar o pacote'
+      ],
+      resposta: [
+        '<strong>É golpe.</strong> A Martins Log nunca envia SMS, e-mail ou WhatsApp pedindo pagamento de taxa, tarifa alfandegária ou "liberação" de pacote. Não pague e não clique no link.',
+        'O frete é acertado com a loja no momento da compra. Não existe nenhuma cobrança extra do transportador na hora da entrega.',
+        'Se receber uma mensagem dessas, apague. Na dúvida, confira a situação real do pacote aqui no rastreio desta página — é a única fonte oficial.'
+      ],
+      acao: { rotulo: 'Conferir no rastreio oficial', href: '#rastreio' }
+    },
+    {
+      id: 'avaria',
+      chip: 'Chegou danificado ou faltando item',
+      titulo: 'Produto danificado ou incompleto',
+      termos: [
+        'danificado', 'quebrado', 'avaria', 'amassado', 'violado', 'faltando',
+        'veio errado', 'produto errado', 'aberto', 'estragado'
+      ],
+      resposta: [
+        'Se a embalagem estiver visivelmente danificada ou violada, <strong>recuse a entrega</strong> e anote o motivo no comprovante — é o registro que garante o seguro da carga.',
+        'Se só percebeu depois, fotografe a embalagem e o produto e comunique a loja em até 7 dias. Toda carga é segurada; a loja aciona o seguro junto à gente.',
+        'Produto errado ou faltando item é responsabilidade da loja: ela monta e lacra o pacote, nós só transportamos lacrado.'
+      ]
+    },
+    {
+      id: 'cancelar',
+      chip: 'Quero cancelar ou devolver',
+      titulo: 'Cancelamento e devolução',
+      termos: [
+        'cancelar', 'devolver', 'devolucao', 'estorno', 'reembolso', 'arrependimento',
+        'nao quero mais', 'desistir', 'trocar o produto', 'troca'
+      ],
+      resposta: [
+        'Cancelamento, troca e reembolso são tratados <strong>com a loja onde você comprou</strong> — o contrato de venda é com ela, não conosco.',
+        'Assim que a loja autorizar a devolução, ela emite a etiqueta de retorno e nós fazemos a coleta ou o encaminhamento.'
+      ]
+    },
+    {
+      id: 'cobertura',
+      chip: 'Vocês entregam na minha cidade?',
+      titulo: 'Área de cobertura',
+      termos: [
+        'cobertura', 'atende', 'entrega em', 'minha cidade', 'meu estado',
+        'todo o brasil', 'regiao', 'interior', 'chegam ate'
+      ],
+      resposta: [
+        'Atendemos <strong>todo o território nacional</strong>, com frota própria nos principais corredores e parceiros credenciados na ponta.',
+        'A seção de cobertura desta página mostra os prazos por região.'
+      ],
+      acao: { rotulo: 'Ver a cobertura', href: '#cobertura' }
+    },
+    {
+      id: 'frete',
+      chip: 'Quanto custa o frete?',
+      titulo: 'Valor do frete',
+      termos: [
+        'quanto custa', 'valor do frete', 'preco do frete', 'quanto e o frete',
+        'cotacao', 'orcamento', 'custo'
+      ],
+      resposta: [
+        'Para quem comprou em uma loja, o frete já foi calculado e cobrado no checkout dela — não há nada a pagar na entrega.',
+        'Se você é lojista e quer contratar a Martins Log, fale com a gente pelos canais no rodapé desta página que montamos uma tabela para o seu volume.'
+      ]
+    },
+    {
+      id: 'atendente',
+      chip: 'Quero falar com um atendente',
+      titulo: 'Atendimento humano',
+      termos: [
+        'atendente', 'falar com alguem', 'humano', 'pessoa', 'telefone', 'contato',
+        'whatsapp', 'ligar', 'suporte', 'reclamacao', 'reclamar'
+      ],
+      resposta: [
+        'Nosso atendimento funciona de <strong>segunda a sexta, das 8h às 18h</strong>.',
+        'Deixe o <strong>código de rastreio</strong> em mãos na primeira mensagem — com ele a consulta é imediata; sem ele, o atendimento trava logo no começo.'
+      ],
+      humano: true
+    }
+  ];
+
+  /** Tudo em minúsculas, sem acento e sem pontuação — o formato dos `termos`. */
+  function normalizarPergunta(texto) {
+    return String(texto == null ? '' : texto)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /**
+   * Casa o termo respeitando fronteira de palavra.
+   *
+   * Com `indexOf` cru, o gatilho "taxa" casaria dentro de "sintaxe" e "pagar"
+   * dentro de "pagarei" — o segundo até serve, o primeiro entrega a resposta
+   * sobre golpe para quem perguntou outra coisa. A fronteira resolve os dois
+   * sem precisar de lista de exceções.
+   */
+  function contemTermo(texto, termo) {
+    var i = texto.indexOf(termo);
+    while (i >= 0) {
+      var antesOk = i === 0 || texto.charAt(i - 1) === ' ';
+      var fim = i + termo.length;
+      var depoisOk = fim >= texto.length || texto.charAt(fim) === ' ';
+      if (antesOk && depoisOk) return true;
+      i = texto.indexOf(termo, i + 1);
+    }
+    return false;
+  }
+
+  /**
+   * Peso 5 para expressão de duas ou mais palavras, 2 para palavra solta.
+   *
+   * "quanto tempo" só aparece em quem pergunta sobre prazo; "pagar" aparece
+   * em meia dúzia de contextos. Somar 1 para cada um faria a coincidência de
+   * duas palavras genéricas vencer o sinal específico.
+   */
+  function pontuar(pergunta, item) {
+    var pontos = 0;
+    for (var i = 0; i < item.termos.length; i++) {
+      var termo = item.termos[i];
+      if (contemTermo(pergunta, termo)) {
+        pontos += termo.indexOf(' ') >= 0 ? 5 : 2;
+      }
+    }
+    return pontos;
+  }
+
+  /** Duas letras, seis ou mais dígitos e duas letras: EC000000014BR. */
+  function pareceCodigo(pergunta) {
+    return /(^|\s)[a-z]{2}\d{6,}[a-z]{2}(\s|$)/.test(pergunta);
+  }
+
+  /**
+   * Decide o que responder.
+   *
+   * Devolve `vazio` quando nada pontua, em vez de entregar o item de maior
+   * pontuação seja ela qual for: responder sobre prazo a quem perguntou de
+   * nota fiscal é pior do que admitir que não sabe e passar para o humano.
+   */
+  function responder(texto) {
+    var pergunta = normalizarPergunta(texto);
+    if (!pergunta) return { tipo: 'vazio', relacionados: [] };
+    if (pareceCodigo(pergunta)) return { tipo: 'codigo', relacionados: [] };
+
+    var ranking = [];
+    for (var i = 0; i < BASE_AJUDA.length; i++) {
+      var pontos = pontuar(pergunta, BASE_AJUDA[i]);
+      if (pontos > 0) ranking.push({ item: BASE_AJUDA[i], pontos: pontos });
+    }
+    if (!ranking.length) return { tipo: 'vazio', relacionados: [] };
+
+    ranking.sort(function (a, b) { return b.pontos - a.pontos; });
+
+    /* Empate ou quase-empate vira sugestão, não segunda resposta despejada
+       na tela: quem perguntou escolhe qual dos dois caminhos era o dele. */
+    var melhor = ranking[0];
+    var relacionados = [];
+    for (var j = 1; j < ranking.length && relacionados.length < 2; j++) {
+      if (ranking[j].pontos >= melhor.pontos * 0.6) relacionados.push(ranking[j].item);
+    }
+
+    return { tipo: 'resposta', item: melhor.item, relacionados: relacionados };
+  }
+
+  /* ===== TELA ===== */
+  (function () {
+    var painel = $('#ajuda-conversa');
+    var form = $('#form-ajuda');
+    if (!painel || !form) return;
+
+    var campo = $('#ajuda-pergunta');
+    var atalhos = $('#ajuda-atalhos');
+    var contato = cfg.ajudaContato || {};
+
+    /* Ancora a rolagem no início da resposta nova, e não no fim do painel:
+       resposta longa rolada até o rodapé começa no meio da frase. */
+    function rolarPara(el) {
+      painel.scrollTop = el.offsetTop - painel.offsetTop - 12;
+    }
+
+    function bolha(autor, classe) {
+      var linha = criar('div', 'ajuda__linha ajuda__linha--' + autor);
+      var b = criar('div', 'ajuda__bolha ' + (classe || ''));
+      linha.appendChild(b);
+      painel.appendChild(linha);
+      return b;
+    }
+
+    function escrever(bolhaEl, item) {
+      var titulo = criar('p', 'ajuda__titulo', item.titulo);
+      bolhaEl.appendChild(titulo);
+      for (var i = 0; i < item.resposta.length; i++) {
+        var p = criar('p');
+        /* Conteúdo nosso, escrito neste arquivo — nada aqui vem do usuário
+           nem da rede, então o <strong> das ênfases pode ser interpretado. */
+        p.innerHTML = item.resposta[i];
+        bolhaEl.appendChild(p);
+      }
+      if (item.acao) {
+        var a = criar('a', 'ajuda__acao', item.acao.rotulo);
+        a.href = item.acao.href;
+        bolhaEl.appendChild(a);
+      }
+      if (item.humano) bolhaEl.appendChild(blocoContato());
+    }
+
+    /**
+     * Canais reais, tirados da configuração.
+     *
+     * Sem `ajudaContato.whatsapp` configurado o botão simplesmente não nasce:
+     * um link de WhatsApp para um número que não existe é pior que nenhum —
+     * o cliente tenta, não recebe resposta e vai embora achando que ninguém
+     * atende.
+     */
+    function blocoContato() {
+      var caixa = criar('div', 'ajuda__canais');
+      if (contato.whatsapp) {
+        var wa = criar('a', 'ajuda__acao ajuda__acao--zap', 'Chamar no WhatsApp');
+        wa.href = 'https://wa.me/' + contato.whatsapp +
+          '?text=' + encodeURIComponent('Olá! Preciso de ajuda com meu pedido. Código de rastreio: ');
+        wa.rel = 'noopener';
+        wa.target = '_blank';
+        caixa.appendChild(wa);
+      }
+      if (contato.telefone) {
+        var tel = criar('a', 'ajuda__acao ajuda__acao--vazado', contato.telefoneRotulo || contato.telefone);
+        tel.href = 'tel:' + contato.telefone;
+        caixa.appendChild(tel);
+      }
+      if (contato.email) {
+        var mail = criar('a', 'ajuda__acao ajuda__acao--vazado', contato.email);
+        mail.href = 'mailto:' + contato.email;
+        caixa.appendChild(mail);
+      }
+      return caixa;
+    }
+
+    function responderNaTela(texto) {
+      var pergunta = bolha('pessoa');
+      pergunta.textContent = texto;
+
+      var r = responder(texto);
+      var resposta = bolha('sistema');
+
+      if (r.tipo === 'codigo') {
+        resposta.appendChild(criar('p', 'ajuda__titulo', 'Isso parece um código de rastreio'));
+        var p = criar('p', null, 'Consultas de código são feitas no campo de rastreio — ele mostra a situação atualizada e todo o histórico do pacote.');
+        resposta.appendChild(p);
+        var ir = criar('a', 'ajuda__acao', 'Consultar este código');
+        ir.href = '#rastreio';
+        ir.addEventListener('click', function () {
+          var alvo = $('#codigo');
+          if (alvo) alvo.value = texto.trim().toUpperCase();
+        });
+        resposta.appendChild(ir);
+      } else if (r.tipo === 'vazio') {
+        resposta.appendChild(criar('p', 'ajuda__titulo', 'Essa eu não sei responder'));
+        resposta.appendChild(criar('p', null,
+          'Não encontrei nada sobre isso nas perguntas frequentes. Tente reescrever com outras palavras, ou fale direto com a nossa equipe — de segunda a sexta, das 8h às 18h.'));
+        resposta.appendChild(blocoContato());
+      } else {
+        escrever(resposta, r.item);
+        if (r.relacionados.length) {
+          var caixa = criar('div', 'ajuda__relacionados');
+          caixa.appendChild(criar('span', 'ajuda__relacionados-rotulo', 'Também pode ser isto:'));
+          for (var i = 0; i < r.relacionados.length; i++) {
+            caixa.appendChild(botaoAtalho(r.relacionados[i].chip));
+          }
+          resposta.appendChild(caixa);
+        }
+      }
+
+      rolarPara(pergunta.parentNode);
+    }
+
+    function botaoAtalho(rotulo) {
+      var b = criar('button', 'ajuda__chip', rotulo);
+      b.type = 'button';
+      b.addEventListener('click', function () { responderNaTela(rotulo); });
+      return b;
+    }
+
+    /* Só os seis primeiros viram atalho visível: a lista inteira na tela é
+       um índice para ler, e quem chega aqui quer uma resposta. */
+    if (atalhos) {
+      for (var i = 0; i < BASE_AJUDA.length && i < 6; i++) {
+        atalhos.appendChild(botaoAtalho(BASE_AJUDA[i].chip));
+      }
+    }
+
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var texto = campo.value.trim();
+      if (!texto) return;
+      responderNaTela(texto);
+      campo.value = '';
+      campo.focus();
+    });
   })();
 })();

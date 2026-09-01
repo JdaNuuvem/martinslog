@@ -683,6 +683,156 @@ body.travado{overflow:hidden}
 .toast--saindo{animation:sair .3s ease both}
 @keyframes sair{to{opacity:0;transform:translateX(20px)}}
 
+/* ===== CENTRAL DE AJUDA ===== */
+.ajuda__painel{
+  max-width:820px;margin:0 auto;
+  background:var(--white);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-md);
+  overflow:hidden;
+}
+
+.ajuda__topo{
+  display:flex;align-items:center;gap:12px;
+  padding:16px 20px;
+  background:var(--navy-900);color:var(--white);
+}
+
+.ajuda__avatar{
+  flex:0 0 auto;display:grid;place-items:center;
+  width:40px;height:40px;border-radius:50%;
+  background:var(--red-600);
+}
+.ajuda__avatar svg{
+  width:20px;height:20px;fill:none;
+  stroke:var(--white);stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round;
+}
+
+.ajuda__identidade{display:flex;flex-direction:column;line-height:1.3}
+.ajuda__identidade strong{font-family:var(--fonte-titulo);font-size:1rem}
+/* Sobre o azul-marinho este cinza dá 5,9:1 — o --gray-500 da paleta clara
+   cairia para 3,4:1 e reprovaria no contraste de texto. */
+.ajuda__identidade small{font-size:.78rem;color:#AEBAD0}
+
+/* A conversa rola dentro do painel, não na página: sem altura máxima, cada
+   resposta empurra o campo de digitação para fora da tela e quem quer fazer
+   a segunda pergunta precisa rolar de volta para achá-lo. */
+.ajuda__conversa{
+  max-height:420px;overflow-y:auto;
+  padding:20px;
+  background:var(--gray-050);
+  display:flex;flex-direction:column;gap:14px;
+  scroll-behavior:smooth;
+}
+
+.ajuda__linha{display:flex}
+.ajuda__linha--sistema{justify-content:flex-start}
+.ajuda__linha--pessoa{justify-content:flex-end}
+
+.ajuda__bolha{
+  max-width:88%;
+  padding:14px 16px;
+  border-radius:var(--radius);
+  background:var(--white);
+  border:1px solid var(--gray-200);
+  box-shadow:var(--shadow-sm);
+  font-size:.95rem;
+}
+.ajuda__bolha p{margin:0 0 10px}
+.ajuda__bolha p:last-child{margin-bottom:0}
+.ajuda__bolha strong{color:var(--navy-900);font-weight:700}
+
+.ajuda__linha--pessoa .ajuda__bolha{
+  background:var(--navy-700);color:var(--white);
+  border-color:var(--navy-700);
+}
+.ajuda__linha--pessoa .ajuda__bolha strong{color:var(--white)}
+
+.ajuda__titulo{
+  font-family:var(--fonte-titulo);font-weight:700;
+  color:var(--navy-900);font-size:1.02rem;line-height:1.3;
+  margin:0 0 8px;
+}
+
+.ajuda__acao{
+  display:inline-flex;align-items:center;gap:6px;
+  margin-top:4px;margin-right:8px;
+  padding:9px 16px;border-radius:999px;
+  background:var(--red-600);color:var(--white);
+  font-weight:600;font-size:.86rem;text-decoration:none;
+  transition:background .18s;
+}
+.ajuda__acao--vazado{
+  background:transparent;color:var(--navy-700);
+  border:1.5px solid var(--gray-200);
+}
+.ajuda__acao--zap{background:var(--verde)}
+@media (hover:hover){
+  .ajuda__acao:hover{background:var(--navy-800);color:var(--white)}
+  .ajuda__acao--vazado:hover{border-color:var(--navy-800)}
+}
+
+.ajuda__canais{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+
+.ajuda__relacionados{
+  margin-top:14px;padding-top:12px;
+  border-top:1px solid var(--gray-200);
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+}
+.ajuda__relacionados-rotulo{
+  width:100%;font-size:.78rem;font-weight:600;
+  text-transform:uppercase;letter-spacing:.04em;
+  color:var(--gray-500);
+}
+
+.ajuda__atalhos{
+  display:flex;flex-wrap:wrap;gap:8px;
+  padding:16px 20px 0;
+}
+
+.ajuda__chip{
+  font:inherit;font-size:.84rem;font-weight:600;
+  padding:8px 14px;border-radius:999px;
+  border:1.5px solid var(--gray-200);
+  background:var(--white);color:var(--navy-700);
+  cursor:pointer;
+  transition:border-color .18s,background .18s;
+}
+@media (hover:hover){
+  .ajuda__chip:hover{border-color:var(--red-600);background:var(--red-050)}
+}
+.ajuda__chip:focus-visible{outline:2px solid var(--red-600);outline-offset:2px}
+
+.ajuda__form{display:flex;gap:10px;padding:16px 20px}
+.ajuda__form input{
+  flex:1;min-width:0;
+  font:inherit;font-size:.95rem;
+  padding:13px 16px;
+  border:1.5px solid var(--gray-200);border-radius:var(--radius);
+  background:var(--gray-050);color:var(--gray-800);
+}
+.ajuda__form input:focus{
+  outline:none;border-color:var(--navy-700);background:var(--white);
+}
+.ajuda__form .botao{flex:0 0 auto;white-space:nowrap}
+
+.ajuda__rodape{
+  margin:0;padding:0 20px 20px;
+  font-size:.82rem;color:var(--gray-500);
+}
+
+/* No celular o botão vira só o ícone: "Perguntar" ao lado do campo sobra
+   pouco mais de metade da largura para digitar. */
+@media (max-width:560px){
+  .ajuda__form .botao span{display:none}
+  .ajuda__form .botao{padding-left:16px;padding-right:16px}
+  .ajuda__bolha{max-width:100%}
+  .ajuda__conversa{max-height:340px;padding:16px}
+  .ajuda__atalhos,.ajuda__form{padding-left:16px;padding-right:16px}
+  .ajuda__rodape{padding-left:16px;padding-right:16px}
+}
+
 /* ===== ANIMAÇÕES DE ENTRADA =====
    O estado escondido só existe quando o JS assume (classe .js no <html>).
    Sem JS — ou se o script falhar — o conteúdo fica visível, nunca em branco. */
