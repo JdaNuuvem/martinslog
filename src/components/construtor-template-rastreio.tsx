@@ -73,7 +73,10 @@ export function ConstrutorTemplateRastreio() {
         padrao: Passo[]
       }
       setPaleta(corpo.paleta)
-      setPadraoDoFluxo(corpo.padrao)
+      // O caminho padrão também precisa de id: ele vira a base do fluxo
+      // personalizado quando a conta troca de modo, e um nó sem id não pode
+      // ser ligado a outro.
+      setPadraoDoFluxo(corpo.padrao.map((passo, i) => ({ ...passo, id: passo.id ?? `padrao-${i}` })))
       setUsaTemplate(Boolean(corpo.template))
       // Templates montados antes da repetição não têm id; atribui na leitura
       // para que dois nós do mesmo tipo não se confundam ao editar.
@@ -272,7 +275,8 @@ export function ConstrutorTemplateRastreio() {
       return
     }
     setUsaTemplate(false)
-    setPassos(padraoDoFluxo)
+    setPassos(padraoDoFluxo.map((passo, i) => ({ ...passo, id: passo.id ?? `padrao-${i}` })))
+    setConexoes([])
     setAviso('Voltou ao caminho padrão. Envios novos seguem a simulação por cenário.')
   }
 
@@ -311,7 +315,14 @@ export function ConstrutorTemplateRastreio() {
           type="button"
           role="radio"
           aria-checked={usaTemplate}
-          onClick={() => setUsaTemplate(true)}
+          onClick={() => {
+            // Garante id em todo nó antes de permitir ligações: os nós vindos
+            // do caminho padrão podem não ter um.
+            setPassos((atuais) =>
+              atuais.map((passo, i) => ({ ...passo, id: passo.id ?? `no-${Date.now()}-${i}` })),
+            )
+            setUsaTemplate(true)
+          }}
           className={`rounded-pilula px-4 py-2 text-sm font-medium ${
             usaTemplate ? 'bg-brand text-white' : 'text-texto-secundario'
           }`}

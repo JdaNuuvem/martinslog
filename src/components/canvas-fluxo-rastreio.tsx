@@ -137,9 +137,11 @@ export function CanvasFluxoRastreio({
   const posicoesIniciais = useRef<Map<number, { x: number; y: number }>>(new Map())
   const panInicial = useRef({ x: 0, y: 0, desloc: { x: 0, y: 0 } })
   const posicoesRef = useRef<{ x: number; y: number }[]>([])
+  const nosRef = useRef<No[]>([])
 
   const posicoes = nos.map((no, indice) => posicaoDoNo(no, indice))
   posicoesRef.current = posicoes
+  nosRef.current = nos
 
   const principal = selecionados.size === 1 ? [...selecionados][0]! : null
   const noSelecionado = principal !== null ? nos[principal] : undefined
@@ -242,7 +244,36 @@ export function CanvasFluxoRastreio({
       setLigando((anterior) => (anterior ? { ...anterior, x: atual.x, y: atual.y } : anterior))
     }
 
-    function aoSoltar() {
+    /**
+     * A solta é resolvida aqui, por posição, e não por um `onPointerUp` na
+     * alça de entrada.
+     *
+     * Duas razões: a alça tem 16 pixels e exigir a mira exata torna a ligação
+     * quase impossível com o mouse; e o `pointerup` frequentemente nem chega
+     * nela, porque o ponteiro fica capturado pelo elemento onde o arrasto
+     * começou. Soltar em qualquer ponto do nó de destino fecha a ligação.
+     */
+    function aoSoltar(evento: PointerEvent) {
+      const ponto = paraCanvas(evento.clientX, evento.clientY)
+      const origem = ligando?.de
+
+      const alvo = nosRef.current.findIndex((no, indice) => {
+        const pos = posicoesRef.current[indice] ?? posicaoPadrao(indice)
+        return (
+          no.id !== undefined &&
+          no.id !== origem &&
+          ponto.x >= pos.x &&
+          ponto.x <= pos.x + LARGURA_NO &&
+          ponto.y >= pos.y &&
+          ponto.y <= pos.y + ALTURA_NO
+        )
+      })
+
+      if (origem && alvo >= 0) {
+        const destino = nosRef.current[alvo]?.id
+        if (destino) onConectar(origem, destino)
+      }
+
       setLigando(null)
     }
 
@@ -252,7 +283,7 @@ export function CanvasFluxoRastreio({
       window.removeEventListener('pointermove', aoMover)
       window.removeEventListener('pointerup', aoSoltar)
     }
-  }, [ligando, paraCanvas])
+  }, [ligando, paraCanvas, onConectar])
 
   function aoApertarNoFundo(evento: ReactPointerEvent) {
     if (evento.target !== evento.currentTarget) return
@@ -540,7 +571,11 @@ export function CanvasFluxoRastreio({
                         : item?.terminal
                           ? 'border-texto-secundario bg-superficie-card'
                           : 'border-brand bg-superficie-card'
-                    } ${ativo ? 'ring-2 ring-brand ring-offset-2' : ''}`}
+                    } ${ativo ? 'ring-2 ring-brand ring-offset-2' : ''} ${
+                      ligando && ligando.de !== no.id
+                        ? 'ring-2 ring-brand/50 ring-offset-1'
+                        : ''
+                    }`}
                   >
                     {editavel ? (
                       <>
@@ -562,18 +597,12 @@ export function CanvasFluxoRastreio({
                               y: pos.y + ALTURA_NO / 2,
                             })
                           }}
-                          className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 cursor-crosshair rounded-full border-2 border-brand bg-superficie-card"
+                          className="absolute -right-2.5 top-1/2 h-5 w-5 -translate-y-1/2 cursor-crosshair rounded-full border-2 border-brand bg-superficie-card hover:bg-brand"
                         />
                         {/* Alça de entrada: solte aqui para fechar a ligação. */}
                         <span
                           aria-hidden="true"
-                          onPointerUp={(e) => {
-                            if (!ligando || !no.id || ligando.de === no.id) return
-                            e.stopPropagation()
-                            onConectar(ligando.de, no.id)
-                            setLigando(null)
-                          }}
-                          className={`absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border-2 ${
+                          className={`pointer-events-none absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border-2 ${
                             ligando && ligando.de !== no.id
                               ? 'border-brand bg-brand'
                               : 'border-borda-campo bg-superficie-card'
