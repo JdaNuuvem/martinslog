@@ -107,7 +107,9 @@ svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.75;strok
 .botao[disabled]{opacity:.65;cursor:not-allowed}
 
 @media (hover:hover){
-  .botao--primario:hover{background:var(--red-500);transform:translateY(-2px);box-shadow:0 10px 24px rgba(216,30,40,.36)}
+  /* O hover escurece em vez de clarear: texto branco sobre --red-500 dá
+     4,24:1, abaixo do mínimo de 4,5:1. Sobre --red-700 dá 6,90:1. */
+  .botao--primario:hover{background:var(--red-700);transform:translateY(-2px);box-shadow:0 10px 24px rgba(216,30,40,.36)}
   .botao--contorno:hover{background:rgba(255,255,255,.12);border-color:var(--white)}
   .botao--navy:hover{background:var(--navy-900);color:var(--white)}
 }
