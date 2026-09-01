@@ -75,7 +75,7 @@ export function PainelSimulacaoEnvio({
   return (
     <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
       <div>
-        <h2 className="text-lg font-bold text-texto-principal">Controles da simulação</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Controles da simulação</h2>
         <p className="text-sm text-texto-secundario">
           Trocar o cenário substitui apenas os eventos futuros: o que o cliente já viu
           permanece como está.

@@ -83,7 +83,7 @@ export function EnderecosArquivados({ versao, onReativado }: Props) {
         aria-controls="lista-enderecos-arquivados"
         className="flex items-center justify-between text-left focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
       >
-        <span className="text-lg font-bold text-texto-principal">Endereços arquivados</span>
+        <span className="text-subtitulo font-semibold text-texto-principal">Endereços arquivados</span>
         <span className="text-sm font-medium text-brand-texto">
           {aberta ? 'Ocultar' : 'Mostrar'}
         </span>

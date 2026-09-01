@@ -94,10 +94,10 @@ export default function CadastroPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-6 px-4 py-8">
+    <div className="flex flex-col gap-6">
       <header>
-        <h1 className="text-2xl font-bold text-texto-principal">Criar conta</h1>
-        <p className="mt-1 text-sm text-texto-secundario">
+        <h1 className="text-titulo font-bold text-texto-principal">Criar conta</h1>
+        <p className="mt-1 text-corpo text-texto-secundario">
           Cadastre-se para acompanhar suas cotações e envios.
         </p>
       </header>

@@ -101,7 +101,13 @@ export function Sidebar({ aberta, onFechar, botaoMenuRef, autenticado }: Sidebar
 
       <aside
         id={SIDEBAR_ID}
-        className={`${aberta ? 'fixed flex shadow-xl' : 'hidden'} bottom-0 left-0 top-topbar z-40 w-sidebar border-r border-superficie-bloco bg-superficie-card lg:fixed lg:flex`}
+        /*
+          Gaveta aberta flutua sobre o conteúdo: sombra, sem borda. Fixada no
+          desktop, ela é parte da estrutura: borda, sem sombra. Cada estado
+          escolhe um dos dois — os dois juntos são o vício que a auditoria de
+          estilo chama de "hairline border with wide shadow".
+        */
+        className={`${aberta ? 'fixed flex shadow-flutuante' : 'hidden'} bottom-0 left-0 top-topbar z-40 w-sidebar bg-superficie-card lg:fixed lg:flex lg:border-r lg:border-superficie-bloco lg:shadow-none`}
       >
         <nav ref={navRef} aria-label="Navegação principal" className="flex h-full flex-col gap-1 p-3">
           <div className="mb-2 flex items-center justify-between lg:hidden">

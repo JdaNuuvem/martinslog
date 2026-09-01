@@ -80,7 +80,7 @@ export function CotacaoStep({ quoteId, servicoId, onQuoteId, onServicoId, onCont
 
   return (
     <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6" aria-labelledby={`${idBase}-titulo`}>
-      <h1 id={`${idBase}-titulo`} className="text-lg font-bold text-texto-principal">
+      <h1 id={`${idBase}-titulo`} className="text-subtitulo font-semibold text-texto-principal">
         Escolha a cotação
       </h1>
       <form onSubmit={submeterCotacao} className="grid grid-cols-2 gap-3">

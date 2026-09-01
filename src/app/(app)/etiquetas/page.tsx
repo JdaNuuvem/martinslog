@@ -12,8 +12,8 @@ export default function PaginaEtiquetas() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-texto-principal">Etiquetas</h1>
-        <p className="text-sm text-texto-secundario">
+        <h1 className="text-titulo font-bold text-texto-principal">Etiquetas</h1>
+        <p className="max-w-leitura text-corpo text-texto-secundario">
           Seus envios, por situação. O cancelamento é possível até a postagem e não devolve o
           valor pago.
         </p>

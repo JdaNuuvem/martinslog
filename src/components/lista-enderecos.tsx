@@ -60,7 +60,7 @@ function SecaoEnderecos({
   return (
     <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-texto-principal">{titulo}</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">{titulo}</h2>
         {modo === 'lista' ? (
           <button
             type="button"
@@ -214,7 +214,7 @@ export function ListaEnderecos() {
   return (
     <div className="mx-auto flex max-w-conteudo flex-col gap-6 py-8">
       <header>
-        <h1 className="text-2xl font-bold text-texto-principal">Endereços</h1>
+        <h1 className="text-titulo font-bold text-texto-principal">Endereços</h1>
         <p className="mt-1 text-sm text-texto-secundario">
           Cadastre remetentes e destinatários para agilizar a geração de etiquetas.
         </p>

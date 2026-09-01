@@ -38,8 +38,8 @@ export default async function PaginaSimulacao() {
   return (
     <>
       <div>
-        <h1 className="text-2xl font-bold text-texto-principal">Simulação de transporte</h1>
-        <p className="text-sm text-texto-secundario">
+        <h1 className="text-titulo font-bold text-texto-principal">Simulação de transporte</h1>
+        <p className="max-w-leitura text-corpo text-texto-secundario">
           A linha do tempo de cada envio nasce inteira na emissão da etiqueta, já datada no
           futuro. Nada roda em segundo plano: a consulta simplesmente mostra o que já venceu.
         </p>
@@ -49,7 +49,7 @@ export default async function PaginaSimulacao() {
 
       <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
         <div>
-          <h2 className="text-lg font-bold text-texto-principal">Envios com rastreio</h2>
+          <h2 className="text-subtitulo font-semibold text-texto-principal">Envios com rastreio</h2>
           <p className="text-sm text-texto-secundario">
             {envios.length === 0
               ? 'Nenhum envio emitido ainda.'
@@ -59,8 +59,8 @@ export default async function PaginaSimulacao() {
 
         {envios.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[48rem] text-left text-sm">
-              <thead className="text-xs uppercase text-texto-secundario">
+            <table className="w-full min-w-[48rem] text-left text-dado">
+              <thead className="text-rotulo uppercase text-texto-secundario">
                 <tr>
                   <th scope="col" className="py-2 pr-4">Código</th>
                   <th scope="col" className="py-2 pr-4">Serviço</th>

@@ -81,7 +81,7 @@ function LinhaEnvio({ envio }: { envio: EnvioResumo }) {
       </div>
 
       <div className="shrink-0 border-l border-borda-campo pl-4 text-right">
-        <p className="text-xs uppercase text-texto-secundario">{envio.servico}</p>
+        <p className="text-rotulo uppercase text-texto-secundario">{envio.servico}</p>
         <p className="text-xs text-texto-secundario">
           {formatarData(envio.ocorridoEm ?? envio.criadoEm)}
         </p>

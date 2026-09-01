@@ -37,7 +37,14 @@ export function OpcaoFreteCard({ opcao }: OpcaoFreteCardProps) {
     <li
       data-testid="opcao-frete"
       data-disponivel="true"
-      className="flex flex-col gap-3 rounded-xl border border-superficie-bloco bg-superficie-card p-4 shadow-sm transition hover:border-brand-light hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
+      /*
+        Elevação sozinha, sem borda. A combinação anterior (borda fina +
+        sombra) deixava a superfície indecisa entre ter aresta e flutuar; o
+        cartão de cotação é conteúdo destacado do fundo, então flutua. O
+        hover reforça a elevação e a marca sem mexer em layout — animar
+        largura ou padding aqui causaria tremor na lista inteira.
+      */
+      className="flex flex-col gap-3 rounded-cartao bg-superficie-card p-5 shadow-elevado transition-shadow hover:shadow-flutuante sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="min-w-0">
         <p className="font-semibold text-texto-principal">{opcao.servicoNome}</p>

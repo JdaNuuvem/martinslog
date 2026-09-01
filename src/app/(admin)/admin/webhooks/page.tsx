@@ -35,8 +35,8 @@ export default async function PaginaWebhooks() {
   return (
     <>
       <div>
-        <h1 className="text-2xl font-bold text-texto-principal">Webhooks</h1>
-        <p className="text-sm text-texto-secundario">
+        <h1 className="text-titulo font-bold text-texto-principal">Webhooks</h1>
+        <p className="max-w-leitura text-corpo text-texto-secundario">
           {pendentes} na fila · {entregues} entregues · {desistidas} desistidas
         </p>
       </div>
@@ -44,14 +44,14 @@ export default async function PaginaWebhooks() {
       <DispararWebhooks />
 
       <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
-        <h2 className="text-lg font-bold text-texto-principal">Entregas não concluídas</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Entregas não concluídas</h2>
 
         {fila.length === 0 ? (
           <p className="text-sm text-texto-secundario">Nenhuma entrega pendente.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[44rem] text-left text-sm">
-              <thead className="text-xs uppercase text-texto-secundario">
+            <table className="w-full min-w-[44rem] text-left text-dado">
+              <thead className="text-rotulo uppercase text-texto-secundario">
                 <tr>
                   <th scope="col" className="py-2 pr-4">Evento</th>
                   <th scope="col" className="py-2 pr-4">Destino</th>

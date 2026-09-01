@@ -26,7 +26,13 @@ export default async function LayoutAdmin({ children }: { children: ReactNode })
 
   return (
     <AppShell nomeUsuario="ADMINISTRAÇÃO">
-      <div className="flex flex-col gap-6">{children}</div>
+      {/*
+        `gap-secao` entre os blocos da página, e não o `gap-6` uniforme de
+        antes: espaçamento igual em toda parte apaga a informação de o que
+        pertence a quê. Dentro de cada seção os itens continuam próximos; é a
+        distância entre seções que diz onde um assunto termina.
+      */}
+      <div className="flex flex-col gap-secao">{children}</div>
     </AppShell>
   )
 }

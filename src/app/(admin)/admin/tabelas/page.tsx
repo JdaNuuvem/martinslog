@@ -24,8 +24,8 @@ export default async function PaginaTabelas() {
   return (
     <>
       <div>
-        <h1 className="text-2xl font-bold text-texto-principal">Tabelas de preço</h1>
-        <p className="text-sm text-texto-secundario">
+        <h1 className="text-titulo font-bold text-texto-principal">Tabelas de preço</h1>
+        <p className="max-w-leitura text-corpo text-texto-secundario">
           {regras.length} {regras.length === 1 ? 'regra vigente' : 'regras vigentes'}.
         </p>
       </div>
@@ -33,7 +33,7 @@ export default async function PaginaTabelas() {
       <ImportarTabelaForm />
 
       <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
-        <h2 className="text-lg font-bold text-texto-principal">Regras vigentes</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Regras vigentes</h2>
 
         {regras.length === 0 ? (
           <p className="text-sm text-texto-secundario">
@@ -41,8 +41,8 @@ export default async function PaginaTabelas() {
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[52rem] text-left text-sm">
-              <thead className="text-xs uppercase text-texto-secundario">
+            <table className="w-full min-w-[52rem] text-left text-dado">
+              <thead className="text-rotulo uppercase text-texto-secundario">
                 <tr>
                   <th scope="col" className="py-2 pr-4">Serviço</th>
                   <th scope="col" className="py-2 pr-4">CEP origem</th>

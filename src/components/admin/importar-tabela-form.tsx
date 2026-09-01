@@ -54,7 +54,7 @@ export function ImportarTabelaForm() {
   return (
     <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
       <div>
-        <h2 className="text-lg font-bold text-texto-principal">Importar tabela de preço</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Importar tabela de preço</h2>
         <p className="text-sm text-texto-secundario">
           O arquivo substitui as regras dos serviços que aparecerem nele. Uma linha com defeito
           cancela a importação inteira — nada é gravado pela metade.

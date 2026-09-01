@@ -201,7 +201,7 @@ export function RevisaoStep({
 
   return (
     <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
-      <h2 className="text-lg font-bold text-texto-principal">Revisão</h2>
+      <h2 className="text-subtitulo font-semibold text-texto-principal">Revisão</h2>
 
       {carregando && <p className="text-sm text-texto-secundario">Calculando valores…</p>}
 

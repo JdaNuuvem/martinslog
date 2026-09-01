@@ -98,8 +98,8 @@ export default async function PaginaEnviosAdmin({
   return (
     <>
       <div>
-        <h1 className="text-2xl font-bold text-texto-principal">Envios</h1>
-        <p className="text-sm text-texto-secundario">
+        <h1 className="text-titulo font-bold text-texto-principal">Envios</h1>
+        <p className="max-w-leitura text-corpo text-texto-secundario">
           Todas as etiquetas da plataforma. Cancelar e excluir daqui fica registrado na auditoria.
         </p>
       </div>
@@ -197,7 +197,7 @@ export default async function PaginaEnviosAdmin({
       </nav>
 
       <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
-        <h2 className="text-lg font-bold text-texto-principal">
+        <h2 className="text-subtitulo font-semibold text-texto-principal">
           {lista.total} {lista.total === 1 ? 'envio' : 'envios'}
         </h2>
 
@@ -205,8 +205,8 @@ export default async function PaginaEnviosAdmin({
           <p className="text-sm text-texto-secundario">Nenhum envio corresponde a este filtro.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[64rem] text-left text-sm">
-              <thead className="text-xs uppercase text-texto-secundario">
+            <table className="w-full min-w-[64rem] text-left text-dado">
+              <thead className="text-rotulo uppercase text-texto-secundario">
                 <tr>
                   <th scope="col" className="py-2 pr-4">Criado em</th>
                   <th scope="col" className="py-2 pr-4">Código</th>

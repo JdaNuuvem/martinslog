@@ -16,8 +16,8 @@ export default async function PaginaServicos() {
   return (
     <>
       <div>
-        <h1 className="text-2xl font-bold text-texto-principal">Transportadoras e serviços</h1>
-        <p className="text-sm text-texto-secundario">
+        <h1 className="text-titulo font-bold text-texto-principal">Transportadoras e serviços</h1>
+        <p className="max-w-leitura text-corpo text-texto-secundario">
           {ativos} de {servicos.length} serviço(s) ativos. Serviço desativado sai das cotações
           novas; envios e cotações já feitos continuam apontando para ele.
         </p>

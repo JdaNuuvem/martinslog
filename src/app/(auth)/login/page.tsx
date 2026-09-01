@@ -72,10 +72,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-6 px-4 py-8">
+    <div className="flex flex-col gap-6">
       <header>
-        <h1 className="text-2xl font-bold text-texto-principal">Entrar</h1>
-        <p className="mt-1 text-sm text-texto-secundario">Acesse sua conta para continuar.</p>
+        <h1 className="text-titulo font-bold text-texto-principal">Entrar</h1>
+        <p className="mt-1 text-corpo text-texto-secundario">Acesse sua conta para continuar.</p>
       </header>
 
       <form onSubmit={aoSubmeter} noValidate className="flex flex-col gap-4">

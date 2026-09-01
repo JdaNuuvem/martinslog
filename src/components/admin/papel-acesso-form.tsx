@@ -124,7 +124,7 @@ export function PapelAcessoForm({ userId }: { userId: string }) {
   return (
     <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
       <div>
-        <h2 className="text-lg font-bold text-texto-principal">Papel e acesso</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Papel e acesso</h2>
         <p className="text-sm text-texto-secundario">
           Promover a administrador dá acesso ao painel inteiro. Toda ação aqui fica registrada na
           auditoria.
@@ -141,13 +141,13 @@ export function PapelAcessoForm({ userId }: { userId: string }) {
         <>
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
             <div>
-              <dt className="text-xs uppercase text-texto-secundario">Papel atual</dt>
+              <dt className="text-rotulo uppercase text-texto-secundario">Papel atual</dt>
               <dd className="text-texto-principal">
                 {contexto.papel === 'ADMIN' ? 'Administrador' : 'Cliente'}
               </dd>
             </div>
             <div>
-              <dt className="text-xs uppercase text-texto-secundario">E-mail</dt>
+              <dt className="text-rotulo uppercase text-texto-secundario">E-mail</dt>
               <dd className="text-texto-principal">
                 {contexto.emailVerificadoEm
                   ? `Verificado em ${dataHora(contexto.emailVerificadoEm)}`
@@ -155,7 +155,7 @@ export function PapelAcessoForm({ userId }: { userId: string }) {
               </dd>
             </div>
             <div>
-              <dt className="text-xs uppercase text-texto-secundario">Sessões ativas</dt>
+              <dt className="text-rotulo uppercase text-texto-secundario">Sessões ativas</dt>
               <dd className="text-texto-principal">{contexto.sessoesAtivas}</dd>
             </div>
           </dl>

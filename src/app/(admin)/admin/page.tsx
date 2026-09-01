@@ -37,8 +37,8 @@ export default async function PaginaAdmin() {
   return (
     <>
       <div>
-        <h1 className="text-2xl font-bold text-texto-principal">Administração</h1>
-        <p className="text-sm text-texto-secundario">
+        <h1 className="text-titulo font-bold text-texto-principal">Administração</h1>
+        <p className="max-w-leitura text-corpo text-texto-secundario">
           Área restrita. Toda ação que mexe em dinheiro ou status fica registrada na auditoria.
         </p>
       </div>
@@ -51,14 +51,14 @@ export default async function PaginaAdmin() {
               href={cartao.href}
               className="rounded-xl bg-superficie-card p-6 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
             >
-              <p className="text-xs uppercase text-texto-secundario">{cartao.titulo}</p>
-              <p className="text-2xl font-bold text-texto-principal">{cartao.valor}</p>
+              <p className="text-rotulo uppercase text-texto-secundario">{cartao.titulo}</p>
+              <p className="text-titulo font-bold text-texto-principal">{cartao.valor}</p>
               <p className="mt-2 text-sm font-medium text-brand-texto">Abrir</p>
             </Link>
           ) : (
             <div key={cartao.titulo} className="rounded-xl bg-superficie-card p-6">
-              <p className="text-xs uppercase text-texto-secundario">{cartao.titulo}</p>
-              <p className="text-2xl font-bold text-texto-principal">{cartao.valor}</p>
+              <p className="text-rotulo uppercase text-texto-secundario">{cartao.titulo}</p>
+              <p className="text-titulo font-bold text-texto-principal">{cartao.valor}</p>
               <p className="mt-2 text-sm text-texto-secundario">Em construção</p>
             </div>
           ),

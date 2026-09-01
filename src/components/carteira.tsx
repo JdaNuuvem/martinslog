@@ -178,7 +178,7 @@ export function Carteira() {
       {modoRecarga && (
         <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6" aria-labelledby="titulo-recarga">
           <div className="flex items-center justify-between">
-            <h2 id="titulo-recarga" className="text-lg font-bold text-texto-principal">
+            <h2 id="titulo-recarga" className="text-subtitulo font-semibold text-texto-principal">
               Adicionar saldo
             </h2>
             <button
@@ -287,7 +287,7 @@ export function Carteira() {
       )}
 
       <section className="flex flex-col gap-3 rounded-xl bg-superficie-card p-6">
-        <h2 className="text-lg font-bold text-texto-principal">Extrato</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Extrato</h2>
 
         {carteira && carteira.extrato.itens.length === 0 && (
           <p className="text-sm text-texto-secundario">Nenhum lançamento ainda.</p>
@@ -295,7 +295,7 @@ export function Carteira() {
 
         {carteira && carteira.extrato.itens.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full text-left text-dado">
               <thead>
                 <tr className="border-b border-superficie-bloco text-texto-secundario">
                   <th className="py-2 pr-4 font-semibold">Data</th>

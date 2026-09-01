@@ -39,8 +39,8 @@ export default async function PaginaUsuario({ params }: { params: Promise<{ id: 
         >
           ← Usuários
         </Link>
-        <h1 className="text-2xl font-bold text-texto-principal">{usuario.nome}</h1>
-        <p className="text-sm text-texto-secundario">
+        <h1 className="text-titulo font-bold text-texto-principal">{usuario.nome}</h1>
+        <p className="max-w-leitura text-corpo text-texto-secundario">
           {usuario.email} · {usuario.documento}
           {usuario.telefone ? ` · ${usuario.telefone}` : ''}
         </p>
@@ -48,16 +48,16 @@ export default async function PaginaUsuario({ params }: { params: Promise<{ id: 
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-xl bg-superficie-card p-6">
-          <p className="text-xs uppercase text-texto-secundario">Saldo atual</p>
-          <p className="text-2xl font-bold text-texto-principal">{reais(usuario.saldoCentavos)}</p>
+          <p className="text-rotulo uppercase text-texto-secundario">Saldo atual</p>
+          <p className="text-titulo font-bold text-texto-principal">{reais(usuario.saldoCentavos)}</p>
         </div>
         <div className="rounded-xl bg-superficie-card p-6">
-          <p className="text-xs uppercase text-texto-secundario">Etiquetas</p>
-          <p className="text-2xl font-bold text-texto-principal">{usuario.envios}</p>
+          <p className="text-rotulo uppercase text-texto-secundario">Etiquetas</p>
+          <p className="text-titulo font-bold text-texto-principal">{usuario.envios}</p>
         </div>
         <div className="rounded-xl bg-superficie-card p-6">
-          <p className="text-xs uppercase text-texto-secundario">Conta desde</p>
-          <p className="text-2xl font-bold text-texto-principal">
+          <p className="text-rotulo uppercase text-texto-secundario">Conta desde</p>
+          <p className="text-titulo font-bold text-texto-principal">
             {usuario.criadoEm.toLocaleDateString('pt-BR')}
           </p>
         </div>
@@ -68,13 +68,13 @@ export default async function PaginaUsuario({ params }: { params: Promise<{ id: 
       <AjusteSaldoForm userId={usuario.id} saldoCentavos={usuario.saldoCentavos} />
 
       <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
-        <h2 className="text-lg font-bold text-texto-principal">Últimos lançamentos</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Últimos lançamentos</h2>
         {usuario.extrato.length === 0 ? (
           <p className="text-sm text-texto-secundario">Nenhum lançamento nesta carteira.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[40rem] text-left text-sm">
-              <thead className="text-xs uppercase text-texto-secundario">
+            <table className="w-full min-w-[40rem] text-left text-dado">
+              <thead className="text-rotulo uppercase text-texto-secundario">
                 <tr>
                   <th scope="col" className="py-2 pr-4">Quando</th>
                   <th scope="col" className="py-2 pr-4">Tipo</th>
@@ -104,13 +104,13 @@ export default async function PaginaUsuario({ params }: { params: Promise<{ id: 
       <CriarEtiquetaForm userId={usuario.id} />
 
       <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
-        <h2 className="text-lg font-bold text-texto-principal">Etiquetas do cliente</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Etiquetas do cliente</h2>
         {usuario.etiquetas.length === 0 ? (
           <p className="text-sm text-texto-secundario">Este cliente ainda não tem etiquetas.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[48rem] text-left text-sm">
-              <thead className="text-xs uppercase text-texto-secundario">
+            <table className="w-full min-w-[48rem] text-left text-dado">
+              <thead className="text-rotulo uppercase text-texto-secundario">
                 <tr>
                   <th scope="col" className="py-2 pr-4">Criada em</th>
                   <th scope="col" className="py-2 pr-4">Código</th>

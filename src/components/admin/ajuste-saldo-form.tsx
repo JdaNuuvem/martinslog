@@ -94,7 +94,7 @@ export function AjusteSaldoForm({
   return (
     <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
       <div>
-        <h2 className="text-lg font-bold text-texto-principal">Ajustar saldo</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Ajustar saldo</h2>
         <p className="text-sm text-texto-secundario">
           O ajuste vira um lançamento no extrato do cliente, com o motivo digitado. Não existe
           edição direta de saldo — para desfazer, lance o ajuste inverso.
@@ -103,7 +103,7 @@ export function AjusteSaldoForm({
 
       <form onSubmit={enviar} className="flex flex-col gap-4">
         <fieldset className="flex flex-col gap-2">
-          <legend className="text-xs uppercase text-texto-secundario">Operação</legend>
+          <legend className="text-rotulo uppercase text-texto-secundario">Operação</legend>
           <div className="flex gap-2">
             {(
               [

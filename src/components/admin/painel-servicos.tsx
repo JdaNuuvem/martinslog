@@ -150,7 +150,7 @@ export function PainelServicos({
       ) : null}
 
       <section className="flex flex-col gap-3 rounded-xl bg-superficie-card p-6">
-        <h2 className="text-lg font-bold text-texto-principal">Nova transportadora</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Nova transportadora</h2>
         <form
           onSubmit={async (evento: FormEvent<HTMLFormElement>) => {
             evento.preventDefault()
@@ -184,7 +184,7 @@ export function PainelServicos({
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-bold text-texto-principal">
+              <h2 className="text-subtitulo font-semibold text-texto-principal">
                 {transportadora.nome}
                 {!transportadora.ativo ? (
                   <span className="ml-2 rounded-pilula bg-borda-campo px-2 py-0.5 text-xs font-medium text-texto-secundario">
@@ -233,8 +233,8 @@ export function PainelServicos({
             <p className="text-sm text-texto-secundario">Nenhum serviço nesta transportadora.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[56rem] text-left text-sm">
-                <thead className="text-xs uppercase text-texto-secundario">
+              <table className="w-full min-w-[56rem] text-left text-dado">
+                <thead className="text-rotulo uppercase text-texto-secundario">
                   <tr>
                     <th scope="col" className="py-2 pr-4">Código</th>
                     <th scope="col" className="py-2 pr-4">Nome</th>
@@ -339,7 +339,7 @@ function ServicoForm({
 
   return (
     <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
-      <h2 className="text-lg font-bold text-texto-principal">
+      <h2 className="text-subtitulo font-semibold text-texto-principal">
         {estado.id ? `Editar serviço ${estado.codigo}` : 'Novo serviço'}
       </h2>
 
@@ -397,7 +397,7 @@ function ServicoForm({
         </div>
 
         <fieldset className="flex flex-wrap items-end gap-3">
-          <legend className="text-xs uppercase text-texto-secundario">
+          <legend className="text-rotulo uppercase text-texto-secundario">
             Dimensões máximas (cm, opcionais)
           </legend>
           {(

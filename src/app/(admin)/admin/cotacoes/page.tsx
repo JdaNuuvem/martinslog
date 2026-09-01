@@ -75,8 +75,8 @@ export default async function PaginaCotacoesAdmin({
   return (
     <>
       <div>
-        <h1 className="text-2xl font-bold text-texto-principal">Cotações</h1>
-        <p className="text-sm text-texto-secundario">
+        <h1 className="text-titulo font-bold text-texto-principal">Cotações</h1>
+        <p className="max-w-leitura text-corpo text-texto-secundario">
           As opções de cada cotação são as que o cliente viu no momento — a tarifa pode ter
           mudado depois, mas o que está aqui é o que foi mostrado.
         </p>
@@ -153,7 +153,7 @@ export default async function PaginaCotacoesAdmin({
       </nav>
 
       <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
-        <h2 className="text-lg font-bold text-texto-principal">
+        <h2 className="text-subtitulo font-semibold text-texto-principal">
           {lista.total} {lista.total === 1 ? 'cotação' : 'cotações'}
         </h2>
 
@@ -213,8 +213,8 @@ export default async function PaginaCotacoesAdmin({
                   <p className="text-sm text-texto-secundario">Nenhuma opção disponível para esta cotação.</p>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[36rem] text-left text-sm">
-                      <thead className="text-xs uppercase text-texto-secundario">
+                    <table className="w-full min-w-[36rem] text-left text-dado">
+                      <thead className="text-rotulo uppercase text-texto-secundario">
                         <tr>
                           <th scope="col" className="py-1 pr-4">Serviço</th>
                           <th scope="col" className="py-1 pr-4">Preço de balcão</th>

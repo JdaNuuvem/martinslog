@@ -153,7 +153,7 @@ export function CatalogoStatus({
 
           <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
             <div>
-              <h2 className="text-lg font-bold text-texto-principal">Etapas do fluxo automático</h2>
+              <h2 className="text-subtitulo font-semibold text-texto-principal">Etapas do fluxo automático</h2>
               <p className="text-sm text-texto-secundario">
                 Um código sem linha aqui usa o texto e a posição embutidos no motor. Salvar cria a
                 linha e passa a valer para todas as contas que não personalizaram aquele código.
@@ -161,8 +161,8 @@ export function CatalogoStatus({
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[52rem] text-left text-sm">
-                <thead className="text-xs uppercase text-texto-secundario">
+              <table className="w-full min-w-[52rem] text-left text-dado">
+                <thead className="text-rotulo uppercase text-texto-secundario">
                   <tr>
                     <th scope="col" className="py-2 pr-4">Código</th>
                     <th scope="col" className="py-2 pr-4">Título</th>
@@ -204,7 +204,7 @@ export function CatalogoStatus({
       ) : (
         <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
           <div>
-            <h2 className="text-lg font-bold text-texto-principal">Status manuais</h2>
+            <h2 className="text-subtitulo font-semibold text-texto-principal">Status manuais</h2>
             <p className="text-sm text-texto-secundario">
               Etapas que não existem no motor. Entram no roteiro do cenário escolhido, na posição
               indicada, e produzem o status de envio informado.
@@ -215,8 +215,8 @@ export function CatalogoStatus({
             <p className="text-sm text-texto-secundario">Nenhum status manual criado.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[56rem] text-left text-sm">
-                <thead className="text-xs uppercase text-texto-secundario">
+              <table className="w-full min-w-[56rem] text-left text-dado">
+                <thead className="text-rotulo uppercase text-texto-secundario">
                   <tr>
                     <th scope="col" className="py-2 pr-4">Código</th>
                     <th scope="col" className="py-2 pr-4">Título</th>
@@ -285,7 +285,7 @@ function CadenciaForm({
   return (
     <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
       <div>
-        <h2 className="text-lg font-bold text-texto-principal">Cadência fixa</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Cadência fixa</h2>
         <p className="text-sm text-texto-secundario">
           Espaça as etapas do caminho normal — emissão, postagem, transferência, saída para
           entrega, entrega — de X em X dias, ignorando o prazo do serviço. As etapas exclusivas de
@@ -379,7 +379,7 @@ function EtapaMotorForm({
       }}
       className="flex flex-col gap-3 border-t border-borda-campo pt-4"
     >
-      <h3 className="text-sm font-bold text-texto-principal">Editar etapa do motor</h3>
+      <h3 className="text-corpo font-semibold text-texto-principal">Editar etapa do motor</h3>
 
       <div className="flex flex-wrap gap-3">
         <label className="flex w-56 flex-col gap-1 text-sm">
@@ -473,7 +473,7 @@ function StatusManualForm({
       }}
       className="flex flex-col gap-3 border-t border-borda-campo pt-4"
     >
-      <h3 className="text-sm font-bold text-texto-principal">Novo status manual</h3>
+      <h3 className="text-corpo font-semibold text-texto-principal">Novo status manual</h3>
 
       <div className="flex flex-wrap gap-3">
         <label className="flex w-56 flex-col gap-1 text-sm">

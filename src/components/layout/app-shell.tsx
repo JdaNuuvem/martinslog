@@ -45,8 +45,14 @@ export function AppShell({ children, nomeUsuario = 'VISITANTE', autenticado = fa
         botaoMenuRef={botaoMenuRef}
         autenticado={autenticado}
       />
-      <main className="min-w-0 px-4 pb-8 pt-topbar lg:pl-sidebar">
-        <div className="pt-8">{children}</div>
+      {/*
+        `px-5` em vez de `px-4`: texto encostado na borda da janela é a
+        reclamação silenciosa de toda tela estreita, e 16px é o mínimo — não a
+        meta. O `pb-secao` fecha a página com o mesmo respiro que separa suas
+        seções, em vez de cortar o conteúdo rente ao fim da rolagem.
+      */}
+      <main className="min-w-0 px-5 pb-secao pt-topbar sm:px-8 lg:pl-sidebar">
+        <div className="pt-bloco lg:pt-secao">{children}</div>
       </main>
     </div>
   )

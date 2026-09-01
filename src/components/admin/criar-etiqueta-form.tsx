@@ -50,7 +50,7 @@ function CamposEndereco({
 }) {
   return (
     <fieldset className="flex flex-col gap-2">
-      <legend className="text-xs uppercase text-texto-secundario">{titulo}</legend>
+      <legend className="text-rotulo uppercase text-texto-secundario">{titulo}</legend>
       <div className="flex flex-wrap gap-3">
         {CAMPOS_ENDERECO.map((campo) => (
           <label key={campo.chave} className={`flex flex-col gap-1 text-sm ${campo.largura}`}>
@@ -174,7 +174,7 @@ export function CriarEtiquetaForm({ userId }: { userId: string }) {
     return (
       <section className="flex items-center justify-between gap-4 rounded-xl bg-superficie-card p-6">
         <div>
-          <h2 className="text-lg font-bold text-texto-principal">Criar etiqueta para o cliente</h2>
+          <h2 className="text-subtitulo font-semibold text-texto-principal">Criar etiqueta para o cliente</h2>
           <p className="text-sm text-texto-secundario">
             A tarifa é cotada no servidor pelos CEPs, peso e dimensões — igual ao fluxo do cliente.
           </p>
@@ -193,7 +193,7 @@ export function CriarEtiquetaForm({ userId }: { userId: string }) {
   return (
     <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
       <div>
-        <h2 className="text-lg font-bold text-texto-principal">Criar etiqueta para o cliente</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Criar etiqueta para o cliente</h2>
         <p className="text-sm text-texto-secundario">
           Sem campo de preço: o valor vem da cotação gerada no servidor.
         </p>
@@ -204,7 +204,7 @@ export function CriarEtiquetaForm({ userId }: { userId: string }) {
         <CamposEndereco titulo="Destinatário" valor={destinatario} aoMudar={setDestinatario} />
 
         <fieldset className="flex flex-col gap-2">
-          <legend className="text-xs uppercase text-texto-secundario">Conteúdo declarado</legend>
+          <legend className="text-rotulo uppercase text-texto-secundario">Conteúdo declarado</legend>
           <div className="flex flex-wrap gap-3">
             <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-sm">
               <span className="text-texto-secundario">Produto</span>
@@ -240,7 +240,7 @@ export function CriarEtiquetaForm({ userId }: { userId: string }) {
         </fieldset>
 
         <fieldset className="flex flex-col gap-2">
-          <legend className="text-xs uppercase text-texto-secundario">Embalagem</legend>
+          <legend className="text-rotulo uppercase text-texto-secundario">Embalagem</legend>
           <div className="flex flex-wrap gap-3">
             <label className="flex w-32 flex-col gap-1 text-sm">
               <span className="text-texto-secundario">Peso (g)</span>

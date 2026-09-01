@@ -69,8 +69,8 @@ export default async function PaginaAuditoria({
   return (
     <>
       <div>
-        <h1 className="text-2xl font-bold text-texto-principal">Auditoria</h1>
-        <p className="text-sm text-texto-secundario">
+        <h1 className="text-titulo font-bold text-texto-principal">Auditoria</h1>
+        <p className="max-w-leitura text-corpo text-texto-secundario">
           Somente leitura. Toda ação que mexe em dinheiro, status ou tabela grava aqui, junto com
           o estado anterior — inclusive as feitas pelo próprio cliente.
         </p>
@@ -158,7 +158,7 @@ export default async function PaginaAuditoria({
       </form>
 
       <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
-        <h2 className="text-lg font-bold text-texto-principal">
+        <h2 className="text-subtitulo font-semibold text-texto-principal">
           {lista.total} {lista.total === 1 ? 'registro' : 'registros'}
         </h2>
 
@@ -207,13 +207,13 @@ export default async function PaginaAuditoria({
                   </summary>
                   <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div>
-                      <p className="text-xs uppercase text-texto-secundario">Antes</p>
+                      <p className="text-rotulo uppercase text-texto-secundario">Antes</p>
                       <pre className="overflow-x-auto rounded-lg border border-borda-campo p-3 text-xs text-texto-principal">
                         {json(registro.antes)}
                       </pre>
                     </div>
                     <div>
-                      <p className="text-xs uppercase text-texto-secundario">Depois</p>
+                      <p className="text-rotulo uppercase text-texto-secundario">Depois</p>
                       <pre className="overflow-x-auto rounded-lg border border-borda-campo p-3 text-xs text-texto-principal">
                         {json(registro.depois)}
                       </pre>

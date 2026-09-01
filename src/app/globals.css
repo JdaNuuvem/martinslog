@@ -22,3 +22,56 @@
 * {
   outline-color: var(--cor-marca);
 }
+
+/**
+ * Família tipográfica declarada de propósito, em vez de herdada do
+ * navegador.
+ *
+ * A pilha começa pela fonte de interface do sistema — a que o usuário já lê o
+ * dia inteiro, e que nenhuma web font substitui sem custo de carregamento e
+ * de personalidade emprestada. Inter e Geist ficam fora por serem a escolha
+ * automática de quase toda interface recente: usá-las é aceitar parecer com
+ * todas as outras.
+ */
+html {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI',
+    system-ui, 'Noto Sans', 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--cor-texto-principal);
+  background-color: var(--cor-fundo-pagina);
+}
+
+/**
+ * Números de largura fixa em tabela e em valor monetário.
+ *
+ * Sem isso, uma coluna de preços dança horizontalmente a cada linha, porque
+ * o "1" proporcional é mais estreito que o "8" — e comparar dois valores
+ * empilhados vira trabalho de conferência em vez de leitura.
+ */
+table,
+time,
+[data-numerico] {
+  font-variant-numeric: tabular-nums;
+}
+
+/**
+ * Título quebra em linhas equilibradas, em vez de deixar uma palavra órfã na
+ * segunda linha. O espaçamento em torno dele é responsabilidade do layout
+ * (`space-y-secao`), não deste arquivo.
+ */
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+/** Evita a última linha do parágrafo com uma palavra sozinha. */
+p {
+  text-wrap: pretty;
+}

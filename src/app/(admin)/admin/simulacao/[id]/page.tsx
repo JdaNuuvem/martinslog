@@ -77,7 +77,7 @@ export default async function PaginaSimulacaoEnvio({
         >
           ← Simulação
         </Link>
-        <h1 className="text-2xl font-bold text-texto-principal">
+        <h1 className="text-titulo font-bold text-texto-principal">
           {envio.codigoRastreio ?? 'Envio sem código'}
         </h1>
       </div>
@@ -85,7 +85,7 @@ export default async function PaginaSimulacaoEnvio({
       <section className="grid grid-cols-2 gap-4 rounded-xl bg-superficie-card p-6 sm:grid-cols-3">
         {resumo.map((item) => (
           <div key={item.rotulo}>
-            <p className="text-xs uppercase text-texto-secundario">{item.rotulo}</p>
+            <p className="text-rotulo uppercase text-texto-secundario">{item.rotulo}</p>
             <p className="text-sm font-medium text-texto-principal">{item.valor}</p>
           </div>
         ))}
@@ -99,7 +99,7 @@ export default async function PaginaSimulacaoEnvio({
       />
 
       <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
-        <h2 className="text-lg font-bold text-texto-principal">
+        <h2 className="text-subtitulo font-semibold text-texto-principal">
           Ocorridos <span className="text-texto-secundario">({passados.length})</span>
         </h2>
         <p className="text-sm text-texto-secundario">
@@ -131,7 +131,7 @@ export default async function PaginaSimulacaoEnvio({
       </section>
 
       <section className="flex flex-col gap-4 rounded-xl bg-superficie-bloco p-6">
-        <h2 className="text-lg font-bold text-texto-principal">
+        <h2 className="text-subtitulo font-semibold text-texto-principal">
           Ainda por acontecer <span className="text-texto-secundario">({futuros.length})</span>
         </h2>
         <p className="text-sm text-texto-secundario">

@@ -88,7 +88,7 @@ export function WebhooksForm() {
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
         <div>
-          <h2 className="text-lg font-bold text-texto-principal">Webhooks</h2>
+          <h2 className="text-subtitulo font-semibold text-texto-principal">Webhooks</h2>
           <p className="text-sm text-texto-secundario">
             Avisamos a sua URL a cada mudança de estado do envio. A entrega é assinada, para você
             conferir que veio mesmo de nós.
@@ -164,7 +164,7 @@ export function WebhooksForm() {
       </section>
 
       <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
-        <h2 className="text-lg font-bold text-texto-principal">Webhooks cadastrados</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Webhooks cadastrados</h2>
 
         {webhooks.length === 0 ? (
           <p className="text-sm text-texto-secundario">Nenhum webhook cadastrado ainda.</p>
@@ -189,7 +189,7 @@ export function WebhooksForm() {
       </section>
 
       <section className="flex flex-col gap-3 rounded-xl bg-superficie-card p-6">
-        <h2 className="text-lg font-bold text-texto-principal">Como conferir a assinatura</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Como conferir a assinatura</h2>
         <p className="text-sm text-texto-secundario">
           Cada entrega leva dois cabeçalhos: <code>x-frete-timestamp</code> e{' '}
           <code>x-frete-signature</code>. Calcule o HMAC-SHA256 de{' '}

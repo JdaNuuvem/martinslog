@@ -50,7 +50,7 @@ export function FatorVelocidadeForm({ fatorAtual }: { fatorAtual: number }) {
   return (
     <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
       <div>
-        <h2 className="text-lg font-bold text-texto-principal">Velocidade da simulação</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Velocidade da simulação</h2>
         <p className="text-sm text-texto-secundario">
           Vale apenas para envios novos. O fator é copiado para o envio quando a etiqueta é
           emitida, então quem já está em trânsito continua no ritmo em que começou — mudar
@@ -60,7 +60,7 @@ export function FatorVelocidadeForm({ fatorAtual }: { fatorAtual: number }) {
 
       <form onSubmit={enviar} className="flex flex-col gap-4">
         <fieldset className="flex flex-col gap-2">
-          <legend className="text-xs uppercase text-texto-secundario">Presets</legend>
+          <legend className="text-rotulo uppercase text-texto-secundario">Presets</legend>
           <div className="flex flex-wrap gap-2">
             {PRESETS.map((preset) => (
               <button
@@ -68,7 +68,7 @@ export function FatorVelocidadeForm({ fatorAtual }: { fatorAtual: number }) {
                 type="button"
                 onClick={() => setFator(preset.valor)}
                 aria-pressed={fator === preset.valor}
-                className={`rounded-lg border px-3 py-2 text-left text-sm focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand ${
+                className={`rounded-lg border px-3 py-2 text-left text-dado focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand ${
                   fator === preset.valor
                     ? 'border-brand bg-brand text-white'
                     : 'border-borda-campo text-texto-principal'

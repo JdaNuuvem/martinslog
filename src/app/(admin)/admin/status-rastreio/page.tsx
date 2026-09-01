@@ -16,8 +16,8 @@ export default async function PaginaStatusRastreio() {
   return (
     <>
       <div>
-        <h1 className="text-2xl font-bold text-texto-principal">Status de rastreio</h1>
-        <p className="text-sm text-texto-secundario">
+        <h1 className="text-titulo font-bold text-texto-principal">Status de rastreio</h1>
+        <p className="max-w-leitura text-corpo text-texto-secundario">
           Catálogo padrão da plataforma. Vale para envios <strong>novos</strong>: a linha do tempo
           é materializada na emissão da etiqueta, então quem já está em trânsito não é reescrito.
         </p>

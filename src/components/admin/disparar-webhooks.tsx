@@ -46,7 +46,7 @@ export function DispararWebhooks() {
   return (
     <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-6">
       <div>
-        <h2 className="text-lg font-bold text-texto-principal">Fila de webhooks</h2>
+        <h2 className="text-subtitulo font-semibold text-texto-principal">Fila de webhooks</h2>
         <p className="text-sm text-texto-secundario">
           Processa as entregas vencidas agora. Em produção isto deve ser chamado por um agendador;
           o botão existe para destravar a fila à mão.
@@ -71,15 +71,15 @@ export function DispararWebhooks() {
       {resultado ? (
         <dl role="status" className="grid grid-cols-3 gap-4 rounded-lg bg-superficie-bloco p-4">
           <div>
-            <dt className="text-xs uppercase text-texto-secundario">Entregues</dt>
+            <dt className="text-rotulo uppercase text-texto-secundario">Entregues</dt>
             <dd className="text-xl font-bold text-brand-texto">{resultado.entregues}</dd>
           </div>
           <div>
-            <dt className="text-xs uppercase text-texto-secundario">Reagendadas</dt>
+            <dt className="text-rotulo uppercase text-texto-secundario">Reagendadas</dt>
             <dd className="text-xl font-bold text-texto-principal">{resultado.falhas}</dd>
           </div>
           <div>
-            <dt className="text-xs uppercase text-texto-secundario">Desistidas</dt>
+            <dt className="text-rotulo uppercase text-texto-secundario">Desistidas</dt>
             <dd className="text-xl font-bold text-erro">{resultado.desistidas}</dd>
           </div>
         </dl>
