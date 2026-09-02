@@ -89,6 +89,8 @@ export type EnvioCriado = {
   descontoCentavos: number
   valorDeclaradoCentavos: number
   sandbox: boolean
+  /** Código do pedido na loja, quando ela mandou um. */
+  referenciaExterna: string | null
 }
 
 export type PreviaEnvio = {
@@ -253,6 +255,7 @@ export async function criarEnvio(userId: string, entrada: EntradaEnvio): Promise
     descontoCentavos: envio.descontoCentavos,
     valorDeclaradoCentavos: envio.valorDeclaradoCentavos,
     sandbox: envio.sandbox,
+    referenciaExterna: envio.referenciaExterna,
   }
 }
 

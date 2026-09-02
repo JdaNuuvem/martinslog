@@ -3,7 +3,7 @@ import { prisma } from '@/infra/db/client'
 import { criarUsuarioComSaldo, criarCotacaoValida } from '@/test/factories'
 import { criarEnvio, pagarEnvio, type EnderecoEnvio } from './shipment-service'
 import { cadastrarWebhook } from './webhook-service'
-import { obterInfoEnvio, type ContextoApi } from './api-publica-service'
+import { criarCarrinho, obterInfoEnvio, type ContextoApi } from './api-publica-service'
 
 /**
  * A referência do pedido da loja, do `/cart` até o rastreio.
@@ -142,5 +142,53 @@ describe('referência do pedido da loja', () => {
     expect(
       await prisma.shipment.count({ where: { referenciaExterna: 'PED-DUAS-CAIXAS' } }),
     ).toBe(2)
+  })
+})
+
+describe('o caminho REAL do /cart', () => {
+  it('grava a referência que veio pela rota, e não só a passada direto ao serviço', async () => {
+    /*
+      Este teste existe porque os outros não pegaram o defeito. Eles chamam
+      `criarEnvio` diretamente, e o campo se perdia um degrau acima: o tipo de
+      entrada do carrinho não tinha `external_id`, então `criarCarrinho` nunca
+      repassava o valor.
+
+      Tudo ficava verde — a suíte testava o serviço, e o que quebrava era a
+      rota. Só um pedido real feito pela API mostrou.
+    */
+    const usuario = await criarUsuarioComSaldo(50_000)
+    usuariosCriados.push(usuario.id)
+    const cotacao = await criarCotacaoValida(usuario.id)
+    const servicoId = (cotacao.opcoes as { servicoId: string }[])[0]!.servicoId
+
+    const item = await criarCarrinho(contextoDe(usuario.id), {
+      service: `${cotacao.id}:${servicoId}`,
+      remetente,
+      destinatario,
+      produtos: [{ nome: 'Produto', quantidade: 1, valorUnitarioCentavos: 9790 }],
+      external_id: 'PED-VINDO-DA-ROTA',
+    })
+
+    const gravado = await prisma.shipment.findUniqueOrThrow({ where: { id: item.id } })
+    expect(gravado.referenciaExterna).toBe('PED-VINDO-DA-ROTA')
+
+    // E volta na resposta do próprio /cart, para o integrador confirmar na hora.
+    expect(item.external_id).toBe('PED-VINDO-DA-ROTA')
+  })
+
+  it('sem external_id, o carrinho continua funcionando', async () => {
+    const usuario = await criarUsuarioComSaldo(50_000)
+    usuariosCriados.push(usuario.id)
+    const cotacao = await criarCotacaoValida(usuario.id)
+    const servicoId = (cotacao.opcoes as { servicoId: string }[])[0]!.servicoId
+
+    const item = await criarCarrinho(contextoDe(usuario.id), {
+      service: `${cotacao.id}:${servicoId}`,
+      remetente,
+      destinatario,
+      produtos: [{ nome: 'Produto', quantidade: 1, valorUnitarioCentavos: 9790 }],
+    })
+
+    expect(item.external_id).toBeNull()
   })
 })

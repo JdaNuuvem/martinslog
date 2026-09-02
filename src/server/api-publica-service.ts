@@ -95,6 +95,8 @@ export type EntradaCarrinho = {
   remetente: EntradaEnvio['remetente']
   destinatario: EntradaEnvio['destinatario']
   produtos: EntradaEnvio['produtos']
+  /** Código do pedido na loja, para o comprador ver um código só. */
+  external_id?: string
 }
 
 /**
@@ -115,6 +117,8 @@ export type ItemCarrinho = {
   label_fee: string
   charged: boolean
   status: string
+  /** A referência que a loja mandou. Nulo quando não mandou. */
+  external_id: string | null
 }
 
 function dividirIdServico(service: string): { quoteId: string; servicoId: string } {
@@ -175,6 +179,7 @@ export async function criarCarrinho(
     remetente: entrada.remetente,
     destinatario: entrada.destinatario,
     produtos: entrada.produtos,
+    referenciaExterna: entrada.external_id ?? null,
     sandbox,
     // Vem do token, não do corpo: um perfil informado a cada requisição é um
     // perfil que uma hora vai vir trocado, e o comprador receberia a mensagem
@@ -192,6 +197,7 @@ export async function criarCarrinho(
     label_fee: (envio.precoCobradoCentavos / 100).toFixed(2),
     charged: await houveCobranca(envio.id),
     status: envio.status,
+    external_id: envio.referenciaExterna,
   }
 }
 
