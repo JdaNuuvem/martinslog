@@ -352,3 +352,145 @@ async function houveCobranca(shipmentId: string): Promise<boolean> {
 }
 
 export type { AmbienteApiToken }
+
+/* ===================== Histórico e entregas ===================== */
+
+export type PassoHistorico = {
+  status: string
+  /** Código do catálogo de rastreio: `POSTADO`, `ENTREGUE`… */
+  code: string
+  title: string
+  description: string
+  city: string | null
+  state: string | null
+  occurred_at: string
+}
+
+export type HistoricoEnvio = {
+  id: string
+  status: string
+  tracking: string | null
+  external_id: string | null
+  steps: PassoHistorico[]
+}
+
+/**
+ * `GET /api/v0/order/history/:id` — tudo que já aconteceu com o envio.
+ *
+ * Existe para tirar da conta do integrador o trabalho de descobrir MUDANÇA por
+ * repetição: sem isto, saber que algo andou exige consultar o estado atual de
+ * novo e de novo, e essa consulta divide a mesma cota das chamadas que vendem.
+ *
+ * Devolve só o que JÁ ocorreu. A timeline é gravada inteira e datada na
+ * emissão da etiqueta, então filtrar pelo relógio é o que impede a rota de
+ * revelar ao comprador uma entrega que ainda não aconteceu.
+ */
+export async function obterHistorico(
+  contexto: ContextoApi,
+  shipmentId: string,
+  agora = new Date(),
+): Promise<HistoricoEnvio> {
+  const envio = await prisma.shipment.findUnique({
+    where: { id: shipmentId },
+    select: {
+      id: true,
+      userId: true,
+      status: true,
+      codigoRastreio: true,
+      referenciaExterna: true,
+    },
+  })
+
+  if (!envio || envio.userId !== contexto.userId) {
+    throw new EnvioNaoEncontradoError(`Envio não encontrado: ${shipmentId}`)
+  }
+
+  const passos = await prisma.trackingEvent.findMany({
+    where: { shipmentId, ocorridoEm: { lte: agora } },
+    orderBy: { ocorridoEm: 'asc' },
+    select: {
+      status: true,
+      codigo: true,
+      titulo: true,
+      descricao: true,
+      cidade: true,
+      uf: true,
+      ocorridoEm: true,
+    },
+  })
+
+  return {
+    id: envio.id,
+    status: envio.status,
+    tracking: envio.codigoRastreio,
+    external_id: envio.referenciaExterna,
+    steps: passos.map((p) => ({
+      status: p.status,
+      code: p.codigo,
+      title: p.titulo,
+      description: p.descricao,
+      city: p.cidade || null,
+      state: p.uf || null,
+      occurred_at: p.ocorridoEm.toISOString(),
+    })),
+  }
+}
+
+export type EntregaWebhook = {
+  event_id: string
+  event: string
+  status: 'entregue' | 'pendente' | 'desistiu'
+  attempts: number
+  http_status: number | null
+  error: string | null
+  created_at: string
+  delivered_at: string | null
+  payload: unknown
+}
+
+/**
+ * `GET /api/v0/webhooks/deliveries` — o que tentamos entregar, e o que houve.
+ *
+ * É a rede de recuperação para quem ficou fora do ar além das seis tentativas:
+ * sem ela, um evento perdido só é reconstruído varrendo pedido a pedido, e essa
+ * varredura compete pela mesma cota das chamadas que vendem.
+ *
+ * O `payload` volta inteiro, exatamente como foi enviado — inclusive o
+ * `event_id`, que é o que permite reprocessar sem duplicar o que já entrou.
+ */
+export async function listarEntregasWebhook(
+  contexto: ContextoApi,
+  filtro: { shipmentId?: string; desde?: Date; limite?: number },
+): Promise<EntregaWebhook[]> {
+  const limite = Math.min(Math.max(filtro.limite ?? 100, 1), 500)
+
+  const entregas = await prisma.webhookDelivery.findMany({
+    where: {
+      // O dono do token, sempre. Nunca um id vindo do corpo.
+      webhookApp: { userId: contexto.userId },
+      ...(filtro.desde ? { criadoEm: { gte: filtro.desde } } : {}),
+      /*
+        O envio não é coluna da entrega: ele vive dentro do payload. Filtrar
+        pelo JSON evita uma coluna nova só para consulta, e o volume por conta
+        é pequeno o bastante para isso não pesar.
+      */
+      ...(filtro.shipmentId
+        ? { payload: { path: ['data', 'id'], equals: filtro.shipmentId } }
+        : {}),
+    },
+    orderBy: { criadoEm: 'desc' },
+    take: limite,
+  })
+
+  return entregas.map((e) => ({
+    event_id: e.id,
+    event: e.evento,
+    status: e.entregueEm ? 'entregue' : e.proximaTentativaEm ? 'pendente' : 'desistiu',
+    attempts: e.tentativas,
+    http_status: e.statusHttp,
+    error: e.erro,
+    created_at: e.criadoEm.toISOString(),
+    delivered_at: e.entregueEm?.toISOString() ?? null,
+    payload: e.payload,
+  }))
+}

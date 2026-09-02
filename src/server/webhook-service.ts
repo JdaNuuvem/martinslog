@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto'
+import { randomBytes, randomUUID } from 'crypto'
 import { lookup } from 'dns/promises'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
@@ -135,13 +135,24 @@ export async function enfileirarEvento(
     return 0
   }
 
-  const payload = montarPayload(evento, envio)
+  /*
+    O id é gerado aqui, e não pelo banco, porque o MESMO valor precisa ir
+    dentro do payload e na linha. `createMany` não devolve os ids gerados,
+    e ler de volta depois abriria uma janela em que a entrega existe sem
+    identidade no corpo.
+
+    Cada destino interessado recebe o SEU id: são entregas distintas do
+    mesmo evento, e quem recebe precisa poder deduplicar sem esbarrar na
+    entrega feita a outro app.
+  */
+  const comId = interessados.map((app) => ({ app, entregaId: randomUUID() }))
 
   await tx.webhookDelivery.createMany({
-    data: interessados.map((app) => ({
+    data: comId.map(({ app, entregaId }) => ({
+      id: entregaId,
       webhookAppId: app.id,
       evento,
-      payload,
+      payload: montarPayload(evento, envio, entregaId),
       // Primeira tentativa é imediata: o disparo pega tudo que está vencido.
       proximaTentativaEm: new Date(),
     })),
@@ -167,7 +178,7 @@ type EnvioPayload = {
  * funcionem trocando apenas a base URL. `tracking` é nulo enquanto o envio
  * não tem código — o que, na prática, significa antes de `order.generated`.
  */
-function montarPayload(evento: Evento, envio: EnvioPayload) {
+function montarPayload(evento: Evento, envio: EnvioPayload, entregaId: string) {
   return {
     event: evento,
     data: {
@@ -197,6 +208,15 @@ function montarPayload(evento: Evento, envio: EnvioPayload) {
       price: (envio.precoFreteCentavos / 100).toFixed(2),
       created_at: envio.criadoEm.toISOString(),
     },
+    /*
+      Identidade desta entrega, estável entre as retentativas.
+
+      Existe porque `sent_at` muda a cada tentativa e não serve de chave.
+      Sem ele, quem integra precisa deduplicar por envio + tipo de evento —
+      o que funciona hoje, mas passa a descartar entrega legítima no dia em
+      que o mesmo evento for disparado duas vezes para o mesmo envio.
+    */
+    event_id: entregaId,
     sent_at: new Date().toISOString(),
   }
 }
