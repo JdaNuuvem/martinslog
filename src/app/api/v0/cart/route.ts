@@ -35,6 +35,15 @@ const corpoSchema = z.object({
   remetente: enderecoSchema,
   destinatario: enderecoSchema,
   produtos: z.array(produtoSchema).min(1, 'Informe ao menos um produto'),
+  /**
+   * O código do pedido na loja, para o comprador ver um código só.
+   *
+   * Opcional: quem já integrou continua funcionando sem mandar nada. E não
+   * é chave de idempotência — repetir não atualiza o envio, cria outro. A
+   * deduplicação de envio segue sendo do integrador; a de pedido mora em
+   * `POST /api/v0/pedidos`, onde `external_id` de fato trava.
+   */
+  external_id: z.string().trim().max(120).optional(),
 })
 
 /** `POST /api/v0/cart` — cria o envio → { id, price, status }. */

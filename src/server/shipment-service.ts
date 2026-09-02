@@ -64,6 +64,8 @@ export type EntradaEnvio = {
    * linha — não muda nenhum cálculo de preço nem a validação de endereço.
    * Default `false`: o fluxo do painel nunca passa este campo.
    */
+  /** Código do pedido na loja, para o comprador ver um código só. */
+  referenciaExterna?: string | null
   sandbox?: boolean
   /**
    * Loja que originou o envio, quando a chamada veio de um token de perfil.
@@ -228,6 +230,7 @@ export async function criarEnvio(userId: string, entrada: EntradaEnvio): Promise
         opcionais: {},
         valorDeclaradoCentavos,
         produtos: entrada.produtos as unknown as Prisma.InputJsonValue,
+        referenciaExterna: entrada.referenciaExterna ?? null,
         sandbox: entrada.sandbox ?? false,
         perfilId: entrada.perfilId ?? null,
       },

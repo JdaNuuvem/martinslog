@@ -114,6 +114,7 @@ export async function enfileirarEvento(
       precoFreteCentavos: true,
       precoCobradoCentavos: true,
       criadoEm: true,
+      referenciaExterna: true,
     },
   })
 
@@ -158,6 +159,7 @@ type EnvioPayload = {
   /** A taxa por etiqueta. Fica fora do payload — ver `montarPayload`. */
   precoCobradoCentavos: number
   criadoEm: Date
+  referenciaExterna: string | null
 }
 
 /**
@@ -173,6 +175,12 @@ function montarPayload(evento: Evento, envio: EnvioPayload) {
       status: envio.status,
       tracking: envio.codigoRastreio,
       tracking_url: envio.codigoRastreio ? `/r/${envio.codigoRastreio}` : null,
+      /*
+        A referência da loja viaja no mesmo evento que traz o código. Sem
+        ela, quem recebe o webhook precisa de uma consulta extra só para
+        saber de qual pedido dele se trata.
+      */
+      external_id: envio.referenciaExterna,
       /*
         O FRETE, não a taxa por etiqueta.
 

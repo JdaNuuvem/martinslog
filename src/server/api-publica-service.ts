@@ -281,6 +281,8 @@ export type InfoEnvio = {
   status: string
   tracking: string | null
   tracking_url: string | null
+  /** A referência que a loja mandou no `/cart`. Nulo quando não mandou. */
+  external_id: string | null
   /** Frete do envio: o valor do transporte, que o comprador do lojista vê. */
   price: string
   /** Taxa por etiqueta gerada. É o preço; `charged` diz se foi cobrado. */
@@ -316,6 +318,7 @@ export async function obterInfoEnvio(contexto: ContextoApi, shipmentId: string):
     status: envio.status,
     tracking: envio.codigoRastreio,
     tracking_url: envio.codigoRastreio ? `/r/${envio.codigoRastreio}` : null,
+    external_id: envio.referenciaExterna,
     price: (envio.precoFreteCentavos / 100).toFixed(2),
     label_fee: (envio.precoCobradoCentavos / 100).toFixed(2),
     charged: await houveCobranca(envio.id),

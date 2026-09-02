@@ -270,6 +270,19 @@ model Shipment {
   labelUrl               String?
   dceNumero              String?
   /**
+   * O código do pedido no sistema da loja.
+   *
+   * Existe para o comprador ver UM código só. Sem ele, quem compra recebe o
+   * código da loja no e-mail e o nosso no rastreio, e não tem como saber que
+   * são o mesmo pedido — a dúvida vira contato no suporte.
+   *
+   * Opcional de propósito: quem integra sem referência continua funcionando.
+   * E não é único: a loja é dona do próprio espaço de códigos, e recusar um
+   * repetido faria a nossa trava derrubar um envio legítimo dela. A
+   * idempotência de pedido mora em `Pedido.externalId`, onde é decisão nossa.
+   */
+  referenciaExterna      String?
+  /**
    * `true` para envios criados por um `ApiToken` de ambiente SANDBOX pela
    * API pública (`/api/v0`). Isola o teste do lojista do dinheiro real: o
    * pagamento de um envio sandbox nunca toca a `Wallet` nem dispara a
@@ -303,6 +316,7 @@ model Shipment {
 
   @@index([userId, status])
   @@index([perfilId, status])
+  @@index([referenciaExterna])
   @@map("shipments")
 }
 
