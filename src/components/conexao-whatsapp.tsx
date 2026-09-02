@@ -293,7 +293,19 @@ export function ConexaoWhatsapp() {
           </dl>
         )}
 
-        <form onSubmit={conectar} className="mt-5 flex flex-col gap-4">
+        {/*
+        O navegador preenchia o ID do número com o e-mail salvo e o token com a
+        senha da conta — os rótulos "ID" e "campo de senha" enganam a heurística
+        dele. Conectar com isso falharia de um jeito que não explica nada.
+
+        `autoComplete="off"` sozinho não basta em campo de senha: os navegadores
+        o ignoram de propósito. `new-password` é o valor que eles respeitam.
+      */}
+      <form
+        onSubmit={conectar}
+        autoComplete="off"
+        className="mt-5 flex flex-col gap-4"
+      >
           <div>
             <label
               htmlFor={`${idBase}-phone`}
@@ -307,6 +319,9 @@ export function ConexaoWhatsapp() {
               onChange={(e) => setPhoneNumberId(e.target.value)}
               placeholder="105954253907000"
               className={CAMPO}
+              name="ml-phone-number-id"
+              autoComplete="off"
+              inputMode="numeric"
               required
             />
             <p className="mt-1 text-dado text-texto-secundario">
@@ -326,6 +341,8 @@ export function ConexaoWhatsapp() {
               value={wabaId}
               onChange={(e) => setWabaId(e.target.value)}
               className={CAMPO}
+              name="ml-waba-id"
+              autoComplete="off"
             />
           </div>
 
@@ -342,7 +359,8 @@ export function ConexaoWhatsapp() {
               value={token}
               onChange={(e) => setToken(e.target.value)}
               className={CAMPO}
-              autoComplete="off"
+              name="ml-meta-token"
+              autoComplete="new-password"
             />
             <p className="mt-1 text-dado text-texto-secundario">
               Precisa ser o token permanente, não o temporário de 24 horas — este último para de
