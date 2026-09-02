@@ -13,6 +13,7 @@ import {
   IconeIntegracoes,
   IconePerfil,
   IconeRastreio,
+  IconeWhatsapp,
   IconeSair,
 } from './icones'
 import { useLogout } from './usar-logout'
@@ -25,6 +26,7 @@ const ITENS = [
   { rotulo: 'Rastreio', href: '/rastreio', Icone: IconeRastreio },
   { rotulo: 'Fluxo do rastreio', href: '/rastreio/status', Icone: IconeFluxo },
   { rotulo: 'Ajuda', href: '/ajuda', Icone: IconeAjuda },
+  { rotulo: 'WhatsApp', href: '/whatsapp', Icone: IconeWhatsapp },
   { rotulo: 'Integrações', href: '/integracoes', Icone: IconeIntegracoes },
   { rotulo: 'Convide e ganhe', href: '/convide', Icone: IconeConvide },
   { rotulo: 'Perfil', href: '/perfil', Icone: IconePerfil },

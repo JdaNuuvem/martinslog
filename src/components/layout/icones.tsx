@@ -110,6 +110,16 @@ export function IconeIntegracoes(props: IconeProps) {
   )
 }
 
+/** Balao de conversa. O logotipo do WhatsApp e marca da Meta e nao
+ *  pode ser redesenhado; um balao diz a mesma coisa sem usar a marca. */
+export function IconeWhatsapp(props: IconeProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.6 8.6 0 0 1-4-1L3 20l1.2-5.3a8.2 8.2 0 0 1-1.1-4.1A8.4 8.4 0 0 1 11.6 3 8.4 8.4 0 0 1 21 11.5z" />
+    </svg>
+  )
+}
+
 export function IconeConvide(props: IconeProps) {
   return (
     <svg {...base} {...props}>
