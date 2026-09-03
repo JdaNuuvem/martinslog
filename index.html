@@ -53,7 +53,11 @@
       whatsapp: '',
       telefone: '+551198376392',
       telefoneRotulo: '(11) 9837-6392',
-      email: 'contato@martinslog.net'
+      // VAZIO DE PROPOSITO ate o dominio receber e-mail: martinslog.net nao tem
+      // registro MX, e mensagem enviada para ca simplesmente volta. Um canal que
+      // engole a mensagem e pior que canal nenhum — e a Central de Ajuda ja trata
+      // valor vazio suprimindo o botao, igual faz com o WhatsApp.
+      email: ''
     }
   };
 </script>
@@ -70,7 +74,6 @@
   "description": "Transportadora rodoviária de cargas com frota própria, seguro total e rastreamento 24h.",
   "image": "https://martinslog.net/assets/img/logo-martins-log-640.png",
   "telephone": "+551198376392",
-  "email": "contato@martinslog.net",
   "address": {
     "@type": "PostalAddress",
     "streetAddress": "Rua Tarcísio Pelogia, 19 — Vila Ita",
@@ -547,7 +550,6 @@
         <li><a href="tel:+551198376392">(11) 9837-6392</a></li>
         <!-- TODO: o domínio ainda não recebe e-mail. Configurar o
              encaminhamento antes de divulgar este endereço. -->
-        <li><a href="mailto:contato@martinslog.net">contato@martinslog.net</a></li>
         <li>Rua Tarcísio Pelogia, 19 — Vila Ita</li>
         <li>Jacareí/SP — CEP 12321-313</li>
       </ul>
@@ -560,7 +562,7 @@
            informados divergem: 68.461.299/0001-15 é válido; 68.461.289/0001-14
            não fecha no dígito verificador (seria .../0001-82). -->
       <p>© 2026 MARTINS LOG E TRANSPORTES LTDA — Todos os direitos reservados.</p>
-      <p><a href="#">Política de Privacidade</a></p>
+      <p><a href="/privacidade.html">Política de Privacidade</a></p>
     </div>
   </div>
 </footer>

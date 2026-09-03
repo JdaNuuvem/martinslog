@@ -15,6 +15,10 @@ COPY index.html /usr/share/nginx/html/
 # A página que quem está fora do Brasil vê. Estilo embutido nela: um arquivo
 # externo pediria uma segunda requisição, que passaria de novo pelo bloqueio.
 COPY fora-do-brasil.html /usr/share/nginx/html/
+# Politica de privacidade. Existe porque o site grava sessao de visitante
+# (Microsoft Clarity): sem a pagina, o link do rodape apontava para lugar
+# nenhum enquanto a gravacao ja acontecia.
+COPY privacidade.html /usr/share/nginx/html/
 COPY assets /usr/share/nginx/html/assets
 # Documentação pública da API, servida em /docs. Sem esta linha a pasta some da
 # imagem e a rota responde 404 — sem nenhum erro no build que denuncie isso.
