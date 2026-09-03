@@ -28,6 +28,23 @@ const schema = z.object({
   WEBHOOK_CRON_TOKEN: z.string().min(32).optional(),
 
   /**
+   * Se qualquer pessoa pode criar conta pela tela pública.
+   *
+   * Padrão FECHADO, e o padrão é a parte importante: esquecer de definir a
+   * variável mantém a porta trancada. O contrário — aberto por omissão — faria
+   * um ambiente novo, ou uma variável perdida numa migração de servidor, abrir
+   * o cadastro sem ninguém notar.
+   *
+   * Fechado, a conta nasce só pelo painel de administração. A tela pública
+   * continua respondendo, para não dar erro de rota a quem tiver o link
+   * antigo, mas explica que o acesso é concedido pela equipe.
+   */
+  CADASTRO_PUBLICO: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
+  /**
    * Conta de SMS da própria plataforma, usada quando o perfil não trouxe a
    * dele.
    *
