@@ -193,3 +193,32 @@ describe('entregas de webhook', () => {
     expect(deOutro).toHaveLength(0)
   })
 })
+
+describe('marca de ambiente no payload', () => {
+  it('todos os eventos dizem se são de teste, não só os dois primeiros', async () => {
+    /*
+      O flag era carimbado DEPOIS de a entrega existir, por uma função chamada
+      em dois lugares — então só `order.created` e `order.released` o traziam.
+      Quem integra tinha que adivinhar o ambiente pelo prefixo do código de
+      rastreio, e no dia em que esse formato mudasse um evento de teste viraria
+      etapa em pedido real.
+    */
+    const { usuario, envio } = await envioPago()
+    await cadastrarWebhook(usuario.id, 'https://exemplo.com.br/webhook', [
+      'order.posted',
+      'order.delivered',
+    ])
+    await sincronizarEnvio(envio.id, new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
+
+    const entregas = await listarEntregasWebhook(contextoDe(usuario.id), { shipmentId: envio.id })
+    expect(entregas.length).toBeGreaterThan(0)
+
+    // Envio real: o campo existe e é falso. Existir importa tanto quanto o
+    // valor — ausente obrigaria o integrador a inferir.
+    for (const e of entregas) {
+      const payload = e.payload as { sandbox?: boolean }
+      expect(payload, e.event).toHaveProperty('sandbox')
+      expect(payload.sandbox, e.event).toBe(false)
+    }
+  })
+})

@@ -115,6 +115,7 @@ export async function enfileirarEvento(
       precoCobradoCentavos: true,
       criadoEm: true,
       referenciaExterna: true,
+      sandbox: true,
     },
   })
 
@@ -164,6 +165,7 @@ export async function enfileirarEvento(
 type EnvioPayload = {
   id: string
   status: string
+  sandbox: boolean
   codigoRastreio: string | null
   /** O transporte. É o que o integrador mostra ao comprador dele. */
   precoFreteCentavos: number
@@ -217,6 +219,19 @@ function montarPayload(evento: Evento, envio: EnvioPayload, entregaId: string) {
       que o mesmo evento for disparado duas vezes para o mesmo envio.
     */
     event_id: entregaId,
+    /*
+      Vem do envio, e não de um carimbo posterior.
+
+      Antes o flag era gravado DEPOIS de a entrega existir, por uma função
+      chamada em dois lugares — então só `order.created` e `order.released`
+      o traziam. Quem integrava tinha que adivinhar o ambiente pelo prefixo
+      do código de rastreio, e um dia em que esse formato mudasse um evento
+      de teste viraria etapa em pedido real.
+
+      Nascendo aqui, os seis eventos carregam o valor e não há como um
+      caminho novo esquecer de carimbar.
+    */
+    sandbox: envio.sandbox,
     sent_at: new Date().toISOString(),
   }
 }

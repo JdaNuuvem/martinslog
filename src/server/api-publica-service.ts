@@ -129,36 +129,6 @@ function dividirIdServico(service: string): { quoteId: string; servicoId: string
   return { quoteId: service.slice(0, separador), servicoId: service.slice(separador + 1) }
 }
 
-/**
- * Marca como sandbox a(s) entrega(s) de webhook recém-enfileiradas para
- * `shipmentId`/`evento`.
- *
- * `enfileirarEvento` (reusada de `webhook-service.ts`, que é de outra
- * sessão) monta o payload no formato SuperFrete sem nenhuma marcação de
- * ambiente — correto para o fluxo real, mas perigoso para sandbox: sem
- * marcação, a loja processaria um pedido de teste como venda real. Como
- * não é possível alterar `webhook-service.ts` aqui, este adaptador
- * pós-processa as linhas que acabaram de ser gravadas, acrescentando
- * `sandbox: true` ao JSON já congelado — sem duplicar o disparo (que
- * continua sendo feito uma única vez, pelo cron/disparo normal de
- * `WebhookDelivery`).
- */
-async function marcarEntregasComoSandbox(shipmentId: string, evento: Evento): Promise<void> {
-  const entregas = await prisma.webhookDelivery.findMany({
-    where: {
-      evento,
-      payload: { path: ['data', 'id'], equals: shipmentId },
-    },
-  })
-
-  for (const entrega of entregas) {
-    const payload = entrega.payload as Prisma.JsonObject
-    await prisma.webhookDelivery.update({
-      where: { id: entrega.id },
-      data: { payload: { ...payload, sandbox: true } as unknown as Prisma.InputJsonValue },
-    })
-  }
-}
 
 /**
  * `POST /api/v0/cart`. Cria o envio reusando `criarEnvio` — preço sempre
@@ -186,10 +156,6 @@ export async function criarCarrinho(
     // pelo WhatsApp de outra loja sem que nada acusasse o erro.
     perfilId: contexto.perfilId,
   })
-
-  if (sandbox) {
-    await marcarEntregasComoSandbox(envio.id, 'order.created')
-  }
 
   return {
     id: envio.id,
@@ -236,7 +202,6 @@ async function pagarEnvioSandbox(userId: string, shipmentId: string): Promise<vo
   }
 
   await enfileirarEvento(shipmentId, 'order.released')
-  await marcarEntregasComoSandbox(shipmentId, 'order.released')
 }
 
 export type ResultadoCheckout = {
