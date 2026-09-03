@@ -6,8 +6,15 @@ FROM nginx:alpine
 # Remove a página padrão do nginx para ela não sobrar na imagem.
 RUN rm -rf /usr/share/nginx/html/* /etc/nginx/conf.d/default.conf
 
+# Faixas de IP do Brasil, para o bloqueio por país. O prefixo `00-` importa:
+# arquivos de conf.d são incluídos em ordem alfabética, e a diretiva `geo` tem
+# que existir antes de o server que a consulta ser lido.
+COPY geo-br.conf /etc/nginx/conf.d/00-geo-br.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY index.html /usr/share/nginx/html/
+# A página que quem está fora do Brasil vê. Estilo embutido nela: um arquivo
+# externo pediria uma segunda requisição, que passaria de novo pelo bloqueio.
+COPY fora-do-brasil.html /usr/share/nginx/html/
 COPY assets /usr/share/nginx/html/assets
 # Documentação pública da API, servida em /docs. Sem esta linha a pasta some da
 # imagem e a rota responde 404 — sem nenhum erro no build que denuncie isso.
