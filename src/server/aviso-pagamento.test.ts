@@ -86,17 +86,21 @@ describe('aviso de pagamento confirmado', () => {
     expect(mensagens).toHaveLength(1)
   })
 
-  it('telefone impossível não vira mensagem, e a API diz por quê', async () => {
-    const salvo = await registrarPedido(perfilId, {
-      ...pedido('PED-AVISO-3', '123'),
-      clienteFone: '123',
-    })
+  it('telefone impossível é recusado ANTES de virar pedido', async () => {
+    /*
+      A recusa vem de `registrarPedido`, não da fila de mensagens — e é o lugar
+      certo: gravar um pedido cujo comprador não tem como ser avisado é criar
+      trabalho que ninguém vai conseguir terminar. Quem integra recebe o motivo
+      no erro, não um "salvo" seguido de silêncio.
+    */
+    await expect(
+      registrarPedido(perfilId, { ...pedido('PED-AVISO-3', '123'), clienteFone: '123' }),
+    ).rejects.toThrow(/telefone/i)
 
-    const mensagens = await prisma.mensagemEnvio.findMany({ where: { pedidoId: salvo.id } })
-    expect(mensagens).toHaveLength(0)
-    // "Pedido salvo" e ponto final foi o que deixou o defeito original
-    // invisível: quem integra precisa do motivo.
-    expect(salvo.mensagem.toLowerCase()).toContain('telefone')
+    const pedidoGravado = await prisma.pedido.findFirst({
+      where: { perfilId, externalId: 'PED-AVISO-3' },
+    })
+    expect(pedidoGravado).toBeNull()
   })
 
   it('pedido pendente não avisa nada: quem não pagou não recebe confirmação', async () => {
