@@ -69,6 +69,26 @@ export class CodigoRastreioInvalidoError extends DomainError {
 export class ArquivoInvalidoError extends DomainError {
   readonly codigo = 'ARQUIVO_INVALIDO'
 }
+/**
+ * O `service` do `/cart` não veio no formato `quoteId:servicoId`.
+ *
+ * Tem código próprio porque antes isso virava `ENVIO_NAO_ENCONTRADO`, e o
+ * integrador recebia "Envio não encontrado" numa chamada que ainda não tinha
+ * criado envio nenhum — procurando um envio que não existia em vez do erro de
+ * digitação que estava na frente dele.
+ */
+export class ServicoInvalidoError extends DomainError {
+  readonly codigo = 'SERVICO_INVALIDO'
+}
+/**
+ * Telefone que não dá para usar.
+ *
+ * Separado de `ARQUIVO_INVALIDO`, que era o que saía antes: um código sobre
+ * arquivo, numa recusa de telefone, não diz a ninguém o que corrigir.
+ */
+export class TelefoneInvalidoError extends DomainError {
+  readonly codigo = 'TELEFONE_INVALIDO'
+}
 export class CotacaoNaoEncontradaError extends DomainError {
   readonly codigo = 'COTACAO_NAO_ENCONTRADA'
 }

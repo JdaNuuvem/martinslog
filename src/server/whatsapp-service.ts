@@ -3,6 +3,7 @@ import { ArquivoInvalidoError, NaoAutorizadoError } from '@/domain/errors'
 import { cifrar, decifrar, dicaDaChave } from '@/infra/crypto/segredo'
 import { enviarTemplate, normalizarTelefone, verificarCredencial } from '@/infra/whatsapp/cloud-api'
 import { montarParametros } from '@/domain/mensagem/eventos'
+import { catalogoPronto } from '@/domain/mensagem/whatsapp-textos'
 import { acharPerfil } from '@/server/perfil-service'
 import { cancelarCobrancasDePedidoResolvido } from '@/server/recuperacao-service'
 
@@ -122,7 +123,7 @@ export async function salvarConfig(userId: string, perfilId: string, entrada: En
     ...(token ? { tokenCifrado: cifrar(token), dicaToken: dicaDaChave(token) } : {}),
   }
 
-  return prisma.whatsappConfig.upsert({
+  const config = await prisma.whatsappConfig.upsert({
     where: { perfilId },
     create: {
       perfilId,
@@ -132,6 +133,53 @@ export async function salvarConfig(userId: string, perfilId: string, entrada: En
     },
     update: dados,
   })
+
+  await espelharTextosPadrao(perfilId)
+
+  return config
+}
+
+/**
+ * Copia os textos prontos do catálogo para os templates deste perfil.
+ *
+ * Sem isto, o canal ficava mudo mesmo com a conta conectada: `enfileirarMensagem`
+ * exige um `MensagemTemplate` de canal `WHATSAPP`, e **nada em todo o projeto
+ * criava um**. A única escrita naquela tabela era a do SMS. A conta conectava,
+ * o lojista via tudo verde e nenhuma mensagem saía.
+ *
+ * Nasce **inativo**, de propósito. A linha aqui é o espelho local de um texto
+ * que precisa estar APROVADO na Meta — cadastrar lá é passo separado, feito por
+ * quem é dono do número. Marcar ativo agora enfileiraria mensagem para um
+ * template que a Meta ainda não conhece, e cada recusa dessas conta contra a
+ * reputação do número.
+ *
+ * Não toca no que já existe: um texto que o lojista editou ou já ativou fica
+ * como está.
+ */
+async function espelharTextosPadrao(perfilId: string): Promise<void> {
+  for (const texto of catalogoPronto()) {
+    try {
+      await prisma.mensagemTemplate.create({
+        data: {
+          perfilId,
+          canal: 'WHATSAPP',
+          // `EventoMensagem` é uma união de literais; a coluna é texto livre
+          // porque o catálogo de status é personalizável por conta.
+          evento: String(texto.evento),
+          nome: texto.nome,
+          idioma: texto.idioma,
+          previa: texto.corpo,
+          variaveis: texto.variaveis,
+          ativo: false,
+        },
+      })
+    } catch (erro) {
+      // Violação da chave única: o texto já existe para este perfil e evento.
+      // É o caminho normal de quem reconecta a conta.
+      if (erro && typeof erro === 'object' && 'code' in erro && erro.code === 'P2002') continue
+      throw erro
+    }
+  }
 }
 
 export async function desconectar(userId: string, perfilId: string): Promise<void> {
@@ -294,7 +342,7 @@ export async function dispararPendentes(limite = LOTE_PADRAO): Promise<Resultado
       para: item.para,
       nomeTemplate: item.template.nome,
       idioma: item.template.idioma,
-      parametros: montarParametros(ordem, valoresDe(item)),
+      parametros: montarParametros(ordem, await valoresDe(item)),
     })
 
     if (resultado.ok) {
@@ -362,11 +410,13 @@ export async function dispararPendentes(limite = LOTE_PADRAO): Promise<Resultado
  * e o envio o pedido pode ter sido pago, e mandar "conclua sua compra" para
  * quem já pagou é pior do que não mandar nada.
  */
-function valoresDe(item: {
+async function valoresDe(item: {
   para: string
+  shipmentId: string | null
   perfil: { nome: string }
   pedido: { clienteNome: string; valorCentavos: number; checkoutUrl: string | null } | null
-}): Record<string, string> {
+}): Promise<Record<string, string>> {
+  const base = process.env.APP_URL ?? 'https://app.martinslog.net'
   const valores: Record<string, string> = { loja: item.perfil.nome }
 
   if (item.pedido) {
@@ -376,6 +426,30 @@ function valoresDe(item: {
       currency: 'BRL',
     })
     valores.link_checkout = item.pedido.checkoutUrl ?? ''
+  }
+
+  /*
+    O rastreio faltava aqui, e o catálogo de textos tem um template inteiro
+    sobre ele (`ETIQUETA_EMITIDA`: "já tem código de rastreio:
+    {{codigo_rastreio}}"). Sem estes valores, esse texto sairia com as duas
+    variáveis vazias — a mesma mensagem quebrada que o lado do SMS já
+    aprendeu a não mandar.
+  */
+  if (item.shipmentId) {
+    const envio = await prisma.shipment.findUnique({
+      where: { id: item.shipmentId },
+      select: { codigoRastreio: true, destinatario: true },
+    })
+
+    if (envio?.codigoRastreio) {
+      valores.codigo_rastreio = envio.codigoRastreio
+      valores.link_rastreio = `${base}/r/${envio.codigoRastreio}`
+    }
+
+    const destinatario = envio?.destinatario as { nome?: string } | null
+    if (!valores.cliente && destinatario?.nome) {
+      valores.cliente = destinatario.nome
+    }
   }
 
   return valores

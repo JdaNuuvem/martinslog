@@ -4,7 +4,9 @@ import type { AmbienteApiToken, Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { garantirTransicao } from '@/domain/shipment/estados'
 import {
+  DomainError,
   EnvioNaoEncontradoError,
+  ServicoInvalidoError,
   LimiteRequisicoesExcedidoError,
   TokenInvalidoError,
   TransicaoInvalidaError,
@@ -123,10 +125,16 @@ export type ItemCarrinho = {
 
 function dividirIdServico(service: string): { quoteId: string; servicoId: string } {
   const separador = service.indexOf(':')
-  if (separador === -1) {
-    throw new EnvioNaoEncontradoError(`Identificador de serviço inválido: ${service}`)
+  const quoteId = separador === -1 ? '' : service.slice(0, separador)
+  const servicoId = separador === -1 ? '' : service.slice(separador + 1)
+
+  if (!quoteId || !servicoId) {
+    throw new ServicoInvalidoError(
+      `O campo "service" precisa vir no formato "quoteId:servicoId", como devolvido por /calculator. Recebido: "${service}".`,
+    )
   }
-  return { quoteId: service.slice(0, separador), servicoId: service.slice(separador + 1) }
+
+  return { quoteId, servicoId }
 }
 
 
@@ -156,6 +164,38 @@ export async function criarCarrinho(
     // pelo WhatsApp de outra loja sem que nada acusasse o erro.
     perfilId: contexto.perfilId,
   })
+
+  /*
+    Amarra o envio ao PEDIDO que a loja já tinha empurrado.
+
+    A loja manda o mesmo código nos dois lugares — `external_id` em
+    `/pedidos` e em `/cart` — mas `Pedido.shipmentId` nunca era escrito por
+    ninguém, e o vínculo só existia na cabeça de quem integrou. Com ele
+    gravado, a consulta pública do pedido e a tela de administração mostram o
+    rastreio sem precisar reconstruir o par a cada leitura.
+
+    Silencioso quando não há pedido correspondente: a loja pode usar só o
+    `/cart`, e nesse caso não há o que amarrar. Falha aqui nunca derruba a
+    criação do envio, que é o que a chamada veio fazer.
+  */
+  if (contexto.perfilId && entrada.external_id) {
+    try {
+      await prisma.pedido.updateMany({
+        where: {
+          perfilId: contexto.perfilId,
+          externalId: entrada.external_id,
+          shipmentId: null,
+        },
+        data: { shipmentId: envio.id },
+      })
+    } catch (erro) {
+      console.error('Falha ao amarrar o envio ao pedido da loja', {
+        shipmentId: envio.id,
+        externalId: entrada.external_id,
+        cause: erro,
+      })
+    }
+  }
 
   return {
     id: envio.id,
@@ -204,47 +244,105 @@ async function pagarEnvioSandbox(userId: string, shipmentId: string): Promise<vo
   await enfileirarEvento(shipmentId, 'order.released')
 }
 
+export type PagamentoDeEnvio = {
+  id: string
+  /** `paid` (pagou agora), `already_paid` (já estava) ou `failed`. */
+  result: 'paid' | 'already_paid' | 'failed'
+  /** Status do envio no banco depois da tentativa. Nulo quando nem existe. */
+  status: string | null
+  /** Código do erro, quando `failed`. Ex.: `SALDO_INSUFICIENTE`. */
+  error_code?: string
+  error?: string
+}
+
 export type ResultadoCheckout = {
-  status: string
-  orders: { id: string; status: string }[]
+  /** `approved` quando todos passaram, `partial` quando alguns falharam. */
+  status: 'approved' | 'partial'
+  orders: PagamentoDeEnvio[]
 }
 
 /**
  * `POST /api/v0/checkout`. Cada envio da lista é resolvido pelo dono do
  * token, nunca por um id de usuário vindo do corpo — um token não paga
- * envio de outra conta (`EnvioNaoEncontradoError` → 404, o mesmo padrão
- * dos outros serviços desta base para "não existe" vs. "não é seu").
+ * envio de outra conta.
  *
  * Produção usa `pagarEnvio` (débito real, idêntico ao do painel). Sandbox
  * usa `pagarEnvioSandbox`, que nunca encosta na `Wallet`.
+ *
+ * **Cada envio é resolvido por si, e o resultado vem por envio.**
+ *
+ * Antes, o primeiro erro derrubava a chamada inteira. Com `orders: [A, B]`,
+ * A era debitado e ganhava etiqueta, B faltava saldo, e a resposta era um 402
+ * sem `orders` nenhum: o integrador não tinha como saber que A foi pago.
+ * Repetir o mesmo corpo era pior — A já estava `RELEASED`, `garantirTransicao`
+ * lançava, e o lote inteiro voltava 422. B nunca era pago por aquele corpo, e
+ * A ficava pago sem ninguém saber. Dinheiro debitado e informação perdida.
+ *
+ * Agora **repetir a chamada é seguro**: envio já pago responde `already_paid`,
+ * não erro. É a mesma idempotência que a rota de pedidos promete, e que esta
+ * não tinha.
  */
 export async function checkout(
   contexto: ContextoApi,
   orderIds: string[],
 ): Promise<ResultadoCheckout> {
-  const orders: { id: string; status: string }[] = []
+  const orders: PagamentoDeEnvio[] = []
 
   for (const id of orderIds) {
     const envio = await prisma.shipment.findUnique({ where: { id } })
+
     if (!envio || envio.userId !== contexto.userId) {
-      throw new EnvioNaoEncontradoError(`Envio não encontrado: ${id}`)
+      /*
+        "Não é seu" responde igual a "não existe", de propósito: distinguir os
+        dois deixaria um token descobrir quais ids existem na plataforma.
+      */
+      orders.push({
+        id,
+        result: 'failed',
+        status: null,
+        error_code: 'ENVIO_NAO_ENCONTRADO',
+        error: 'Envio não encontrado.',
+      })
+      continue
     }
 
-    if (contexto.ambiente === 'SANDBOX') {
-      await pagarEnvioSandbox(contexto.userId, id)
-    } else {
-      await pagarEnvio(contexto.userId, id)
+    if (envio.status !== 'PENDING') {
+      // Já pago (ou cancelado). Repetir a chamada não é erro — é a rede
+      // fazendo o que rede faz.
+      orders.push({ id, result: 'already_paid', status: envio.status })
+      continue
     }
 
-    // Relê o status após pagar: em produção, `pagarEnvio` tenta emitir a
-    // etiqueta na sequência (`emitirEtiquetaAposPagamento`), e o envio pode
-    // já estar em `GENERATED` quando esta função devolve — devolver
-    // `RELEASED` fixo aqui mentiria sobre o estado real gravado no banco.
-    const atualizado = await prisma.shipment.findUniqueOrThrow({ where: { id } })
-    orders.push({ id, status: atualizado.status })
+    try {
+      if (contexto.ambiente === 'SANDBOX') {
+        await pagarEnvioSandbox(contexto.userId, id)
+      } else {
+        await pagarEnvio(contexto.userId, id)
+      }
+
+      // Relê o status após pagar: em produção, `pagarEnvio` tenta emitir a
+      // etiqueta na sequência (`emitirEtiquetaAposPagamento`), e o envio pode
+      // já estar em `GENERATED` quando esta função devolve — devolver
+      // `RELEASED` fixo aqui mentiria sobre o estado real gravado no banco.
+      const atualizado = await prisma.shipment.findUniqueOrThrow({ where: { id } })
+      orders.push({ id, result: 'paid', status: atualizado.status })
+    } catch (erro) {
+      const atual = await prisma.shipment.findUnique({
+        where: { id },
+        select: { status: true },
+      })
+      orders.push({
+        id,
+        result: 'failed',
+        status: atual?.status ?? null,
+        error_code: erro instanceof DomainError ? erro.codigo : 'ERRO_INTERNO',
+        error: erro instanceof Error ? erro.message : 'Falha ao pagar o envio.',
+      })
+    }
   }
 
-  return { status: 'approved', orders }
+  const algumFalhou = orders.some((o) => o.result === 'failed')
+  return { status: algumFalhou ? 'partial' : 'approved', orders }
 }
 
 export type InfoEnvio = {

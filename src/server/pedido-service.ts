@@ -1,6 +1,6 @@
 import { prisma } from '@/infra/db/client'
 import type { StatusPedido } from '@prisma/client'
-import { ArquivoInvalidoError, NaoAutorizadoError } from '@/domain/errors'
+import { NaoAutorizadoError, TelefoneInvalidoError } from '@/domain/errors'
 import { normalizarTelefone } from '@/infra/whatsapp/cloud-api'
 import { enfileirarMensagem } from '@/server/whatsapp-service'
 import { enfileirarSms } from '@/server/sms-service'
@@ -52,12 +52,12 @@ export async function registrarPedido(
 ): Promise<PedidoSalvo> {
   const externalId = entrada.externalId.trim()
   if (!externalId) {
-    throw new ArquivoInvalidoError('Informe o identificador do pedido na sua loja (external_id).')
+    throw new TelefoneInvalidoError('Informe o identificador do pedido na sua loja (external_id).')
   }
 
   const fone = normalizarTelefone(entrada.clienteFone)
   if (!fone) {
-    throw new ArquivoInvalidoError(
+    throw new TelefoneInvalidoError(
       `Telefone inválido: "${entrada.clienteFone}". Use DDD e número, com ou sem máscara.`,
     )
   }

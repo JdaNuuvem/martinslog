@@ -21,6 +21,13 @@ export async function listarMeusEnvios(
   userId: string,
   filtro: FiltroEnvios = 'todos',
   agora: Date = new Date(),
+  /**
+   * Enxergar TODAS as contas, não só a de quem está logado.
+   *
+   * Decidido no servidor a partir do papel da sessão — ver o comentário
+   * gêmeo em `etiquetas-service.ts`.
+   */
+  todasAsContas = false,
 ): Promise<{ envios: EnvioResumo[]; contagem: Record<FiltroEnvios, number> }> {
   // Etapas que a própria conta criou. Sem elas, um evento com código
   // customizado não teria status correspondente. Para quem nunca
@@ -28,8 +35,12 @@ export async function listarMeusEnvios(
   const statusPorCodigo = await obterStatusPorCodigo(userId)
 
   const envios = await prisma.shipment.findMany({
-    where: { userId },
+    // Na visão de administração o dono deixa de ser filtro: é "os envios da
+    // plataforma", não "os meus".
+    where: todasAsContas ? {} : { userId },
     include: {
+      perfil: { select: { nome: true } },
+      user: { select: { nome: true } },
       service: { select: { nome: true, prazoBase: true } },
       trackingEvents: {
         where: { ocorridoEm: { lte: agora } },
@@ -38,6 +49,8 @@ export async function listarMeusEnvios(
       },
     },
     orderBy: { criadoEm: 'desc' },
+    // Teto na visão de administração; ver o comentário em `etiquetas-service`.
+    ...(todasAsContas ? { take: 1000 } : {}),
   })
 
   const resumos: EnvioResumo[] = envios.map((envio) => {
@@ -56,6 +69,7 @@ export async function listarMeusEnvios(
       servico: envio.service.nome,
       prazoDias: envio.service.prazoBase,
       criadoEm: envio.criadoEm.toISOString(),
+      loja: todasAsContas ? (envio.perfil?.nome ?? envio.user.nome) : null,
     }
   })
 

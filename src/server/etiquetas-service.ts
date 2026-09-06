@@ -35,6 +35,14 @@ const STATUS_POR_ABA: Readonly<Record<AbaEtiquetas, readonly StatusShipment[] | 
 export type FiltroEtiquetas = {
   aba?: AbaEtiquetas
   busca?: string
+  /**
+   * Enxergar TODAS as contas, não só a de quem está logado.
+   *
+   * Ligado apenas para administrador, e decidido no servidor a partir do papel
+   * da sessão — nunca por parâmetro vindo do cliente, que seria um jeito de
+   * qualquer lojista ler os envios dos outros digitando na barra de endereço.
+   */
+  todasAsContas?: boolean
 }
 
 type EnderecoGravado = {
@@ -117,12 +125,22 @@ export async function listarEtiquetas(
 ): Promise<ListaEtiquetasResposta> {
   const aba = filtro.aba ?? 'todos'
   const busca = (filtro.busca ?? '').trim()
+  const todas = filtro.todasAsContas === true
 
   const statusPorCodigo = await obterStatusPorCodigo(userId)
 
   const envios = await prisma.shipment.findMany({
-    where: { userId },
+    /*
+      Na visão de administração o dono deixa de ser filtro. É a diferença
+      entre "minhas etiquetas" e "as etiquetas da plataforma" — e quem entra
+      com a conta de administração espera a segunda.
+    */
+    where: todas ? {} : { userId },
     include: {
+      // De quem é cada linha. O perfil é o nome da LOJA, que é como o dono
+      // pensa; o nome da conta é a rede de segurança para envio sem perfil.
+      perfil: { select: { nome: true } },
+      user: { select: { nome: true } },
       service: { select: { nome: true, prazoBase: true } },
       trackingEvents: {
         where: { ocorridoEm: { lte: agora } },
@@ -134,6 +152,13 @@ export async function listarEtiquetas(
       _count: { select: { trackingEvents: { where: { ocorridoEm: { gt: agora } } } } },
     },
     orderBy: { criadoEm: 'desc' },
+    /*
+      Teto na visão de administração. Sem ele, a tela carregaria a plataforma
+      inteira num único JSON — e cresce todo dia. Mil linhas já é mais do que
+      alguém lê; quem procura um envio específico usa a busca, que continua
+      varrendo tudo no banco.
+    */
+    ...(todas ? { take: 1000 } : {}),
   })
 
   const resumos: EtiquetaResumo[] = envios.map((envio) => {
@@ -159,6 +184,9 @@ export async function listarEtiquetas(
         envio.status !== 'CANCELLED' &&
         envio.codigoRastreio !== null &&
         envio._count.trackingEvents > 0,
+      // De quem é a linha. Só na visão de administração: para o lojista,
+      // repetir o nome da própria loja em cada etiqueta seria ruído.
+      loja: todas ? (envio.perfil?.nome ?? envio.user.nome) : null,
     }
   })
 

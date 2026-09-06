@@ -6,7 +6,7 @@ import { DomainError } from '@/domain/errors'
  * mesmo formato `{ codigo, mensagem }` do restante da API
  * (`src/app/api/envios/route.ts`).
  */
-function statusParaErro(codigo: string): number {
+export function statusParaErro(codigo: string): number {
   switch (codigo) {
     case 'TOKEN_INVALIDO':
       return 401
@@ -19,6 +19,10 @@ function statusParaErro(codigo: string): number {
       return 402
     case 'CORPO_INVALIDO':
     case 'CEP_INVALIDO':
+    // Erro de preenchimento do corpo, não de recurso ausente: 400, e o código
+    // diz qual campo olhar.
+    case 'SERVICO_INVALIDO':
+    case 'TELEFONE_INVALIDO':
       return 400
     case 'NAO_AUTORIZADO':
       return 403

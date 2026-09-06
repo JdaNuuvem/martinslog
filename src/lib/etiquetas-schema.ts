@@ -62,6 +62,14 @@ export type EtiquetaResumo = {
    * envio percorreu tudo, foi cancelado ou nem tem etiqueta emitida.
    */
   podeAvancarEtapa: boolean
+  /**
+   * De qual loja é este envio.
+   *
+   * Só vem preenchido na visão de administração, onde a lista mistura contas:
+   * sem ele, mil etiquetas de quatro lojas viram uma pilha em que não se sabe
+   * de quem é o quê. Para o lojista é sempre nulo — ali toda etiqueta é dele.
+   */
+  loja?: string | null
 }
 
 export type ListaEtiquetasResposta = {

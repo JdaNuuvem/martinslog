@@ -257,6 +257,16 @@ export function ListaEtiquetas() {
               <div className="flex flex-col gap-3">
                 <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                   <div className="flex flex-col gap-1">
+                    {/*
+                      A loja só aparece na visão de administração, onde a lista
+                      mistura contas. Para o lojista o campo vem nulo — repetir
+                      o nome da própria loja em cada linha seria ruído.
+                    */}
+                    {etiqueta.loja ? (
+                      <p className="text-rotulo uppercase tracking-wide text-brand-texto">
+                        {etiqueta.loja}
+                      </p>
+                    ) : null}
                     <p className="font-medium text-texto-principal">{etiqueta.destinatarioNome}</p>
                     <p className="text-dado text-texto-secundario">
                       {etiqueta.destinoCidade

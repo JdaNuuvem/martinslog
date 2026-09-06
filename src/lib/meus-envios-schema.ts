@@ -21,6 +21,8 @@ export type EnvioResumo = {
   servico: string
   prazoDias: number
   criadoEm: string
+  /** De qual loja é o envio. Só na visão de administração; nulo para o lojista. */
+  loja?: string | null
 }
 
 export type ListaEnviosResposta = {
