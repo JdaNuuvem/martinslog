@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { NextRequest } from 'next/server'
 import { AppShell } from '@/components/layout/app-shell'
 import { exigirAdmin } from '@/server/admin/guarda'
+import { NavAdmin } from '@/components/admin/nav-admin'
 
 /**
  * Guarda de toda a área `/admin`. A checagem acontece no servidor, antes de
@@ -32,7 +33,10 @@ export default async function LayoutAdmin({ children }: { children: ReactNode })
         pertence a quê. Dentro de cada seção os itens continuam próximos; é a
         distância entre seções que diz onde um assunto termina.
       */}
-      <div className="flex flex-col gap-secao">{children}</div>
+      <div className="flex flex-col gap-secao">
+        <NavAdmin />
+        {children}
+      </div>
     </AppShell>
   )
 }

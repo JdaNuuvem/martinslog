@@ -330,9 +330,22 @@ export async function pagarEnvio(userId: string, shipmentId: string): Promise<vo
 
     const dono = await tx.user.findUnique({
       where: { id: userId },
-      select: { isentoCobranca: true },
+      select: { isentoCobranca: true, papel: true },
     })
-    const isento = dono?.isentoCobranca === true
+    /*
+      Administrador é isento por definição, sem depender da marcação nominal.
+
+      Quem administra a plataforma não é cliente dela: a taxa por etiqueta é o
+      que a Martins Log cobra de quem usa o serviço, e cobrá-la de si mesma
+      obrigaria a manter saldo fictício numa carteira interna só para poder
+      operar. Pior: uma conta de administração sem saldo travaria a emissão
+      manual justamente quando ela é usada — para destravar o envio de um
+      cliente.
+
+      Continua sem lançamento no livro-caixa, como qualquer isenção: nada de
+      creditar dinheiro de mentira e inflar o extrato.
+    */
+    const isento = dono?.isentoCobranca === true || dono?.papel === 'ADMIN'
 
     const envio = await tx.shipment.findUnique({ where: { id: shipmentId } })
     if (!envio) {

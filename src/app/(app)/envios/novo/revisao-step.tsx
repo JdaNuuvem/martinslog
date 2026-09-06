@@ -45,6 +45,12 @@ export function RevisaoStep({
 }: Props) {
   const [previa, setPrevia] = useState<PreviaResposta | null>(null)
   const [saldoCentavos, setSaldoCentavos] = useState<number | null>(null)
+  /*
+    Conta isenta (administrador, parceiro) não é cobrada por etiqueta. Sem
+    saber disso, esta tela mostraria "saldo atual insuficiente" e ofereceria
+    recarga para quem nunca vai ser debitado — um bloqueio inventado.
+  */
+  const [isento, setIsento] = useState(false)
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [confirmando, setConfirmando] = useState(false)
@@ -65,7 +71,7 @@ export function RevisaoStep({
       try {
         const [respostaPrevia, respostaCarteira] = await Promise.all([
           fetch(`/api/envios?quoteId=${encodeURIComponent(quoteId)}&servicoId=${encodeURIComponent(servicoId)}`),
-          fetch('/api/carteira'),
+          fetch('/api/carteira/saldo'),
         ])
 
         if (!respostaPrevia.ok) {
@@ -76,14 +82,20 @@ export function RevisaoStep({
         const { previa: previaResposta } = (await respostaPrevia.json()) as { previa: PreviaResposta }
 
         let saldo: number | null = null
+        let contaIsenta = false
         if (respostaCarteira.ok) {
-          const dadosCarteira = (await respostaCarteira.json()) as { saldoCentavos: number }
+          const dadosCarteira = (await respostaCarteira.json()) as {
+            saldoCentavos: number
+            isento?: boolean
+          }
           saldo = dadosCarteira.saldoCentavos
+          contaIsenta = dadosCarteira.isento === true
         }
 
         if (!cancelado) {
           setPrevia(previaResposta)
           setSaldoCentavos(saldo)
+          setIsento(contaIsenta)
         }
       } catch {
         if (!cancelado) setErro('Não foi possível conectar ao servidor.')
@@ -191,7 +203,7 @@ export function RevisaoStep({
 
   async function verificarSaldoAposRecarga() {
     try {
-      const resposta = await fetch('/api/carteira')
+      const resposta = await fetch('/api/carteira/saldo')
       if (!resposta.ok) return
       const dados = (await resposta.json()) as { saldoCentavos: number }
       setSaldoCentavos(dados.saldoCentavos)
@@ -230,19 +242,30 @@ export function RevisaoStep({
             gerá-la. Mostrar só um dos dois deixaria o cliente esperando um
             desconto que não existe, ou uma cobrança que não vai acontecer.
           */}
-          <p>
-            <span className="font-semibold text-texto-principal">Valor a debitar:</span>{' '}
-            {formatarReais(previa.precoCobradoCentavos)}{' '}
-            <span className="text-texto-secundario">(preço por etiqueta gerada)</span>
-          </p>
-          {saldoCentavos !== null && (
+          {isento ? (
             <p>
-              <span className="font-semibold text-texto-principal">Saldo após pagar:</span>{' '}
-              {formatarReais(Math.max(0, saldoCentavos - previa.precoCobradoCentavos))}
-              {saldoCentavos < previa.precoCobradoCentavos && (
-                <span className="ml-2 text-erro">(saldo atual insuficiente)</span>
-              )}
+              <span className="font-semibold text-texto-principal">Valor a debitar:</span> nada —{' '}
+              <span className="text-texto-secundario">
+                esta conta é isenta da taxa por etiqueta
+              </span>
             </p>
+          ) : (
+            <>
+              <p>
+                <span className="font-semibold text-texto-principal">Valor a debitar:</span>{' '}
+                {formatarReais(previa.precoCobradoCentavos)}{' '}
+                <span className="text-texto-secundario">(preço por etiqueta gerada)</span>
+              </p>
+              {saldoCentavos !== null && (
+                <p>
+                  <span className="font-semibold text-texto-principal">Saldo após pagar:</span>{' '}
+                  {formatarReais(Math.max(0, saldoCentavos - previa.precoCobradoCentavos))}
+                  {saldoCentavos < previa.precoCobradoCentavos && (
+                    <span className="ml-2 text-erro">(saldo atual insuficiente)</span>
+                  )}
+                </p>
+              )}
+            </>
           )}
         </div>
       )}

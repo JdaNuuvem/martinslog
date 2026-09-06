@@ -1,5 +1,18 @@
 import Link from 'next/link'
 import { prisma } from '@/infra/db/client'
+import { AtualizaSozinho } from '@/components/admin/atualiza-sozinho'
+
+/** Os números do painel são de agora, não do último build. */
+export const dynamic = 'force-dynamic'
+
+type Cartao = {
+  titulo: string
+  valor: number
+  href: string
+  pronto: boolean
+  /** Recorte que muda a leitura do número — pendentes, falhas. */
+  nota?: string
+}
 
 /**
  * Entrada da área administrativa: números do dia e os caminhos para as
@@ -7,8 +20,20 @@ import { prisma } from '@/infra/db/client'
  * ausência seja explícita em vez de parecer um link quebrado.
  */
 export default async function PaginaAdmin() {
-  const [regras, envios, usuarios, auditoria, webhooksNaFila, cotacoes, statusPadrao, servicos] =
-    await Promise.all([
+  const [
+    regras,
+    envios,
+    usuarios,
+    auditoria,
+    webhooksNaFila,
+    cotacoes,
+    statusPadrao,
+    servicos,
+    pedidos,
+    pedidosPendentes,
+    mensagens,
+    mensagensFalhas,
+  ] = await Promise.all([
       prisma.priceRule.count(),
       prisma.shipment.count(),
       prisma.user.count(),
@@ -21,9 +46,29 @@ export default async function PaginaAdmin() {
       prisma.quote.count(),
       prisma.statusRastreio.count({ where: { userId: null } }),
       prisma.service.count({ where: { ativo: true } }),
+      prisma.pedido.count(),
+      // O pendente é o número que vale dinheiro: é a venda que ainda dá para
+      // recuperar. Somado ao resto, ele desaparece.
+      prisma.pedido.count({ where: { status: 'PENDENTE' } }),
+      prisma.mensagemEnvio.count(),
+      prisma.mensagemEnvio.count({ where: { status: 'FALHA' } }),
     ])
 
-  const cartoes = [
+  const cartoes: Cartao[] = [
+    {
+      titulo: 'Pedidos',
+      valor: pedidos,
+      href: '/admin/pedidos',
+      pronto: true,
+      nota: `${pedidosPendentes.toLocaleString('pt-BR')} aguardando pagamento`,
+    },
+    {
+      titulo: 'Mensagens enviadas',
+      valor: mensagens,
+      href: '/admin/mensagens',
+      pronto: true,
+      nota: mensagensFalhas > 0 ? `${mensagensFalhas.toLocaleString('pt-BR')} com falha` : undefined,
+    },
     { titulo: 'Regras de preço', valor: regras, href: '/admin/tabelas', pronto: true },
     { titulo: 'Webhooks na fila', valor: webhooksNaFila, href: '/admin/webhooks', pronto: true },
     { titulo: 'Envios', valor: envios, href: '/admin/envios', pronto: true },
@@ -41,6 +86,9 @@ export default async function PaginaAdmin() {
         <p className="max-w-leitura text-corpo text-texto-secundario">
           Área restrita. Toda ação que mexe em dinheiro ou status fica registrada na auditoria.
         </p>
+        <div className="mt-2">
+          <AtualizaSozinho segundos={60} />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -52,13 +100,20 @@ export default async function PaginaAdmin() {
               className="rounded-xl bg-superficie-card p-6 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
             >
               <p className="text-rotulo uppercase text-texto-secundario">{cartao.titulo}</p>
-              <p className="text-titulo font-bold text-texto-principal">{cartao.valor}</p>
+              <p className="text-titulo font-bold text-texto-principal">
+                {cartao.valor.toLocaleString('pt-BR')}
+              </p>
+              {cartao.nota ? (
+                <p className="mt-1 text-sm text-texto-secundario">{cartao.nota}</p>
+              ) : null}
               <p className="mt-2 text-sm font-medium text-brand-texto">Abrir</p>
             </Link>
           ) : (
             <div key={cartao.titulo} className="rounded-xl bg-superficie-card p-6">
               <p className="text-rotulo uppercase text-texto-secundario">{cartao.titulo}</p>
-              <p className="text-titulo font-bold text-texto-principal">{cartao.valor}</p>
+              <p className="text-titulo font-bold text-texto-principal">
+                {cartao.valor.toLocaleString('pt-BR')}
+              </p>
               <p className="mt-2 text-sm text-texto-secundario">Em construção</p>
             </div>
           ),

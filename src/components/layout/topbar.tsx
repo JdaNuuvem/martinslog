@@ -23,8 +23,9 @@ function formatarReais(centavos: number): string {
  * `null`, que a interface mostra como reticências — nunca como zero, que
  * seria repetir o mesmo erro por outro caminho.
  */
-function useSaldo(autenticado: boolean): number | null {
+function useSaldo(autenticado: boolean): { saldoCentavos: number | null; isento: boolean } {
   const [saldoCentavos, setSaldoCentavos] = useState<number | null>(null)
+  const [isento, setIsento] = useState(false)
 
   useEffect(() => {
     if (!autenticado) {
@@ -39,10 +40,12 @@ function useSaldo(autenticado: boolean): number | null {
         if (!resposta.ok) {
           return
         }
-        const dados = (await resposta.json()) as { saldoCentavos?: number }
-        if (ativo && typeof dados.saldoCentavos === 'number') {
+        const dados = (await resposta.json()) as { saldoCentavos?: number; isento?: boolean }
+        if (!ativo) return
+        if (typeof dados.saldoCentavos === 'number') {
           setSaldoCentavos(dados.saldoCentavos)
         }
+        setIsento(dados.isento === true)
       } catch {
         // Silêncio proposital: saldo indisponível não é motivo para poluir a
         // tela de erro. O atalho continua levando à carteira, onde a falha
@@ -55,7 +58,7 @@ function useSaldo(autenticado: boolean): number | null {
     }
   }, [autenticado])
 
-  return saldoCentavos
+  return { saldoCentavos, isento }
 }
 
 type TopbarProps = {
@@ -79,7 +82,7 @@ type TopbarProps = {
  */
 export function Topbar({ nomeUsuario, menuAberto, onAlternarMenu, botaoMenuRef, autenticado }: TopbarProps) {
   const { sair, saindo } = useLogout()
-  const saldoCentavos = useSaldo(autenticado)
+  const { saldoCentavos, isento } = useSaldo(autenticado)
 
   return (
     /*
@@ -108,16 +111,33 @@ export function Topbar({ nomeUsuario, menuAberto, onAlternarMenu, botaoMenuRef, 
           descreve um saldo que não existe. O bloco inteiro só aparece para
           quem está autenticado.
         */}
+        {/*
+          Conta isenta não mostra saldo: administrador e parceiro não pagam
+          pela etiqueta, e exibir "R$ 0,00" ali sugere uma conta sem fundos e
+          uma emissão prestes a travar — exatamente o oposto do que acontece.
+        */}
         {autenticado ? (
-          <>
-            <IconeCarteira className="text-texto-secundario" />
-            <Link
-              href="/carteira"
-              className="text-sm font-bold text-brand-texto underline underline-offset-2 hover:text-brand-light"
-            >
-              {saldoCentavos === null ? '···' : formatarReais(saldoCentavos)}
-            </Link>
-          </>
+          isento ? (
+            <>
+              <IconeCarteira className="text-texto-secundario" />
+              <span
+                className="text-sm font-bold text-texto-secundario"
+                title="Esta conta não é cobrada por etiqueta gerada."
+              >
+                Isento
+              </span>
+            </>
+          ) : (
+            <>
+              <IconeCarteira className="text-texto-secundario" />
+              <Link
+                href="/carteira"
+                className="text-sm font-bold text-brand-texto underline underline-offset-2 hover:text-brand-light"
+              >
+                {saldoCentavos === null ? '···' : formatarReais(saldoCentavos)}
+              </Link>
+            </>
+          )
         ) : null}
       </div>
 
