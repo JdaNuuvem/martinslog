@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, type RefObject } from 'react'
 import {
+  IconeAdmin,
   IconeAjuda,
   IconeCalcular,
   IconeConvide,
@@ -32,6 +33,18 @@ const ITENS = [
   { rotulo: 'Perfil', href: '/perfil', Icone: IconePerfil },
 ] as const
 
+/**
+ * O atalho para a administração.
+ *
+ * Fica separado da lista de cima porque não é uma tela da loja: é a área que
+ * enxerga TODAS as contas. Só aparece para quem é administrador — e sem ele o
+ * administrador não tinha como chegar em `/admin`, a não ser digitando o
+ * endereço. Ele entrava, via a tela de rastreio da PRÓPRIA conta (vazia, porque
+ * a conta de administração não tem envio nenhum) e concluía, com razão, que o
+ * painel estava quebrado.
+ */
+const ITEM_ADMIN = { rotulo: 'Administração', href: '/admin', Icone: IconeAdmin } as const
+
 type SidebarProps = {
   aberta: boolean
   onFechar: () => void
@@ -39,6 +52,8 @@ type SidebarProps = {
   botaoMenuRef?: RefObject<HTMLButtonElement | null>
   /** Ver `TopbarProps.autenticado` — controla se "Sair" aparece no menu mobile. */
   autenticado: boolean
+  /** Mostra o atalho da administração. Falso por padrão: ver `ITEM_ADMIN`. */
+  ehAdmin?: boolean
 }
 
 /**
@@ -47,8 +62,9 @@ type SidebarProps = {
  * disso, deslizando para dentro/fora com `translate`. Operável por
  * teclado e fechável com Escape.
  */
-export function Sidebar({ aberta, onFechar, botaoMenuRef, autenticado }: SidebarProps) {
+export function Sidebar({ aberta, onFechar, botaoMenuRef, autenticado, ehAdmin = false }: SidebarProps) {
   const pathname = usePathname()
+  const itens = ehAdmin ? [...ITENS, ITEM_ADMIN] : ITENS
 
   /**
    * Item destacado: o de rota mais específica que casa com a página atual.
@@ -58,7 +74,8 @@ export function Sidebar({ aberta, onFechar, botaoMenuRef, autenticado }: Sidebar
    * do rastreio" casariam, e a navegação diria ao usuário que ele está em
    * dois lugares.
    */
-  const hrefAtivo = ITENS.map((item) => item.href)
+  const hrefAtivo = itens
+    .map((item) => item.href)
     .filter((href) =>
       href === '/' ? pathname === '/' : pathname === href || pathname?.startsWith(`${href}/`),
     )
@@ -154,7 +171,7 @@ export function Sidebar({ aberta, onFechar, botaoMenuRef, autenticado }: Sidebar
             </button>
           </div>
 
-          {ITENS.map(({ rotulo, href, Icone }) => {
+          {itens.map(({ rotulo, href, Icone }) => {
             const ativo = href === hrefAtivo
             return (
               <Link

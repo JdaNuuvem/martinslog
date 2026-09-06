@@ -14,6 +14,8 @@ type AppShellProps = {
    * o que encerrar.
    */
   autenticado?: boolean
+  /** Acrescenta o atalho da administração à lateral. */
+  ehAdmin?: boolean
 }
 
 /**
@@ -26,7 +28,12 @@ type AppShellProps = {
  * menu fecha. Sem esse par, quem navega por teclado perde a posição ao
  * fechar o menu e cai no início da página.
  */
-export function AppShell({ children, nomeUsuario = 'VISITANTE', autenticado = false }: AppShellProps) {
+export function AppShell({
+  children,
+  nomeUsuario = 'VISITANTE',
+  autenticado = false,
+  ehAdmin = false,
+}: AppShellProps) {
   const [menuAberto, setMenuAberto] = useState(false)
   const botaoMenuRef = useRef<HTMLButtonElement>(null)
 
@@ -44,6 +51,7 @@ export function AppShell({ children, nomeUsuario = 'VISITANTE', autenticado = fa
         onFechar={() => setMenuAberto(false)}
         botaoMenuRef={botaoMenuRef}
         autenticado={autenticado}
+        ehAdmin={ehAdmin}
       />
       {/*
         `px-5` em vez de `px-4`: texto encostado na borda da janela é a

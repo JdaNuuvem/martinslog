@@ -26,7 +26,7 @@ export default async function LayoutAdmin({ children }: { children: ReactNode })
   }
 
   return (
-    <AppShell nomeUsuario="ADMINISTRAÇÃO">
+    <AppShell nomeUsuario="ADMINISTRAÇÃO" autenticado ehAdmin>
       {/*
         `gap-secao` entre os blocos da página, e não o `gap-6` uniforme de
         antes: espaçamento igual em toda parte apaga a informação de o que

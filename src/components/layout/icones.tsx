@@ -139,6 +139,16 @@ export function IconePerfil(props: IconeProps) {
   )
 }
 
+/** Escudo: a área restrita, que enxerga todas as contas. */
+export function IconeAdmin(props: IconeProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 3l7 3v6c0 4.4-3 8.2-7 9-4-.8-7-4.6-7-9V6l7-3Z" />
+      <path d="M9.5 12l1.8 1.8 3.2-3.6" />
+    </svg>
+  )
+}
+
 export function IconeSalvar(props: IconeProps) {
   return (
     <svg {...base} {...props}>
