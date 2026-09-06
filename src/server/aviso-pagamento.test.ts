@@ -48,13 +48,36 @@ function pedido(externalId: string, telefone: string) {
 }
 
 describe('aviso de pagamento confirmado', () => {
-  it('enfileira SMS mesmo sem WhatsApp conectado', async () => {
+  it('não manda o aviso de rastreio antes de existir rastreio', async () => {
     /*
-      O caso real: nenhuma conta de WhatsApp verificada no perfil. Antes da
-      correção, isto produzia zero mensagens — o retorno "sem-whatsapp"
-      encerrava a função e o SMS nunca era considerado.
+      Medido em produção: o comprador recebia DUAS mensagens — uma pelo pedido
+      marcado PAGO e outra pelo envio pago. A primeira vinha sem o link, porque
+      quem tem o código é o envio: saía "Acompanhe cada passo da entrega pelo
+      link" e mais nada. Promessa sem entrega, e um crédito gasto para isso.
+
+      Agora o pedido não enfileira o que não consegue completar; o envio manda,
+      segundos depois, a mensagem inteira.
     */
     const salvo = await registrarPedido(perfilId, pedido('PED-AVISO-1', '11988880001'))
+
+    const mensagens = await prisma.mensagemEnvio.findMany({ where: { pedidoId: salvo.id } })
+    expect(mensagens).toHaveLength(0)
+    expect(salvo.mensagem).toContain('etiqueta')
+  })
+
+  it('texto sem variável de rastreio passa: a trava é do conteúdo, não do canal', async () => {
+    /*
+      A regra não é "pedido nunca manda SMS" — é "não prometa o que não pode
+      cumprir". Trocado o texto por um que não fala de rastreio, a mensagem
+      volta a sair pelo caminho do pedido, que é o desejável para a loja
+      integrada só por `/api/v0/pedidos`.
+    */
+    await prisma.mensagemTemplate.updateMany({
+      where: { perfilId, evento: 'PEDIDO_PAGO', canal: 'SMS' },
+      data: { previa: 'Oi {{cliente}}! Recebemos o pagamento do seu pedido.' },
+    })
+
+    const salvo = await registrarPedido(perfilId, pedido('PED-AVISO-5', '11988880005'))
 
     const mensagens = await prisma.mensagemEnvio.findMany({ where: { pedidoId: salvo.id } })
     expect(mensagens.map((m) => m.canal)).toContain('SMS')

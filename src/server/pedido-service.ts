@@ -170,6 +170,13 @@ async function avisarPagamento(
   */
   const motivo = sms.status === 'fulfilled' ? sms.value : 'erro'
   switch (motivo) {
+    case 'sem-rastreio':
+      /*
+        Não é falha, e dizer "não avisei" seria mentira: o texto de pagamento
+        confirmado é sobre o link de rastreio, que nasce com o ENVIO. A
+        mensagem sai de lá, com o código, segundos depois.
+      */
+      return 'Pedido salvo. O aviso com o código de rastreio sai quando a etiqueta for gerada.'
     case 'sem-template':
       return 'Pedido salvo. Não há mensagem configurada para pagamento confirmado.'
     case 'telefone-invalido':

@@ -159,6 +159,13 @@ export type ResultadoEnfileiramento =
   | 'sem-template'
   | 'telefone-invalido'
   | 'repetida'
+  /**
+   * O texto promete o rastreio e ainda não há envio de onde tirá-lo.
+   *
+   * Não é falha: é o mesmo aviso chegando cedo demais. Quem tem o código é o
+   * envio, e ele nasce segundos depois — a mensagem sai de lá, inteira.
+   */
+  | 'sem-rastreio'
 
 /**
  * Põe um SMS na fila.
@@ -178,6 +185,26 @@ export async function enfileirarSms(entrada: PedidoDeSms): Promise<ResultadoEnfi
 
   const para = normalizarTelefone(entrada.para)
   if (!para) return 'telefone-invalido'
+
+  /*
+    Mensagem que promete o rastreio precisa do rastreio.
+
+    O texto padrão de pagamento confirmado é inteiro sobre o link: "Acompanhe
+    cada passo da entrega pelo link: {{link_rastreio}}". Esse valor só existe
+    quando a mensagem está amarrada a um ENVIO — é dele que sai o código.
+
+    Sem o envio, `compor` substitui por vazio e apara os dois-pontos soltos, e
+    o comprador recebe "Acompanhe cada passo da entrega pelo link" e mais nada.
+    Uma frase que promete e não entrega; pior do que silêncio, porque parece
+    golpe malfeito.
+
+    Isto também é o que impede a mensagem DUPLICADA. O aviso de pagamento
+    chega por dois caminhos — o pedido marcado PAGO e o envio pago — e o
+    segundo vem segundos depois com o código na mão. Barrar aqui deixa passar
+    exatamente um: o que serve.
+  */
+  const precisaDeRastreio = /\{\{\s*(link_rastreio|codigo_rastreio)\s*\}\}/i.test(template.previa)
+  if (precisaDeRastreio && !entrada.shipmentId) return 'sem-rastreio'
 
   try {
     await prisma.mensagemEnvio.create({
