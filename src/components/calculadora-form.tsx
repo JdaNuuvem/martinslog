@@ -3,7 +3,6 @@
 import { FormEvent, useEffect, useId, useState, type ReactNode } from 'react'
 import { cotacaoRequestSchema, type CotacaoErro, type CotacaoResposta } from '@/lib/cotacao-schema'
 import { OpcaoFreteCard } from './opcao-frete-card'
-import { ModalCadastro } from './modal-cadastro'
 import { IconeChevron, IconeLimpar, IconeSalvar } from './layout/icones'
 
 const FAIXAS_PESO = [
@@ -112,7 +111,6 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
    * booleano evita perder qual serviço foi clicado entre a escolha e o fim do
    * cadastro.
    */
-  const [destinoCadastro, setDestinoCadastro] = useState<string | null>(null)
   const [mensagemSalvar, setMensagemSalvar] = useState<string | null>(null)
   const idBase = useId()
 
@@ -590,7 +588,6 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
                   opcao={opcao}
                   quoteId={resultado.quoteId}
                   autenticado={autenticado}
-                  aoEscolherComoVisitante={setDestinoCadastro}
                 />
               ))}
             </ul>
@@ -604,9 +601,6 @@ export function CalculadoraForm({ autenticado = false }: { autenticado?: boolean
           continua na tela atrás do diálogo, e o destino guardado leva direto
           ao fluxo de envio com o serviço escolhido — sem recalcular nada.
         */}
-        {destinoCadastro ? (
-          <ModalCadastro destino={destinoCadastro} aoFechar={() => setDestinoCadastro(null)} />
-        ) : null}
       </div>
     </div>
   )

@@ -19,9 +19,9 @@ import { lerSessaoDoServidor } from '@/server/auth/sessao-servidor'
  *   toda venda.
  * - **Autenticado** recebe o `AppShell` completo, como sempre.
  *
- * Quando um visitante escolhe um frete, o cadastro abre em cima da própria
- * cotação (`ModalCadastro`, disparado pela lista) e o leva ao fluxo de envio
- * com o serviço já escolhido.
+ * Quando um visitante escolhe um frete, vai para o login levando o serviço
+ * escolhido no destino — e volta ao fluxo de envio já com ele. Não há mais
+ * cadastro: conta na Martins Log é criada pela equipe.
  */
 export default async function PaginaCalculadora() {
   const sessao = await lerSessaoDoServidor()

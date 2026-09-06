@@ -60,18 +60,6 @@ export function ShellPublico({
             >
               Entrar
             </Link>
-            {/*
-              Menor no celular. Somando marca, "Entrar" e este botão no tamanho
-              de desktop, a barra passa de 320px de largura e o conteúdo
-              transborda para fora da tela — que é onde a régua horizontal
-              aparece e a página inteira ganha cara de quebrada.
-            */}
-            <Link
-              href="/cadastro"
-              className="shrink-0 rounded-pilula bg-destaque px-3 py-1.5 text-rotulo font-bold text-white transition hover:bg-destaque-escuro focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:px-4 sm:py-2 sm:text-dado"
-            >
-              Criar conta
-            </Link>
           </nav>
         </div>
       </header>
