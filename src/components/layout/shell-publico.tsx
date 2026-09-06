@@ -46,19 +46,17 @@ export function ShellPublico({
           </Link>
 
           <nav className="flex items-center gap-1 sm:gap-4">
-            {/* Escondido no celular: com quatro itens a barra quebra, e este é
-                o único que tem atalho em outro lugar (o rodapé). */}
+            {/* Único item da barra desde que entrar e criar conta saíram: a
+                  plataforma é privada e o acesso é concedido pela equipe.
+
+                  Estava oculto no celular porque a barra tinha quatro itens e
+                  quebrava. Sozinho ele cabe — e barra de navegação vazia no
+                  celular é pior do que item nenhum. */}
             <Link
               href="/rastrear"
-              className="hidden rounded px-2 py-1 text-dado font-medium text-sidebar-texto hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:block"
-            >
-              Rastrear
-            </Link>
-            <Link
-              href="/login"
               className="rounded px-2 py-1 text-dado font-medium text-sidebar-texto hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
-              Entrar
+              Rastrear
             </Link>
           </nav>
         </div>

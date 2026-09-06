@@ -68,6 +68,21 @@ function destinatarioCom(telefone?: string): EnderecoEnvio {
   }
 }
 
+/**
+ * As mensagens que ESTE teste provocou, achadas pelo telefone dele.
+ *
+ * `dispararSmsPendentes` drena a fila INTEIRA — é um cron, e a base de teste é
+ * compartilhada. Contar `fake.enviados` direto fazia o teste depender do que
+ * outro deixou para trás: bastava um vizinho estourar o tempo com mensagem na
+ * fila para este receber a alheia e falhar dizendo "avisou sem telefone".
+ *
+ * Cada teste usa um telefone PRÓPRIO. Compartilhar o número não resolveria
+ * nada — a mensagem vazada casaria com o filtro do mesmo jeito.
+ */
+function enviadosPara(telefone: string) {
+  return fake.enviados.filter((e) => e.para === telefone)
+}
+
 async function lojaComPerfil(nome: string) {
   const usuario = await criarUsuarioComSaldo(50_000)
   usuariosCriados.push(usuario.id)
@@ -99,16 +114,16 @@ describe('SMS de pagamento confirmado', () => {
   it('enfileira e envia o aviso com o nome da loja e o link de rastreio', async () => {
     const { usuario, perfil } = await lojaComPerfil('Best Buy Tech')
 
-    await venderPara(usuario.id, perfil.id, destinatarioCom('(11) 98888-7777'))
+    await venderPara(usuario.id, perfil.id, destinatarioCom('(11) 98888-0001'))
 
     const resultado = await dispararSmsPendentes()
     expect(resultado.enviadas).toBe(1)
-    expect(fake.enviados).toHaveLength(1)
+    expect(enviadosPara('5511988880001')).toHaveLength(1)
 
-    const enviado = fake.enviados[0]!
+    const enviado = enviadosPara('5511988880001')[0]!
 
     // O telefone chega com máscara e precisa sair em E.164.
-    expect(enviado.para).toBe('5511988887777')
+    expect(enviado.para).toBe('5511988880001')
 
     const texto = enviado.texto
     // No Brasil o remetente do SMS é um número curto: sem o nome escrito
@@ -127,7 +142,7 @@ describe('SMS de pagamento confirmado', () => {
     await venderPara(usuario.id, perfil.id, destinatarioCom(undefined))
 
     expect(await dispararSmsPendentes()).toMatchObject({ enviadas: 0 })
-    expect(fake.enviados).toHaveLength(0)
+    expect(enviadosPara('5511988880002')).toHaveLength(0)
   })
 
   it('envio de teste não manda SMS para ninguém', async () => {
@@ -138,28 +153,28 @@ describe('SMS de pagamento confirmado', () => {
       manda mensagem sobre uma compra que não existiu — e quem recebe denuncia
       como spam, com razão.
     */
-    await venderPara(usuario.id, perfil.id, destinatarioCom('11988887777'), { sandbox: true })
+    await venderPara(usuario.id, perfil.id, destinatarioCom('11988880003'), { sandbox: true })
 
     expect(await dispararSmsPendentes()).toMatchObject({ enviadas: 0 })
-    expect(fake.enviados).toHaveLength(0)
+    expect(enviadosPara('5511988880003')).toHaveLength(0)
   })
 
   it('não manda a mesma mensagem duas vezes', async () => {
     const { usuario, perfil } = await lojaComPerfil('Loja Sem Repeticao')
 
-    await venderPara(usuario.id, perfil.id, destinatarioCom('11988887777'))
+    await venderPara(usuario.id, perfil.id, destinatarioCom('11988880004'))
 
     expect((await dispararSmsPendentes()).enviadas).toBe(1)
     // Um segundo disparo não pode reenviar o que já saiu.
     expect((await dispararSmsPendentes()).enviadas).toBe(0)
-    expect(fake.enviados).toHaveLength(1)
+    expect(enviadosPara('5511988880004')).toHaveLength(1)
   })
 
   it('recusa temporária fica na fila; recusa definitiva desiste', async () => {
     const { usuario, perfil } = await lojaComPerfil('Loja Com Falha')
 
     fake.falharProxima = { mensagem: 'SALDO INSUFICIENTE', retentavel: true }
-    await venderPara(usuario.id, perfil.id, destinatarioCom('11988887777'))
+    await venderPara(usuario.id, perfil.id, destinatarioCom('11988880005'))
 
     const primeira = await dispararSmsPendentes()
     expect(primeira.enviadas).toBe(0)
@@ -177,7 +192,7 @@ describe('SMS de pagamento confirmado', () => {
   it('grava por qual provedor a mensagem saiu', async () => {
     const { usuario, perfil } = await lojaComPerfil('Loja Provedor')
 
-    await venderPara(usuario.id, perfil.id, destinatarioCom('11988887777'))
+    await venderPara(usuario.id, perfil.id, destinatarioCom('11988880006'))
     await dispararSmsPendentes()
 
     const enviada = await prisma.mensagemEnvio.findFirstOrThrow({ where: { perfilId: perfil.id } })
@@ -205,10 +220,10 @@ describe('nome de exibição', () => {
       data: { userId: usuario.id, nome: 'Best Buy Tech', nomeExibicao: 'Tiktok shop' },
     })
 
-    await venderPara(usuario.id, perfil.id, destinatarioCom('11988887777'))
+    await venderPara(usuario.id, perfil.id, destinatarioCom('11988880007'))
     await dispararSmsPendentes()
 
-    const texto = fake.enviados[0]!.texto
+    const texto = enviadosPara('5511988880007')[0]!.texto
     expect(texto).toContain('Tiktok shop')
     expect(texto).not.toContain('Best Buy Tech')
   })
@@ -220,9 +235,9 @@ describe('nome de exibição', () => {
       data: { userId: usuario.id, nome: 'Loja Sem Exibicao' },
     })
 
-    await venderPara(usuario.id, perfil.id, destinatarioCom('11988887777'))
+    await venderPara(usuario.id, perfil.id, destinatarioCom('11988880008'))
     await dispararSmsPendentes()
 
-    expect(fake.enviados[0]!.texto).toContain('Loja Sem Exibicao')
+    expect(enviadosPara('5511988880008')[0]!.texto).toContain('Loja Sem Exibicao')
   })
 })

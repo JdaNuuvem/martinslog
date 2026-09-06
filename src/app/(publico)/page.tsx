@@ -64,16 +64,6 @@ export default async function PaginaCalculadora() {
             </li>
           ))}
         </ul>
-
-        <p className="text-dado text-texto-secundario">
-          Já tem conta?{' '}
-          <Link
-            href="/login"
-            className="font-medium text-brand-texto underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
-          >
-            Entrar
-          </Link>
-        </p>
       </div>
     </ShellPublico>
   )
