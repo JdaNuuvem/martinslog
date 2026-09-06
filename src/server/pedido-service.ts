@@ -113,6 +113,18 @@ export async function registrarPedido(
       ? { pagoEm: entrada.pagoEm ?? agora }
       : {}),
     ...(status === 'CANCELADO' && !anterior?.canceladoEm ? { canceladoEm: agora } : {}),
+    /*
+      A decisão de não perseguir vive no PEDIDO, não na requisição.
+
+      `notificarCliente` decidia só se ESTA chamada avisava, e morria aqui. A
+      régua de recuperação não olha nada disso — varre pendente por idade e
+      cria mensagem direto. Bastava uma regra ativa para milhares de "conclua
+      sua compra" saírem para quem abandonou o carrinho semanas atrás.
+
+      Só grava quando é para NÃO perseguir: uma sincronização posterior do
+      mesmo pedido não pode reabilitar a cobrança que a importação desligou.
+    */
+    ...(entrada.notificarCliente === false ? { recuperavel: false } : {}),
   }
 
   const pedido = anterior

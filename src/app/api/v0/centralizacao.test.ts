@@ -102,6 +102,65 @@ describe('importação de pedidos antigos', () => {
     expect(pedido.pagoEm?.toISOString()).toBe(ONTEM)
   })
 
+  it('marca o importado como NÃO recuperável — a régua não pode alcançá-lo', async () => {
+    /*
+      A trava que faltava, e a mais perigosa.
+
+      `notificar_cliente` decidia só se AQUELA chamada avisava, e morria ali. A
+      régua de recuperação não olha nada disso: varre pedido pendente por idade
+      e cria mensagem direto, duzentos por regra por rodada. Bastava uma regra
+      ativa para milhares de "conclua sua compra" saírem para quem abandonou o
+      carrinho semanas atrás.
+
+      A proteção que existia — a janela de sete dias — só funciona se quem
+      importa lembrar de mandar a data da loja. Sem ela, todo pedido importado
+      parece nascido agora e passa por dentro. Agora a decisão vive no dado.
+    */
+    await PEDIDOS(
+      req('/api/v0/pedidos', {
+        external_id: 'HIST-004',
+        status: 'PENDENTE',
+        cliente: { nome: 'Abandonou o carrinho', telefone: '11988887004' },
+        notificar_cliente: false,
+      }),
+    )
+
+    const pedido = await prisma.pedido.findUniqueOrThrow({
+      where: { perfilId_externalId: { perfilId, externalId: 'HIST-004' } },
+    })
+    expect(pedido.recuperavel).toBe(false)
+  })
+
+  it('o pedido normal continua recuperável: a trava é da importação, não de todos', async () => {
+    await PEDIDOS(
+      req('/api/v0/pedidos', {
+        external_id: 'VIVO-001',
+        status: 'PENDENTE',
+        cliente: { nome: 'Comprando agora', telefone: '11988887010' },
+      }),
+    )
+
+    const pedido = await prisma.pedido.findUniqueOrThrow({
+      where: { perfilId_externalId: { perfilId, externalId: 'VIVO-001' } },
+    })
+    expect(pedido.recuperavel).toBe(true)
+  })
+
+  it('uma sincronização depois não reabilita a cobrança que a importação desligou', async () => {
+    await PEDIDOS(
+      req('/api/v0/pedidos', {
+        external_id: 'HIST-004',
+        status: 'PENDENTE',
+        cliente: { nome: 'Abandonou o carrinho', telefone: '11988887004' },
+      }),
+    )
+
+    const pedido = await prisma.pedido.findUniqueOrThrow({
+      where: { perfilId_externalId: { perfilId, externalId: 'HIST-004' } },
+    })
+    expect(pedido.recuperavel).toBe(false)
+  })
+
   it('aceita CANCELADO, que é o destino dos pedidos expirados', async () => {
     /*
       A loja tem milhares de PIX que venceram. Eles existiam só como "pendente
@@ -234,6 +293,69 @@ describe('e-mails da loja no painel', () => {
             external_id: 'HIST-001',
             assunto: 'Pagamento confirmado',
             enviada_em: ONTEM,
+          },
+        ],
+      }),
+    )
+
+    expect(await resposta.json()).toMatchObject({ registradas: 0, repetidas: 1 })
+  })
+
+  it('dois e-mails com o MESMO evento e assuntos iguais não colapsam num só', async () => {
+    /*
+      A trava geral desta tabela foi desenhada para o que a PLATAFORMA envia:
+      `(perfil, evento, canal, pedido, envio, regra)` com `NULLS NOT DISTINCT`.
+      Numa mensagem reportada, envio e regra são sempre nulos e o pedido fica
+      nulo quando o código não é encontrado — e a chave desaba para
+      `(perfil, evento, canal)`.
+
+      O efeito seria brutal e silencioso: três mil e-mails "pagamento
+      confirmado" virariam UM, e os outros voltariam contados como REPETIDOS —
+      o número que a rota devolve justamente como prova de que a importação é
+      segura de repetir. O operador leria "500 repetidas" e concluiria que já
+      tinha importado, quando havia perdido o lote.
+
+      O id do provedor é a identidade de verdade.
+    */
+    const resposta = await MENSAGENS(
+      req('/api/v0/mensagens', {
+        mensagens: [
+          {
+            canal: 'EMAIL',
+            evento: 'PROMOCAO',
+            para: 'um@exemplo.com',
+            entregue: true,
+            id_externo: 'resend-aaa',
+          },
+          {
+            canal: 'EMAIL',
+            evento: 'PROMOCAO',
+            para: 'dois@exemplo.com',
+            entregue: true,
+            id_externo: 'resend-bbb',
+          },
+        ],
+      }),
+    )
+
+    expect(await resposta.json()).toMatchObject({ registradas: 2, repetidas: 0 })
+
+    const gravadas = await prisma.mensagemEnvio.count({
+      where: { perfilId, canal: 'EMAIL', evento: 'PROMOCAO' },
+    })
+    expect(gravadas).toBe(2)
+  })
+
+  it('o MESMO id do provedor duas vezes é uma mensagem só', async () => {
+    const resposta = await MENSAGENS(
+      req('/api/v0/mensagens', {
+        mensagens: [
+          {
+            canal: 'EMAIL',
+            evento: 'PROMOCAO',
+            para: 'um@exemplo.com',
+            entregue: true,
+            id_externo: 'resend-aaa',
           },
         ],
       }),

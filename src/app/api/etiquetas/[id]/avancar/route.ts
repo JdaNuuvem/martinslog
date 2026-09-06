@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { DomainError, EnvioNaoEncontradoError } from '@/domain/errors'
 import { lerSessao } from '@/server/auth/sessao'
 import { avancarEtapa } from '@/server/avancar-etapa-service'
+import { donoEfetivo } from '@/server/dono-efetivo'
 
 /**
  * Avança o envio do próprio usuário para a próxima etapa do percurso.
@@ -21,7 +22,9 @@ export async function POST(
   const { id } = await context.params
 
   try {
-    const etapa = await avancarEtapa(sessao.userId, id)
+    // Mesma resolução de dono que o lote já fazia: sem ela, o botão de uma
+    // linha só responde "não encontrado" em tudo que não é do administrador.
+    const etapa = await avancarEtapa(await donoEfetivo(sessao, id), id)
     return NextResponse.json({ etapa }, { status: 200 })
   } catch (error) {
     if (error instanceof EnvioNaoEncontradoError) {

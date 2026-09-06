@@ -59,6 +59,15 @@ export async function dispararRecuperacoes(agora = new Date()): Promise<Resultad
       where: {
         perfilId: regra.perfilId,
         status: 'PENDENTE',
+        /*
+          Histórico importado não é carrinho abandonado de agora.
+
+          A janela de sete dias abaixo protegia por acidente: ela só funciona
+          se quem importou lembrou de mandar a data da loja. Sem a data, todo
+          pedido importado parece nascido agora e passa por dentro dela. Esta
+          marca vive no pedido e não depende de ninguém lembrar de nada.
+        */
+        recuperavel: true,
         criadoEm: { lte: venceuEm, gte: limiteDeIdade },
         // Sem telefone não há para onde mandar.
         clienteFone: { not: '' },

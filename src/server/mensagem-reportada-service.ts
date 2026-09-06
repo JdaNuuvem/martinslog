@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import type { CanalMensagem, StatusMensagem } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { normalizarTelefone } from '@/infra/whatsapp/cloud-api'
@@ -93,7 +94,7 @@ export async function registrarMensagemEnviada(
         status: (entrada.entregue ? 'ENVIADA' : 'DESISTIU') satisfies StatusMensagem,
         tentativas: 1,
         erro: entrada.entregue ? null : (entrada.erro?.slice(0, 500) ?? 'A loja não informou o motivo.'),
-        idExterno: entrada.idExterno ?? null,
+        idExterno: identidade(entrada),
         enviadaEm: entrada.entregue ? quando : null,
         criadoEm: quando,
         // Nunca há próxima tentativa: a mensagem não é nossa para reenviar.
@@ -107,6 +108,36 @@ export async function registrarMensagemEnviada(
     }
     throw erro
   }
+}
+
+/**
+ * A identidade da mensagem reportada, que entra na trava contra repetição.
+ *
+ * O id do provedor é a resposta certa quando existe — é único por natureza e
+ * permite conferir a mensagem lá na origem. Quando não existe (envio que
+ * falhou antes de ganhar id, provedor que não devolve um), a identidade é
+ * derivada do que a mensagem É: destinatário, evento e momento.
+ *
+ * Sem isso, duas mensagens diferentes com o mesmo evento e sem id colidiriam
+ * na chave — e a segunda voltaria contada como "repetida", que é o número em
+ * que o operador se apoia para decidir se a importação funcionou.
+ *
+ * O prefixo `reportado:` é deliberado: quem ler esta coluna depois precisa
+ * saber, sem adivinhar, que este valor foi construído aqui e não veio de
+ * provedor nenhum.
+ */
+function identidade(entrada: MensagemReportada): string {
+  if (entrada.idExterno) return entrada.idExterno
+
+  const semente = [
+    entrada.canal,
+    entrada.evento,
+    entrada.para.trim().toLowerCase(),
+    (entrada.enviadaEm ?? new Date()).toISOString(),
+    entrada.assunto ?? '',
+  ].join('|')
+
+  return `reportado:${createHash('sha1').update(semente).digest('hex').slice(0, 24)}`
 }
 
 /**

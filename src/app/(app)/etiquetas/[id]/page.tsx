@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server'
 import { notFound, redirect } from 'next/navigation'
 import { EnvioNaoEncontradoError } from '@/domain/errors'
 import { lerSessao } from '@/server/auth/sessao'
+import { donoEfetivo } from '@/server/dono-efetivo'
 import { obterEtiqueta } from '@/server/etiquetas-service'
 
 const ROTULO_STATUS: Readonly<Record<string, string>> = {
@@ -42,7 +43,9 @@ export default async function PaginaEtiqueta({ params }: { params: Promise<{ id:
 
   let etiqueta
   try {
-    etiqueta = await obterEtiqueta(sessao.userId, id)
+    // O administrador abre a etiqueta de qualquer loja — a lista já mostra
+    // todas, e um "Detalhes" que cai em 404 promete e nega depois do clique.
+    etiqueta = await obterEtiqueta(await donoEfetivo(sessao, id), id)
   } catch (error) {
     if (error instanceof EnvioNaoEncontradoError) {
       notFound()

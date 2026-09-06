@@ -3,8 +3,21 @@ import { z } from 'zod'
 import { respostaErro, statusParaErro } from '../_lib/erro'
 import { autenticarRequisicao, checkout } from '@/server/api-publica-service'
 
+/** Teto por chamada. Ver o comentário no schema. */
+const MAXIMO_POR_CHAMADA = 100
+
 const corpoSchema = z.object({
-  orders: z.array(z.string().min(1)).min(1, 'Informe ao menos um envio'),
+  orders: z
+    .array(z.string().min(1))
+    .min(1, 'Informe ao menos um envio')
+    /*
+      Esta é a rota que mexe em DINHEIRO: cada item debita a carteira e emite
+      etiqueta, em série. Sem teto, uma chamada com milhares de ids segura a
+      conexão por minutos e estoura no meio — a carteira fica debitada num
+      subconjunto que o integrador não tem como saber qual foi, que é
+      exatamente o defeito que o resultado-por-envio veio eliminar.
+    */
+    .max(MAXIMO_POR_CHAMADA, `No máximo ${MAXIMO_POR_CHAMADA} envios por chamada`),
 })
 
 /**

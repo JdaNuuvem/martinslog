@@ -135,7 +135,32 @@ export async function listarEtiquetas(
       entre "minhas etiquetas" e "as etiquetas da plataforma" — e quem entra
       com a conta de administração espera a segunda.
     */
-    where: todas ? {} : { userId },
+    where: {
+      ...(todas ? {} : { userId }),
+      /*
+        A BUSCA VAI PARA O BANCO na visão de administração, não para a memória.
+
+        Com o teto de mil linhas, filtrar depois do corte faria a busca
+        enxergar só as mil mais novas: procurar o código de um envio de agosto
+        devolveria "nenhuma etiqueta", que é indistinguível de "não existe" —
+        e um comentário meu chegou a afirmar o contrário. Para o lojista, que
+        não tem teto, o filtro em memória continuava correto; foi o papel novo
+        que quebrou a promessa.
+      */
+      ...(todas && busca
+        ? {
+            OR: [
+              { codigoRastreio: { contains: busca, mode: 'insensitive' as const } },
+              {
+                destinatario: {
+                  path: ['nome'],
+                  string_contains: busca,
+                },
+              },
+            ],
+          }
+        : {}),
+    },
     include: {
       // De quem é cada linha. O perfil é o nome da LOJA, que é como o dono
       // pensa; o nome da conta é a rede de segurança para envio sem perfil.
@@ -155,8 +180,9 @@ export async function listarEtiquetas(
     /*
       Teto na visão de administração. Sem ele, a tela carregaria a plataforma
       inteira num único JSON — e cresce todo dia. Mil linhas já é mais do que
-      alguém lê; quem procura um envio específico usa a busca, que continua
-      varrendo tudo no banco.
+      alguém lê; quem procura um envio específico usa a busca, que é aplicada
+      no BANCO (ver o `where` acima) e por isso alcança tudo, não só o pedaço
+      carregado.
     */
     ...(todas ? { take: 1000 } : {}),
   })
@@ -190,12 +216,28 @@ export async function listarEtiquetas(
     }
   })
 
-  const contagem = Object.fromEntries(
-    (Object.keys(STATUS_POR_ABA) as AbaEtiquetas[]).map((chave) => [
-      chave,
-      resumos.filter((etiqueta) => cabeNaAba(etiqueta.status as StatusShipment, chave)).length,
-    ]),
-  ) as Record<AbaEtiquetas, number>
+  /*
+    A contagem das abas vem do BANCO quando a lista tem teto.
+
+    Contá-la sobre as linhas carregadas diria "Entregues (612)" com dezenas de
+    milhares na base, e o total nunca passaria de mil — sem nada na tela
+    dizendo que houve corte. Para o lojista, que carrega tudo, contar em
+    memória é o mesmo número e uma consulta a menos.
+
+    O status aqui é o PERSISTIDO, não o derivado do último evento: derivar
+    exigiria carregar tudo, que é justamente o que o teto evita. A diferença
+    aparece só na janela entre um evento ocorrer e a sincronização gravá-lo, e
+    um número de aba levemente atrasado é muito melhor do que um número que
+    para de crescer em mil.
+  */
+  const contagem = todas
+    ? await contarPorAbaNoBanco(busca)
+    : (Object.fromEntries(
+        (Object.keys(STATUS_POR_ABA) as AbaEtiquetas[]).map((chave) => [
+          chave,
+          resumos.filter((etiqueta) => cabeNaAba(etiqueta.status as StatusShipment, chave)).length,
+        ]),
+      ) as Record<AbaEtiquetas, number>)
 
   return {
     etiquetas: resumos.filter(
@@ -214,6 +256,41 @@ export async function listarEtiquetas(
  * chamador não distingue "não existe" de "não é seu", então não descobre ids
  * válidos por tentativa.
  */
+/**
+ * Conta cada aba direto no banco, respeitando a busca quando há uma.
+ *
+ * Um `groupBy` por status, e as abas somam os status que cada uma agrupa —
+ * cinco contagens numa consulta, em vez de cinco consultas.
+ */
+async function contarPorAbaNoBanco(busca: string): Promise<Record<AbaEtiquetas, number>> {
+  const where = busca
+    ? {
+        OR: [
+          { codigoRastreio: { contains: busca, mode: 'insensitive' as const } },
+          { destinatario: { path: ['nome'], string_contains: busca } },
+        ],
+      }
+    : {}
+
+  const grupos = await prisma.shipment.groupBy({
+    by: ['status'],
+    where,
+    _count: { _all: true },
+  })
+
+  const porStatus = new Map(grupos.map((g) => [g.status, g._count._all]))
+
+  return Object.fromEntries(
+    (Object.keys(STATUS_POR_ABA) as AbaEtiquetas[]).map((aba) => {
+      const status = STATUS_POR_ABA[aba]
+      const total = status
+        ? status.reduce((soma, s) => soma + (porStatus.get(s) ?? 0), 0)
+        : grupos.reduce((soma, g) => soma + g._count._all, 0)
+      return [aba, total]
+    }),
+  ) as Record<AbaEtiquetas, number>
+}
+
 export async function obterEtiqueta(
   userId: string,
   shipmentId: string,

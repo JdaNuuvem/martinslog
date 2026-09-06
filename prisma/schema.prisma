@@ -801,6 +801,17 @@ model Pedido {
    */
   comprovante   String?
   comprovanteEm DateTime?
+  /**
+   * Este comprador pode ser cutucado pela régua de recuperação?
+   * Falso para o que entrou como HISTÓRICO. A régua varre pedido pendente por
+   * idade e cria mensagem direto — e a trava que existia (`notificar_cliente`)
+   * valia só para a requisição em que era mandada, morrendo ali. Bastava uma
+   * regra ativa para milhares de "conclua sua compra" saírem para gente que
+   * abandonou o carrinho semanas atrás.
+   * Vive no dado de propósito: trava que depende de quem chama lembrar de
+   * mandar um campo não é trava.
+   */
+  recuperavel   Boolean      @default(true)
   criadoEm      DateTime     @default(now())
   atualizadoEm  DateTime     @updatedAt
   pagoEm        DateTime?
@@ -811,6 +822,8 @@ model Pedido {
 
   @@unique([perfilId, externalId])
   @@index([perfilId, status, criadoEm])
+  /// O caminho da régua de recuperação, que roda de cinco em cinco minutos.
+  @@index([perfilId, recuperavel, status, criadoEm])
   /// Quem mandou comprovante é um recorte que se procura, e são poucos entre
   /// muitos. O índice no banco é PARCIAL (`WHERE comprovanteEm IS NOT NULL`) —
   /// o Prisma não sabe escrever isso, então a migration é a fonte da verdade.
@@ -877,7 +890,14 @@ model MensagemEnvio {
   para               String
   status             StatusMensagem @default(PENDENTE)
   tentativas         Int            @default(0)
-  /// Identificador da mensagem na Meta (`wamid`), quando aceita.
+  /// Identificador da mensagem no provedor (`wamid` na Meta, id da SMS Dev,
+  /// id da Resend quando a loja reporta o próprio e-mail).
+  ///
+  /// **Entra na trava contra repetição.** Numa mensagem REPORTADA pela loja,
+  /// pedido/envio/regra são nulos e a chave desabaria para
+  /// `(perfil, evento, canal)`, colapsando milhares de e-mails num só — ver o
+  /// comentário da migration `20260906190000`. No que a plataforma enfileira
+  /// este campo é nulo até o envio, e a deduplicação segue idêntica.
   idExterno          String?
   erro               String?
   proximaTentativaEm DateTime?
@@ -925,7 +945,7 @@ model MensagemEnvio {
   /// Quem regenerar migration a partir deste schema precisa conferir se a
   /// cláusula sobreviveu: ver
   /// `20260903090000_trava_duplicata_com_nulos/migration.sql`.
-  @@unique([perfilId, evento, canal, pedidoId, shipmentId, regraId], map: "mensagem_envios_dedupe_key")
+  @@unique([perfilId, evento, canal, pedidoId, shipmentId, regraId, idExterno], map: "mensagem_envios_dedupe_key")
   @@index([regraId])
   @@index([proximaTentativaEm, status])
   @@index([perfilId, criadoEm])
