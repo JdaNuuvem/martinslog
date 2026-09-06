@@ -81,15 +81,13 @@ export async function registrarMensagemEnviada(
         // gravar "loja" diz a verdade e explica por que não há template.
         provedor: 'loja',
         pedidoId: pedido?.id ?? null,
+        evento: entrada.evento,
         /*
-          O assunto entra junto do evento porque a lista mostra o evento, e
-          "PEDIDO_PAGO" sozinho não diz ao operador qual e-mail o comprador
-          abriu. `MensagemEnvio` não tem campo de assunto, e criar um só para
-          isto obrigaria os outros canais a conviver com uma coluna vazia.
+          O assunto tem coluna própria. Estava concatenado no evento por falta
+          de lugar, e isso quebrava o filtro: cada e-mail virava um evento
+          diferente, e "filtrar por PEDIDO_PAGO" não trazia nenhum.
         */
-        evento: entrada.assunto
-          ? `${entrada.evento} — ${entrada.assunto}`.slice(0, 200)
-          : entrada.evento,
+        assunto: entrada.assunto ?? null,
         para,
         status: (entrada.entregue ? 'ENVIADA' : 'DESISTIU') satisfies StatusMensagem,
         tentativas: 1,

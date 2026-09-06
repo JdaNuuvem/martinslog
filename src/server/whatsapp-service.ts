@@ -3,6 +3,7 @@ import { ArquivoInvalidoError, NaoAutorizadoError } from '@/domain/errors'
 import { cifrar, decifrar, dicaDaChave } from '@/infra/crypto/segredo'
 import { enviarTemplate, normalizarTelefone, verificarCredencial } from '@/infra/whatsapp/cloud-api'
 import { montarParametros } from '@/domain/mensagem/eventos'
+import { compor } from '@/domain/mensagem/texto'
 import { catalogoPronto } from '@/domain/mensagem/whatsapp-textos'
 import { acharPerfil } from '@/server/perfil-service'
 import { cancelarCobrancasDePedidoResolvido } from '@/server/recuperacao-service'
@@ -336,13 +337,24 @@ export async function dispararPendentes(limite = LOTE_PADRAO): Promise<Resultado
       ? (item.template.variaveis as unknown[]).map(String)
       : []
 
+    /*
+      O texto que o comprador vai ler, montado aqui para ser GRAVADO.
+
+      No WhatsApp o corpo aprovado vive na Meta e o que viaja são os
+      parâmetros; sem compor a prévia com os valores reais, a tela mostraria o
+      template com `{{1}}` no lugar do nome. E a pergunta de quem abre a tela é
+      sempre a mesma: o que exatamente essa pessoa recebeu?
+    */
+    const valores = await valoresDe(item)
+    const textoEnviado = compor(item.template.previa, valores)
+
     const resultado = await enviarTemplate({
       phoneNumberId: config.phoneNumberId,
       token: decifrar(config.tokenCifrado),
       para: item.para,
       nomeTemplate: item.template.nome,
       idioma: item.template.idioma,
-      parametros: montarParametros(ordem, await valoresDe(item)),
+      parametros: montarParametros(ordem, valores),
     })
 
     if (resultado.ok) {
@@ -355,6 +367,7 @@ export async function dispararPendentes(limite = LOTE_PADRAO): Promise<Resultado
           tentativas: item.tentativas + 1,
           erro: null,
           proximaTentativaEm: null,
+          texto: textoEnviado,
         },
       })
       enviadas++
@@ -370,6 +383,9 @@ export async function dispararPendentes(limite = LOTE_PADRAO): Promise<Resultado
       data: {
         status: desistiu ? 'DESISTIU' : 'PENDENTE',
         tentativas,
+        // O texto vai junto mesmo na falha: metade das recusas se explica
+        // olhando o que se tentou mandar.
+        texto: textoEnviado,
         erro: resultado.codigo ? `[${resultado.codigo}] ${resultado.mensagem}` : resultado.mensagem,
         proximaTentativaEm: proxima,
       },

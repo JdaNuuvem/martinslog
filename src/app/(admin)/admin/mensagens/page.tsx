@@ -124,13 +124,13 @@ export default async function PaginaMensagens({
         {emails ? <input type="hidden" name="tipo" value="email" /> : null}
         <label className="flex min-w-0 flex-1 flex-col gap-1 text-dado sm:flex-none">
           <span className="text-texto-secundario">
-            {emails ? 'Destinatário, assunto ou evento' : 'Telefone ou evento'}
+            {emails ? 'Destinatário, assunto ou evento' : 'Telefone, evento ou texto da mensagem'}
           </span>
           <input
             type="search"
             name="busca"
             defaultValue={parametros.busca ?? ''}
-            placeholder={emails ? 'maria@… ou PEDIDO_PAGO' : '11988887777 ou POSTADO'}
+            placeholder={emails ? 'maria@… ou parte do assunto' : '11988887777 ou parte da mensagem'}
             className={`${CAMPO} w-full sm:w-72`}
           />
         </label>
@@ -221,7 +221,7 @@ async function AbaMensagens({ parametros, pagina }: { parametros: Busca; pagina:
           colunas={[
             { rotulo: 'Para', principal: true },
             { rotulo: 'Canal' },
-            { rotulo: 'Evento' },
+            { rotulo: 'Mensagem' },
             { rotulo: 'Loja' },
             { rotulo: 'Situação' },
             { rotulo: 'Pedido / rastreio' },
@@ -242,7 +242,36 @@ async function AbaMensagens({ parametros, pagina }: { parametros: Busca; pagina:
                   </>
                 ) : null}
               </>,
-              <span className="text-texto-secundario">{m.evento}</span>,
+              /*
+                O que a pessoa recebeu, não só o rótulo do momento.
+
+                "PEDIDO_PAGO · enviada" não responde à pergunta que traz alguém
+                a esta tela — que é sempre "o que exatamente essa pessoa leu?".
+                O evento fica por cima, pequeno, porque serve para filtrar; o
+                texto fica embaixo, porque é o que se lê.
+              */
+              <div className="flex flex-col gap-1">
+                <span className="text-rotulo uppercase tracking-wide text-texto-secundario">
+                  {m.evento}
+                </span>
+                {m.assunto ? (
+                  <span className="font-medium text-texto-principal">{m.assunto}</span>
+                ) : null}
+                {m.texto ? (
+                  <span className="block max-w-lg whitespace-pre-wrap break-words text-texto-principal">
+                    {m.texto}
+                  </span>
+                ) : m.canal === 'EMAIL' ? (
+                  // O corpo do e-mail vive na loja, e copiá-lo para cá criaria
+                  // uma segunda versão do mesmo texto para divergir na primeira
+                  // edição. O assunto acima é o que identifica qual e-mail foi.
+                  <span className="text-texto-secundario">corpo do e-mail fica na loja</span>
+                ) : (
+                  // Honesto sobre o que não foi guardado, em vez de recompor
+                  // agora e mostrar uma mensagem que ninguém recebeu.
+                  <span className="text-texto-secundario">texto não registrado no envio</span>
+                )}
+              </div>,
               <span className="text-texto-secundario">{m.loja}</span>,
               <>
                 <span

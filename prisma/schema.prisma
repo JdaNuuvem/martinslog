@@ -888,6 +888,21 @@ model MensagemEnvio {
   /// corrigido depois, e o histórico precisa dizer para onde a mensagem foi
   /// de fato.
   para               String
+  /**
+   * O texto exato que saiu, congelado no envio.
+   * Compor de novo na hora de exibir não serve: o template pode ter sido
+   * editado e o código de rastreio pode ter mudado, então a tela mostraria uma
+   * mensagem que ninguém recebeu. Quando o comprador diz "a mensagem veio
+   * errada", esta coluna é a única resposta possível.
+   * Nulo no que foi enviado antes desta coluna existir, e no e-mail reportado
+   * pela loja — ali o corpo vive lá, e copiá-lo criaria uma segunda versão do
+   * mesmo texto para divergir na primeira edição.
+   */
+  texto              String?
+  /**
+   * Assunto do e-mail. Vazio nos canais que não têm um.
+   */
+  assunto            String?
   status             StatusMensagem @default(PENDENTE)
   tentativas         Int            @default(0)
   /// Identificador da mensagem no provedor (`wamid` na Meta, id da SMS Dev,

@@ -341,6 +341,13 @@ export async function dispararSmsPendentes(limite = LOTE_PADRAO): Promise<Result
           erro: null,
           proximaTentativaEm: null,
           /*
+            Congela o texto EXATO que saiu. Recompor depois mostraria uma
+            mensagem que ninguém recebeu: o template pode ser editado e o
+            código de rastreio pode mudar. Quando o comprador diz "veio
+            errada", esta é a única resposta possível.
+          */
+          texto,
+          /*
             Grava o provedor que de fato atendeu, e não o configurado: sem
             fornecedor contratado quem atende é o que só registra, e o
             histórico precisa dizer isso. Do contrário, "enviada" mentiria.
@@ -360,6 +367,9 @@ export async function dispararSmsPendentes(limite = LOTE_PADRAO): Promise<Result
       data: {
         status: desistiu ? 'DESISTIU' : 'PENDENTE',
         tentativas,
+        // O texto vai junto mesmo na falha: metade das recusas de operadora se
+        // explicam olhando o que se tentou mandar.
+        texto,
         erro: resultado.codigo ? `[${resultado.codigo}] ${resultado.mensagem}` : resultado.mensagem,
         proximaTentativaEm: proxima,
         provedor: smsProvider.nome,

@@ -364,6 +364,35 @@ describe('e-mails da loja no painel', () => {
     expect(await resposta.json()).toMatchObject({ registradas: 0, repetidas: 1 })
   })
 
+  it('o assunto tem coluna própria e não polui o evento', async () => {
+    /*
+      Estava concatenado no evento por falta de lugar
+      ("PAGO — Pagamento confirmado — pedido PED-X"), e isso quebrava o
+      filtro: cada e-mail virava um evento diferente, e "filtrar por PAGO" não
+      trazia nenhum.
+    */
+    await MENSAGENS(
+      req('/api/v0/mensagens', {
+        mensagens: [
+          {
+            canal: 'EMAIL',
+            evento: 'PEDIDO_POSTADO',
+            para: 'assunto@exemplo.com',
+            entregue: true,
+            assunto: 'Seu pedido foi postado — PED-9',
+            id_externo: 'resend-assunto',
+          },
+        ],
+      }),
+    )
+
+    const m = await prisma.mensagemEnvio.findFirstOrThrow({
+      where: { perfilId, idExterno: 'resend-assunto' },
+    })
+    expect(m.evento).toBe('PEDIDO_POSTADO')
+    expect(m.assunto).toBe('Seu pedido foi postado — PED-9')
+  })
+
   it('mensagem de e-mail nunca entra na fila de envio da plataforma', async () => {
     /*
       Ela já foi enviada pela loja. `PENDENTE` faria o disparador tentar

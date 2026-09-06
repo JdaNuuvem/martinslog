@@ -22,6 +22,10 @@ export type MensagemAdmin = {
   canal: CanalMensagem
   provedor: string | null
   evento: string
+  /** O texto exato que saiu. Nulo no que é anterior à coluna e no e-mail. */
+  texto: string | null
+  /** Assunto, quando é e-mail. */
+  assunto: string | null
   para: string
   status: StatusMensagem
   tentativas: number
@@ -75,9 +79,16 @@ function montarWhere(filtro: FiltroMensagens): Prisma.MensagemEnvioWhereInput {
       traço. Comparar o texto cru não acharia nunca.
     */
     const digitos = busca.replace(/\D/g, '')
+    /*
+      A busca alcança o TEXTO e o ASSUNTO, não só o destinatário e o evento.
+      Quem investiga "o comprador reclamou da mensagem" chega com um pedaço da
+      frase, não com o código do evento.
+    */
     where.OR = [
       { para: { contains: digitos || busca } },
       { evento: { contains: busca, mode: 'insensitive' } },
+      { texto: { contains: busca, mode: 'insensitive' } },
+      { assunto: { contains: busca, mode: 'insensitive' } },
     ]
   }
 
@@ -102,6 +113,8 @@ export async function listarMensagensAdmin(
         canal: true,
         provedor: true,
         evento: true,
+        texto: true,
+        assunto: true,
         para: true,
         status: true,
         tentativas: true,
@@ -144,6 +157,8 @@ export async function listarMensagensAdmin(
       canal: l.canal,
       provedor: l.provedor,
       evento: l.evento,
+      texto: l.texto,
+      assunto: l.assunto,
       para: l.para,
       status: l.status,
       tentativas: l.tentativas,
