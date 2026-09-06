@@ -179,6 +179,11 @@ export type ResultadoEnfileiramento =
  * nenhum mostrando o que teria sido enviado. Enfileirar sempre transforma o
  * período sem fornecedor num ensaio observável.
  */
+/** O texto promete rastreio? Então precisa de um código para cumprir. */
+function precisaRastreio(previa: string): boolean {
+  return /\{\{\s*(link_rastreio|codigo_rastreio)\s*\}\}/i.test(previa)
+}
+
 export async function enfileirarSms(entrada: PedidoDeSms): Promise<ResultadoEnfileiramento> {
   const template = await garantirTemplate(entrada.perfilId, entrada.evento)
   if (!template || !template.ativo) return 'sem-template'
@@ -203,8 +208,7 @@ export async function enfileirarSms(entrada: PedidoDeSms): Promise<ResultadoEnfi
     segundo vem segundos depois com o código na mão. Barrar aqui deixa passar
     exatamente um: o que serve.
   */
-  const precisaDeRastreio = /\{\{\s*(link_rastreio|codigo_rastreio)\s*\}\}/i.test(template.previa)
-  if (precisaDeRastreio && !entrada.shipmentId) return 'sem-rastreio'
+  if (precisaRastreio(template.previa) && !entrada.shipmentId) return 'sem-rastreio'
 
   try {
     await prisma.mensagemEnvio.create({
@@ -282,8 +286,42 @@ export async function dispararSmsPendentes(limite = LOTE_PADRAO): Promise<Result
       continue
     }
 
+    const valores = await valoresDe(item)
+
+    /*
+      Segunda trava do rastreio, agora na hora de mandar.
+
+      O enfileiramento confere se EXISTE um envio; aqui confere se o envio já
+      tem CÓDIGO. Os dois momentos são diferentes: `pagarEnvio` chama o aviso
+      logo depois de emitir a etiqueta, e a emissão pode ter tropeçado — ela
+      engole a falha de propósito, para não desfazer um débito que já
+      aconteceu. Sem esta conferência o comprador recebia "Segue o link de
+      rastreio do seu pedido" e nada mais, marcado como ENVIADA, sem
+      retentativa nenhuma.
+
+      Reagendar é o certo: a reemissão acontece e o código aparece minutos
+      depois. Se nunca aparecer, a mensagem esgota as tentativas e some da
+      fila com o motivo escrito — visível, em vez de entregue e errada.
+    */
+    if (precisaRastreio(item.template.previa) && !valores.link_rastreio) {
+      const tentativasSemCodigo = item.tentativas + 1
+      const proxima = proximaTentativaEm(tentativasSemCodigo)
+      await prisma.mensagemEnvio.update({
+        where: { id: item.id },
+        data: {
+          status: proxima ? 'PENDENTE' : 'DESISTIU',
+          tentativas: tentativasSemCodigo,
+          erro: 'A etiqueta ainda não tem código de rastreio.',
+          proximaTentativaEm: proxima,
+        },
+      })
+      if (proxima) falhas++
+      else desistidas++
+      continue
+    }
+
     const credencial = await resolverCredencial(item.perfilId)
-    const texto = compor(item.template.previa, await valoresDe(item))
+    const texto = compor(item.template.previa, valores)
 
     const resultado = await smsProvider.enviar(
       credencial.credenciais ?? { chave: '' },

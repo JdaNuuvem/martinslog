@@ -7,6 +7,7 @@ import { criarEnvio, pagarEnvio, type EnderecoEnvio, type ProdutoDeclarado } fro
 import { emitirEtiqueta } from '@/server/emitir-etiqueta-service'
 import { cancelarEtiqueta } from '@/server/etiquetas-service'
 import { enfileirarEvento } from '@/server/webhook-service'
+import { houveCobranca } from '@/server/api-publica-service'
 
 /**
  * Criação, cancelamento e exclusão de etiquetas **em nome de um cliente**,
@@ -162,6 +163,18 @@ export async function criarEtiquetaParaUsuario(
     await liberarSemCobranca(actorUserId, envio.id, motivo)
   }
 
+  /*
+    `cobrado` sai do LIVRO-CAIXA, não da intenção de quem pediu.
+
+    `cobrarSaldo` diz o que se quis fazer; o lançamento diz o que aconteceu.
+    Os dois divergem sempre que a conta é isenta — parceiro, ou o próprio
+    administrador — porque `pagarEnvio` pula o débito de propósito. A auditoria
+    registrava "cobrado: true" para uma etiqueta que não gerou centavo nenhum,
+    enquanto a API dizia `charged: false` para o mesmo envio. Duas versões da
+    verdade sobre dinheiro, e a errada era a que ficava gravada para sempre.
+  */
+  const cobrado = await houveCobranca(envio.id)
+
   await prisma.auditLog.create({
     data: {
       actorUserId,
@@ -174,7 +187,12 @@ export async function criarEtiquetaParaUsuario(
         quoteId: cotacao.quoteId,
         servicoId: opcao.servicoId,
         precoCobradoCentavos: envio.precoCobradoCentavos,
-        cobrado: entrada.cobrarSaldo,
+        cobrado,
+        /*
+          A isenção fica explícita: sem isto, "pediu para cobrar e não cobrou"
+          parece defeito na leitura da auditoria, quando é a regra funcionando.
+        */
+        isentoDaTaxa: entrada.cobrarSaldo && !cobrado,
         motivo,
       } as Prisma.InputJsonValue,
     },
@@ -203,7 +221,7 @@ export async function criarEtiquetaParaUsuario(
     id: envio.id,
     codigoRastreio,
     precoCobradoCentavos: envio.precoCobradoCentavos,
-    cobrado: entrada.cobrarSaldo,
+    cobrado,
   }
 }
 

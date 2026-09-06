@@ -69,7 +69,9 @@ export default async function PaginaAdmin() {
     // recuperar. Somado ao resto, ele desaparece.
     prisma.pedido.count({ where: { status: 'PENDENTE' } }),
     prisma.mensagemEnvio.count(),
-    prisma.mensagemEnvio.count({ where: { status: 'FALHA' } }),
+    // `DESISTIU`, não `FALHA`: ver o comentário em `consulta-mensagens.ts`.
+    // Contar `FALHA` mostrava "nenhuma falha" com a caixa cheia delas.
+    prisma.mensagemEnvio.count({ where: { status: 'DESISTIU' } }),
   ])
 
   const grupos: { titulo: string; descricao: string; cartoes: Cartao[] }[] = [

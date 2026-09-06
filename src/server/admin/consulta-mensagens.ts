@@ -49,7 +49,16 @@ export type ResultadoMensagens = {
   pagina: number
   paginas: number
   porCanal: { canal: CanalMensagem; total: number }[]
-  /** Quantas falharam no total — o número que se olha primeiro. */
+  /**
+   * Quantas NÃO CHEGARAM — o número que se olha primeiro.
+   *
+   * Conta `DESISTIU`, não `FALHA`. `FALHA` existe no enum e **nada no sistema
+   * o escreve**: os dois disparadores gravam `ENVIADA`, `PENDENTE` ou
+   * `DESISTIU`, e o aviso de situação da operadora grava `DESISTIU`. Contar
+   * `FALHA` dava zero para sempre — a pílula de falhas dizia "0" enquanto as
+   * recusas reais estavam ali do lado, e clicar nela mostrava "nenhuma
+   * mensagem".
+   */
   falhas: number
 }
 
@@ -112,7 +121,7 @@ export async function listarMensagensAdmin(
       where: { ...where, canal: undefined },
       _count: { _all: true },
     }),
-    prisma.mensagemEnvio.count({ where: { ...where, status: 'FALHA' } }),
+    prisma.mensagemEnvio.count({ where: { ...where, status: 'DESISTIU' } }),
   ])
 
   /*

@@ -29,8 +29,10 @@ const CANAIS: { valor: CanalMensagem; rotulo: string }[] = [
 const SITUACOES: { valor: StatusMensagem; rotulo: string }[] = [
   { valor: 'ENVIADA', rotulo: 'Enviadas' },
   { valor: 'PENDENTE', rotulo: 'Na fila' },
+  // `FALHA` fica na lista porque o enum a tem e um dado antigo pode carregá-la;
+  // o que o sistema grava hoje é `DESISTIU`.
+  { valor: 'DESISTIU', rotulo: 'Não chegaram' },
   { valor: 'FALHA', rotulo: 'Falharam' },
-  { valor: 'DESISTIU', rotulo: 'Desistidas' },
 ]
 
 type Busca = { tipo?: string; canal?: string; status?: string; busca?: string; pagina?: string }
@@ -186,17 +188,21 @@ async function AbaMensagens({ parametros, pagina }: { parametros: Busca; pagina:
           </Link>
         ))}
         {/*
-          A pílula de falhas é atalho de operação, não filtro decorativo: é por
-          ela que se começa quando alguém diz que a mensagem não chegou.
+          Atalho de operação, não filtro decorativo: é por ele que se começa
+          quando alguém diz que a mensagem não chegou.
+
+          Aponta para `DESISTIU`, e não para `FALHA`: `FALHA` está no enum e
+          ninguém o escreve, então a pílula mostrava "0" para sempre enquanto
+          as recusas de verdade estavam logo ao lado.
         */}
         <Link
-          href={comParametros(parametros, { status: 'FALHA', pagina: undefined })}
-          aria-current={parametros.status === 'FALHA' ? 'page' : undefined}
+          href={comParametros(parametros, { status: 'DESISTIU', pagina: undefined })}
+          aria-current={parametros.status === 'DESISTIU' ? 'page' : undefined}
           className={`${PILULA} ${
-            parametros.status === 'FALHA' ? 'bg-erro text-white' : 'bg-erro/10 text-erro'
+            parametros.status === 'DESISTIU' ? 'bg-erro text-white' : 'bg-erro/10 text-erro'
           }`}
         >
-          Falhas ({lista.falhas.toLocaleString('pt-BR')})
+          Não chegaram ({lista.falhas.toLocaleString('pt-BR')})
         </Link>
       </div>
 

@@ -308,7 +308,7 @@ export async function obterInfoEnvio(contexto: ContextoApi, shipmentId: string):
  * gera lançamento, e um envio ainda `PENDING` também não — os dois respondem
  * falso pelo mesmo motivo, sem precisar de caso especial.
  */
-async function houveCobranca(shipmentId: string): Promise<boolean> {
+export async function houveCobranca(shipmentId: string): Promise<boolean> {
   const lancamentos = await prisma.ledgerEntry.count({
     where: { refTipo: 'SHIPMENT', refId: shipmentId, tipo: 'DEBITO' },
   })

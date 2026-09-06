@@ -1,4 +1,4 @@
-import { CepInvalidoError } from '@/domain/errors'
+import { CepInvalidoError, ServicoIndisponivelError } from '@/domain/errors'
 import { EnderecoCep, GeoProvider } from './provider'
 
 /**
@@ -8,20 +8,24 @@ import { EnderecoCep, GeoProvider } from './provider'
  * de um jeito diferente:
  *
  *  - **A primeira fonte achou** → devolve. A reserva nem é consultada.
- *  - **A primeira disse que não existe** → PERGUNTA À RESERVA antes de
- *    acreditar. É o caso que motivou tudo isto: o ViaCEP não carrega o CEP
- *    geral de município, e um comprador de cidade pequena tinha a venda
- *    recusada com "CEP não encontrado" para um CEP perfeitamente válido.
- *  - **A primeira estava fora do ar** → tenta a reserva. Se ela responder,
- *    ótimo; a indisponibilidade de um fornecedor deixa de ser problema do
- *    lojista.
- *  - **As duas dizem que não existe** → aí sim, não existe.
- *  - **A primeira disse que não existe e a reserva não respondeu** → mantém a
- *    recusa. Uma fonte afirmou positivamente que o CEP não existe; deixar
- *    passar geraria etiqueta para um endereço inexistente, que é pior do que
- *    recusar — a recusa aparece na lista de erros e alguém conserta.
- *  - **As duas fora do ar** → indisponibilidade, que a cotação trata como
- *    "pula a validação" em vez de recusar.
+ *  - **A reserva achou** → devolve. É o caso que motivou tudo isto: o ViaCEP
+ *    não carrega o CEP geral de município, e um comprador de cidade pequena
+ *    tinha a venda recusada com "CEP não encontrado" para um CEP válido.
+ *  - **As duas negam** → aí sim, não existe. Recusa.
+ *  - **A primeira não respondeu** → nunca recusa, aconteça o que acontecer com
+ *    a reserva. Vira indisponibilidade, que a cotação trata pulando a
+ *    validação em vez de barrar a venda.
+ *
+ * O último ramo é o que mudou, e o motivo importa. Antes, uma negativa da
+ * RESERVA SOZINHA bastava para recusar — e é justamente o cenário em que ela
+ * erra mais: com o ViaCEP fora do ar, toda venda cujo CEP a BrasilAPI não
+ * conhece seria barrada de uma vez só, em escala, que é exatamente o que a
+ * segunda fonte veio evitar.
+ *
+ * A assimetria é deliberada: recusar CEP bom é venda paga sem etiqueta, com o
+ * erro à vista e alguém para consertar; deixar passar CEP ruim é uma encomenda
+ * perdida. O primeiro é recuperável, e é o único que acontece em lote quando
+ * um fornecedor cai.
  */
 export class GeoComReserva implements GeoProvider {
   constructor(
@@ -30,26 +34,47 @@ export class GeoComReserva implements GeoProvider {
   ) {}
 
   async buscarPorCep(cep: string): Promise<EnderecoCep> {
+    let erroPrincipal: unknown
+
     try {
       return await this.principal.buscarPorCep(cep)
-    } catch (erroPrincipal) {
-      /*
-        Formato inválido (`normalizarCep`) também chega como CepInvalidoError.
-        Consultar a reserva com um texto que não é CEP só gastaria uma ida à
-        rede para receber a mesma recusa — mas distinguir os dois casos aqui
-        exigiria um erro próprio, e o custo de uma consulta a mais é menor que
-        o de um caminho especial mal testado. Vai para a reserva.
-      */
-      try {
-        return await this.reserva.buscarPorCep(cep)
-      } catch (erroReserva) {
-        // A reserva também recusou de forma positiva: as duas fontes negam.
-        if (erroReserva instanceof CepInvalidoError) throw erroReserva
+    } catch (erro) {
+      erroPrincipal = erro
+    }
 
-        // A reserva não respondeu. Vale o veredito da principal, seja ele
-        // "não existe" (recusa) ou "não respondeu" (pula a validação).
+    /*
+      Formato inválido (`normalizarCep`) também chega como CepInvalidoError.
+      Consultar a reserva com um texto que não é CEP só gasta uma ida à rede
+      para receber a mesma recusa — mas distinguir os dois casos exigiria um
+      erro próprio, e o custo de uma consulta a mais é menor que o de um
+      caminho especial mal testado.
+    */
+    try {
+      return await this.reserva.buscarPorCep(cep)
+    } catch (erroReserva) {
+      const principalNegou = erroPrincipal instanceof CepInvalidoError
+      const reservaNegou = erroReserva instanceof CepInvalidoError
+
+      if (principalNegou && reservaNegou) {
+        throw erroReserva
+      }
+
+      if (principalNegou) {
+        // A primeira afirmou que não existe e a reserva não respondeu. Uma
+        // negativa positiva basta para recusar — e a recusa aparece na lista
+        // de erros, onde alguém conserta o endereço.
         throw erroPrincipal
       }
+
+      /*
+        A primeira não respondeu. Não importa o que a reserva disse: sem a
+        fonte principal, não há base para afirmar que o CEP não existe. Vira
+        indisponibilidade, e a cotação segue sem a validação.
+      */
+      throw new ServicoIndisponivelError(
+        'Nenhuma fonte de CEP respondeu de forma conclusiva.',
+        { cause: erroPrincipal },
+      )
     }
   }
 }

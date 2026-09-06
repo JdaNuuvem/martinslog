@@ -77,6 +77,22 @@ describe('GeoComReserva', () => {
     await expect(geo.buscarPorCep('99999999')).rejects.toBeInstanceOf(CepInvalidoError)
   })
 
+  it('a principal não responde e a reserva nega: NÃO recusa', async () => {
+    /*
+      O ramo que mais custa dinheiro. Com o ViaCEP fora do ar, uma negativa da
+      BrasilAPI sozinha barraria toda venda cujo CEP ela não conhece — em
+      lote, de uma vez, que é exatamente o que a segunda fonte veio evitar.
+
+      Vira indisponibilidade: a cotação pula a validação em vez de recusar.
+    */
+    const geo = new GeoComReserva(
+      fonte(new ServicoIndisponivelError('ViaCEP caiu')),
+      fonte(new CepInvalidoError('não achei')),
+    )
+
+    await expect(geo.buscarPorCep('13700000')).rejects.toBeInstanceOf(ServicoIndisponivelError)
+  })
+
   it('a principal nega e a reserva não responde: mantém a recusa', async () => {
     /*
       Uma fonte AFIRMOU que o CEP não existe. Deixar passar por dúvida geraria

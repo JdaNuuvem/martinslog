@@ -117,18 +117,43 @@ export async function listarPedidosAdmin(filtro: FiltroPedidos = {}): Promise<Re
   ])
 
   /*
-    O código de rastreio vive no envio, não no pedido. Buscado em UMA consulta
-    para os cinquenta da página — dentro do laço seriam cinquenta idas ao
-    banco, e a tela ficaria lenta justamente quando há muito o que ver.
+    O código de rastreio vive no envio, e o vínculo é a REFERÊNCIA EXTERNA.
+
+    A coluna `Pedido.shipmentId` existe no schema e nunca é escrita por
+    ninguém — a tela mostrava "—" em todas as linhas, inclusive nos pedidos que
+    já tinham etiqueta impressa há dias. O que de fato liga os dois é o código
+    do pedido na loja: a loja manda `external_id` no `/pedidos` e o MESMO valor
+    como `external_id` no `/cart`, que vira `Shipment.referenciaExterna`.
+
+    O perfil entra na busca junto com a referência: dois lojistas podem usar a
+    mesma numeração de pedido, e casar só pelo código mostraria a um deles o
+    rastreio do outro.
+
+    Uma consulta para os cinquenta da página, não uma por linha.
   */
-  const shipmentIds = linhas.map((l) => l.shipmentId).filter((id): id is string => Boolean(id))
-  const envios = shipmentIds.length
+  const referencias = linhas.map((l) => l.externalId)
+  const envios = referencias.length
     ? await prisma.shipment.findMany({
-        where: { id: { in: shipmentIds } },
-        select: { id: true, codigoRastreio: true },
+        where: {
+          referenciaExterna: { in: referencias },
+          perfilId: { in: [...new Set(linhas.map((l) => l.perfil.id))] },
+        },
+        select: { id: true, codigoRastreio: true, referenciaExterna: true, perfilId: true },
+        orderBy: { criadoEm: 'desc' },
       })
     : []
-  const rastreioPorEnvio = new Map(envios.map((e) => [e.id, e.codigoRastreio]))
+
+  /*
+    Chave composta, e a PRIMEIRA vence: `orderBy` desc deixa o envio mais
+    recente na frente, que é o certo quando um pedido foi refeito.
+  */
+  const envioPorPedido = new Map<string, { id: string; codigoRastreio: string | null }>()
+  for (const e of envios) {
+    const chave = `${e.perfilId}|${e.referenciaExterna}`
+    if (!envioPorPedido.has(chave)) {
+      envioPorPedido.set(chave, { id: e.id, codigoRastreio: e.codigoRastreio })
+    }
+  }
 
   return {
     pedidos: linhas.map((l) => ({
@@ -144,8 +169,9 @@ export async function listarPedidosAdmin(filtro: FiltroPedidos = {}): Promise<Re
       pagoEm: l.pagoEm,
       loja: l.perfil.nome,
       lojaId: l.perfil.id,
-      shipmentId: l.shipmentId,
-      codigoRastreio: l.shipmentId ? (rastreioPorEnvio.get(l.shipmentId) ?? null) : null,
+      shipmentId: l.shipmentId ?? envioPorPedido.get(`${l.perfil.id}|${l.externalId}`)?.id ?? null,
+      codigoRastreio:
+        envioPorPedido.get(`${l.perfil.id}|${l.externalId}`)?.codigoRastreio ?? null,
       mensagens: l._count.mensagens,
     })),
     total,
