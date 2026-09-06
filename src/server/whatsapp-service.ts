@@ -238,6 +238,16 @@ export async function dispararPendentes(limite = LOTE_PADRAO): Promise<Resultado
 
   const pendentes = await prisma.mensagemEnvio.findMany({
     where: {
+      /*
+        SÓ WhatsApp. Sem este filtro, esta fila varria também os SMS
+        pendentes e tentava mandá-los pela Meta — que os recusaria, gastando
+        as tentativas de cada um até o `DESISTIU`. O comprador nunca receberia
+        o SMS, e o motivo gravado seria um erro do WhatsApp, apontando para o
+        lugar errado. A fila irmã (`dispararSmsPendentes`) sempre filtrou por
+        canal; esta não filtrava, e as duas rodam de minuto em minuto pelo
+        mesmo agendador.
+      */
+      canal: 'WHATSAPP',
       status: 'PENDENTE',
       tentativas: { lt: MAXIMO_TENTATIVAS },
       proximaTentativaEm: { lte: agora },

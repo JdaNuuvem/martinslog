@@ -9,20 +9,32 @@ type Cartao = {
   titulo: string
   valor: number
   href: string
-  pronto: boolean
   /** Recorte que muda a leitura do número — pendentes, falhas. */
   nota?: string
+  /**
+   * O recorte pede ação de alguém.
+   *
+   * Só quando é verdade: pintar de vermelho o que não é urgente ensina a
+   * ignorar vermelho, e aí o alerta que importa passa despercebido.
+   */
+  atencao?: boolean
 }
 
 /**
- * Entrada da área administrativa: números do dia e os caminhos para as
- * telas. As seções ainda não construídas aparecem marcadas, para que a
- * ausência seja explícita em vez de parecer um link quebrado.
+ * Entrada da área administrativa.
+ *
+ * Os cartões vêm em três grupos, e a ordem é deliberada: primeiro o que muda
+ * ao longo do dia e pede olho (pedido, envio, mensagem, fila), depois o que se
+ * configura uma vez e fica (preço, serviço, status), por último a conta. Uma
+ * grade única de dez cartões dá o mesmo peso ao pedido que chegou agora e à
+ * tabela de preço que ninguém toca há um mês — e quem abre o painel para
+ * trabalhar perde tempo procurando.
  */
 export default async function PaginaAdmin() {
   const [
     regras,
     envios,
+    enviosSemCodigo,
     usuarios,
     auditoria,
     webhooksNaFila,
@@ -34,91 +46,133 @@ export default async function PaginaAdmin() {
     mensagens,
     mensagensFalhas,
   ] = await Promise.all([
-      prisma.priceRule.count(),
-      prisma.shipment.count(),
-      prisma.user.count(),
-      prisma.auditLog.count(),
-      // Só o que ainda vai ser tentado: entrega concluída ou desistida não é
-      // trabalho pendente, e contá-la faria o número nunca baixar.
-      prisma.webhookDelivery.count({
-        where: { entregueEm: null, proximaTentativaEm: { not: null } },
-      }),
-      prisma.quote.count(),
-      prisma.statusRastreio.count({ where: { userId: null } }),
-      prisma.service.count({ where: { ativo: true } }),
-      prisma.pedido.count(),
-      // O pendente é o número que vale dinheiro: é a venda que ainda dá para
-      // recuperar. Somado ao resto, ele desaparece.
-      prisma.pedido.count({ where: { status: 'PENDENTE' } }),
-      prisma.mensagemEnvio.count(),
-      prisma.mensagemEnvio.count({ where: { status: 'FALHA' } }),
-    ])
+    prisma.priceRule.count(),
+    prisma.shipment.count(),
+    /*
+      Envio pago que ficou sem código de rastreio: a emissão tropeçou depois do
+      pagamento. É o comprador que pagou e não tem o que acompanhar — o número
+      que mais merece estar na primeira tela.
+    */
+    prisma.shipment.count({ where: { status: 'RELEASED', codigoRastreio: null } }),
+    prisma.user.count(),
+    prisma.auditLog.count(),
+    // Só o que ainda vai ser tentado: entrega concluída ou desistida não é
+    // trabalho pendente, e contá-la faria o número nunca baixar.
+    prisma.webhookDelivery.count({
+      where: { entregueEm: null, proximaTentativaEm: { not: null } },
+    }),
+    prisma.quote.count(),
+    prisma.statusRastreio.count({ where: { userId: null } }),
+    prisma.service.count({ where: { ativo: true } }),
+    prisma.pedido.count(),
+    // O pendente é o número que vale dinheiro: é a venda que ainda dá para
+    // recuperar. Somado ao resto, ele desaparece.
+    prisma.pedido.count({ where: { status: 'PENDENTE' } }),
+    prisma.mensagemEnvio.count(),
+    prisma.mensagemEnvio.count({ where: { status: 'FALHA' } }),
+  ])
 
-  const cartoes: Cartao[] = [
+  const grupos: { titulo: string; descricao: string; cartoes: Cartao[] }[] = [
     {
-      titulo: 'Pedidos',
-      valor: pedidos,
-      href: '/admin/pedidos',
-      pronto: true,
-      nota: `${pedidosPendentes.toLocaleString('pt-BR')} aguardando pagamento`,
+      titulo: 'O dia',
+      descricao: 'O que muda a toda hora e pede olho.',
+      cartoes: [
+        {
+          titulo: 'Pedidos',
+          valor: pedidos,
+          href: '/admin/pedidos',
+          nota: `${pedidosPendentes.toLocaleString('pt-BR')} aguardando pagamento`,
+        },
+        {
+          titulo: 'Envios',
+          valor: envios,
+          href: '/admin/envios',
+          nota:
+            enviosSemCodigo > 0
+              ? `${enviosSemCodigo.toLocaleString('pt-BR')} pagos sem código de rastreio`
+              : undefined,
+          atencao: enviosSemCodigo > 0,
+        },
+        {
+          titulo: 'Mensagens',
+          valor: mensagens,
+          href: '/admin/mensagens',
+          nota:
+            mensagensFalhas > 0
+              ? `${mensagensFalhas.toLocaleString('pt-BR')} não chegaram`
+              : 'nenhuma falha',
+          atencao: mensagensFalhas > 0,
+        },
+        {
+          titulo: 'Webhooks na fila',
+          valor: webhooksNaFila,
+          href: '/admin/webhooks',
+          nota: webhooksNaFila > 0 ? 'aguardando entrega' : 'fila vazia',
+        },
+      ],
     },
     {
-      titulo: 'Mensagens enviadas',
-      valor: mensagens,
-      href: '/admin/mensagens',
-      pronto: true,
-      nota: mensagensFalhas > 0 ? `${mensagensFalhas.toLocaleString('pt-BR')} com falha` : undefined,
+      titulo: 'Como o frete é calculado',
+      descricao: 'Ajustado de vez em quando; muda o preço de todo mundo.',
+      cartoes: [
+        { titulo: 'Regras de preço', valor: regras, href: '/admin/tabelas' },
+        { titulo: 'Serviços ativos', valor: servicos, href: '/admin/servicos' },
+        { titulo: 'Status de rastreio', valor: statusPadrao, href: '/admin/status-rastreio' },
+        { titulo: 'Cotações', valor: cotacoes, href: '/admin/cotacoes' },
+      ],
     },
-    { titulo: 'Regras de preço', valor: regras, href: '/admin/tabelas', pronto: true },
-    { titulo: 'Webhooks na fila', valor: webhooksNaFila, href: '/admin/webhooks', pronto: true },
-    { titulo: 'Envios', valor: envios, href: '/admin/envios', pronto: true },
-    { titulo: 'Cotações', valor: cotacoes, href: '/admin/cotacoes', pronto: true },
-    { titulo: 'Usuários', valor: usuarios, href: '/admin/usuarios', pronto: true },
-    { titulo: 'Registros de auditoria', valor: auditoria, href: '/admin/auditoria', pronto: true },
-    { titulo: 'Status de rastreio', valor: statusPadrao, href: '/admin/status-rastreio', pronto: true },
-    { titulo: 'Serviços', valor: servicos, href: '/admin/servicos', pronto: true },
+    {
+      titulo: 'Contas e histórico',
+      descricao: 'Quem tem acesso e o que foi feito.',
+      cartoes: [
+        { titulo: 'Usuários', valor: usuarios, href: '/admin/usuarios' },
+        { titulo: 'Registros de auditoria', valor: auditoria, href: '/admin/auditoria' },
+      ],
+    },
   ]
 
   return (
     <>
-      <div>
+      <div className="flex flex-col gap-2">
         <h1 className="text-titulo font-bold text-texto-principal">Administração</h1>
         <p className="max-w-leitura text-corpo text-texto-secundario">
-          Área restrita. Toda ação que mexe em dinheiro ou status fica registrada na auditoria.
+          Todas as lojas em um lugar. Toda ação que mexe em dinheiro ou status fica registrada na
+          auditoria.
         </p>
-        <div className="mt-2">
-          <AtualizaSozinho segundos={60} />
-        </div>
+        <AtualizaSozinho segundos={60} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {cartoes.map((cartao) =>
-          cartao.pronto ? (
-            <Link
-              key={cartao.titulo}
-              href={cartao.href}
-              className="rounded-xl bg-superficie-card p-6 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
-            >
-              <p className="text-rotulo uppercase text-texto-secundario">{cartao.titulo}</p>
-              <p className="text-titulo font-bold text-texto-principal">
-                {cartao.valor.toLocaleString('pt-BR')}
-              </p>
-              {cartao.nota ? (
-                <p className="mt-1 text-sm text-texto-secundario">{cartao.nota}</p>
-              ) : null}
-              <p className="mt-2 text-sm font-medium text-brand-texto">Abrir</p>
-            </Link>
-          ) : (
-            <div key={cartao.titulo} className="rounded-xl bg-superficie-card p-6">
-              <p className="text-rotulo uppercase text-texto-secundario">{cartao.titulo}</p>
-              <p className="text-titulo font-bold text-texto-principal">
-                {cartao.valor.toLocaleString('pt-BR')}
-              </p>
-              <p className="mt-2 text-sm text-texto-secundario">Em construção</p>
-            </div>
-          ),
-        )}
-      </div>
+      {grupos.map((grupo) => (
+        <section key={grupo.titulo} className="flex flex-col gap-3">
+          <div>
+            <h2 className="text-subtitulo font-semibold text-texto-principal">{grupo.titulo}</h2>
+            <p className="text-dado text-texto-secundario">{grupo.descricao}</p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {grupo.cartoes.map((cartao) => (
+              <Link
+                key={cartao.titulo}
+                href={cartao.href}
+                className="group flex flex-col rounded-xl bg-superficie-card p-5 transition hover:bg-superficie-bloco focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+              >
+                <p className="text-rotulo uppercase text-texto-secundario">{cartao.titulo}</p>
+                <p className="text-titulo font-bold leading-tight text-texto-principal">
+                  {cartao.valor.toLocaleString('pt-BR')}
+                </p>
+                {cartao.nota ? (
+                  <p
+                    className={`mt-1 text-dado ${cartao.atencao ? 'font-medium text-erro' : 'text-texto-secundario'}`}
+                  >
+                    {cartao.nota}
+                  </p>
+                ) : null}
+                <p className="mt-auto pt-3 text-sm font-medium text-brand-texto">Abrir →</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ))}
     </>
   )
 }

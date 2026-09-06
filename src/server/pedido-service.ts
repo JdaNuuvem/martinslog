@@ -3,6 +3,7 @@ import type { StatusPedido } from '@prisma/client'
 import { ArquivoInvalidoError, NaoAutorizadoError } from '@/domain/errors'
 import { normalizarTelefone } from '@/infra/whatsapp/cloud-api'
 import { enfileirarMensagem } from '@/server/whatsapp-service'
+import { enfileirarSms } from '@/server/sms-service'
 
 /**
  * Pedidos da loja, empurrados por ela pela API pública.
@@ -114,35 +115,67 @@ export async function registrarPedido(
     }
   }
 
-  const resultado = await enfileirarMensagem({
-    perfilId,
-    evento: 'PEDIDO_PAGO',
-    para: fone,
-    pedidoId: pedido.id,
-    valores: {},
-  })
+  const aviso = await avisarPagamento(perfilId, fone, pedido.id)
 
   return {
     id: pedido.id,
     external_id: externalId,
     status,
     criado: !anterior,
-    mensagem: explicar(resultado),
+    mensagem: aviso,
   }
 }
 
-function explicar(resultado: Awaited<ReturnType<typeof enfileirarMensagem>>): string {
-  switch (resultado) {
-    case 'enfileirada':
-      return 'Confirmação de pagamento na fila de envio.'
-    case 'sem-whatsapp':
-      return 'Pedido salvo. O WhatsApp deste perfil não está conectado.'
+/**
+ * Avisa o comprador de que o pagamento entrou — por TODO canal configurado.
+ *
+ * Antes, este caminho chamava só o WhatsApp. E o WhatsApp exige uma conta
+ * verificada na Meta, que ainda não existe: a função devolvia `sem-whatsapp` e
+ * ninguém era avisado — nem por WhatsApp, nem por SMS. Medido em produção
+ * antes da correção: 561 pedidos pagos da Loja PG e 28 SMS. Os 28 tinham vindo
+ * de outro caminho (o envio pago), não deste.
+ *
+ * Os dois canais são tentados de forma independente, e um não derruba o outro:
+ * o SMS existe justamente para funcionar enquanto o WhatsApp não existe, e
+ * fazer a falta de um calar o outro é repetir o defeito ao contrário.
+ */
+async function avisarPagamento(
+  perfilId: string,
+  fone: string,
+  pedidoId: string,
+): Promise<string> {
+  const [sms, whats] = await Promise.allSettled([
+    enfileirarSms({ perfilId, evento: 'PEDIDO_PAGO', para: fone, pedidoId, valores: {} }),
+    enfileirarMensagem({ perfilId, evento: 'PEDIDO_PAGO', para: fone, pedidoId, valores: {} }),
+  ])
+
+  const canais: string[] = []
+  if (sms.status === 'fulfilled' && (sms.value === 'enfileirada' || sms.value === 'repetida')) {
+    canais.push('SMS')
+  }
+  if (
+    whats.status === 'fulfilled' &&
+    (whats.value === 'enfileirada' || whats.value === 'repetida')
+  ) {
+    canais.push('WhatsApp')
+  }
+
+  if (canais.length > 0) {
+    return `Confirmação de pagamento na fila de envio (${canais.join(' e ')}).`
+  }
+
+  /*
+    Nenhum canal aceitou. O integrador precisa saber POR QUE — "pedido salvo" e
+    ponto final foi o que deixou este defeito invisível por dias.
+  */
+  const motivo = sms.status === 'fulfilled' ? sms.value : 'erro'
+  switch (motivo) {
     case 'sem-template':
       return 'Pedido salvo. Não há mensagem configurada para pagamento confirmado.'
     case 'telefone-invalido':
-      return 'Pedido salvo, mas o telefone não serve para WhatsApp.'
-    case 'repetida':
-      return 'Pedido salvo. A confirmação já tinha sido enviada.'
+      return 'Pedido salvo, mas o telefone informado não é válido.'
+    default:
+      return 'Pedido salvo. Nenhum canal de aviso está configurado para esta loja.'
   }
 }
 
