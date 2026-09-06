@@ -1,0 +1,14 @@
+-- E-mail vira um canal de mensagem, ao lado de SMS e WhatsApp.
+--
+-- A loja envia milhares de e-mails ao comprador — "aguardando pagamento",
+-- "pagamento confirmado", "pedido postado" — e não havia por onde eles
+-- entrarem aqui: `email_deliveries` é presa a `userId` e `shipmentId`, e a API
+-- pública não tinha rota de mensagem nenhuma. O painel dizia "0 e-mails" com
+-- três mil e seiscentos enviados do outro lado.
+--
+-- Reusar `mensagem_envios`, em vez de criar uma tabela nova, é o que faz a
+-- tela de mensagens mostrar SMS, WhatsApp e e-mail na MESMA lista, com o mesmo
+-- filtro e a mesma contagem de falhas. Uma tabela separada exigiria uma
+-- segunda tela, e a pergunta que se faz ali ("o comprador foi avisado?") não
+-- distingue canal.
+ALTER TYPE "CanalMensagem" ADD VALUE IF NOT EXISTS 'EMAIL';

@@ -27,6 +27,27 @@ export type EntradaPedido = {
   valorCentavos?: number
   produtos?: unknown[]
   checkoutUrl?: string | null
+  /** O comprovante que o comprador mandou: endereço http ou URI de dados. */
+  comprovante?: string | null
+  comprovanteEm?: Date | null
+  /**
+   * Quando o pedido nasceu NA LOJA, e quando o pagamento entrou lá.
+   *
+   * Existem para a importação do histórico. Sem elas, todo pedido importado
+   * apareceria criado no instante da importação, e a lista viraria uma parede
+   * de "hoje" — perdendo exatamente a informação que faz o histórico valer.
+   */
+  criadoEm?: Date | null
+  pagoEm?: Date | null
+  /**
+   * Avisar o comprador na mudança de status. Padrão: avisa.
+   *
+   * A importação de histórico manda `false`. Sem essa trava, trazer meses de
+   * pedidos anteriores avisaria "pagamento confirmado" a milhares de pessoas
+   * que compraram semanas atrás — mensagem cobrada, sem sentido para quem
+   * recebe, e um envio em massa não solicitado do ponto de vista da operadora.
+   */
+  notificarCliente?: boolean
 }
 
 export type PedidoSalvo = {
@@ -77,13 +98,35 @@ export async function registrarPedido(
     valorCentavos: entrada.valorCentavos ?? 0,
     produtos: (entrada.produtos ?? []) as never,
     checkoutUrl: entrada.checkoutUrl?.trim() || null,
-    ...(status === 'PAGO' && !anterior?.pagoEm ? { pagoEm: agora } : {}),
+    /*
+      O comprovante só é sobrescrito quando vem de fato. Uma sincronização que
+      não carrega o campo não pode apagar a prova que já estava aqui.
+    */
+    ...(entrada.comprovante ? { comprovante: entrada.comprovante } : {}),
+    ...(entrada.comprovanteEm ? { comprovanteEm: entrada.comprovanteEm } : {}),
+    /*
+      A data do pagamento vem da LOJA quando ela informa; só cai no relógio
+      daqui quando ela não sabe dizer. Carimbar `agora` num pedido pago há três
+      semanas mentiria sobre quando o dinheiro entrou.
+    */
+    ...(status === 'PAGO' && !anterior?.pagoEm
+      ? { pagoEm: entrada.pagoEm ?? agora }
+      : {}),
     ...(status === 'CANCELADO' && !anterior?.canceladoEm ? { canceladoEm: agora } : {}),
   }
 
   const pedido = anterior
     ? await prisma.pedido.update({ where: { id: anterior.id }, data: dados })
-    : await prisma.pedido.create({ data: { perfilId, externalId, ...dados } })
+    : await prisma.pedido.create({
+        data: {
+          perfilId,
+          externalId,
+          ...dados,
+          // Só na CRIAÇÃO: a data de nascimento de um pedido não muda depois,
+          // e deixá-la editável faria uma sincronização reescrever o histórico.
+          ...(entrada.criadoEm ? { criadoEm: entrada.criadoEm } : {}),
+        },
+      })
 
   const mudouStatus = !anterior || anterior.status !== status
   if (!mudouStatus) {
@@ -112,6 +155,21 @@ export async function registrarPedido(
         status === 'PENDENTE'
           ? 'Pedido registrado. A recuperação cuidará dele se o pagamento não vier.'
           : 'Pedido cancelado. Nenhuma mensagem enviada.',
+    }
+  }
+
+  /*
+    A importação de histórico grava e não avisa ninguém. Ver `notificarCliente`
+    em `EntradaPedido`: o padrão é avisar, e quem importa escreve o contrário
+    de propósito.
+  */
+  if (entrada.notificarCliente === false) {
+    return {
+      id: pedido.id,
+      external_id: externalId,
+      status,
+      criado: !anterior,
+      mensagem: 'Pedido gravado sem avisar o comprador, como pedido.',
     }
   }
 

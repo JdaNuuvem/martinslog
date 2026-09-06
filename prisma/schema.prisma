@@ -75,13 +75,11 @@ model User {
   cepOrigemPadrao   String?
   /**
    * Conta isenta da taxa por etiqueta.
-   *
    * Emite etiqueta sem saldo e **sem lançamento no livro-caixa** — não é
    * saldo infinito. A diferença importa: dar crédito de mentira à carteira
    * criaria receita que nunca existiu no extrato, e o financeiro passaria a
    * somar dinheiro que ninguém pagou. Sem lançamento, `charged` responde
    * falso na API e o número continua verdadeiro.
-   *
    * Existe para as contas de parceiro e de teste da própria plataforma. Não
    * é plano comercial: é exceção nominal, ligada uma a uma, e por isso o
    * padrão é `false` e nada na interface a concede.
@@ -271,11 +269,9 @@ model Shipment {
   dceNumero              String?
   /**
    * O código do pedido no sistema da loja.
-   *
    * Existe para o comprador ver UM código só. Sem ele, quem compra recebe o
    * código da loja no e-mail e o nosso no rastreio, e não tem como saber que
    * são o mesmo pedido — a dúvida vira contato no suporte.
-   *
    * Opcional de propósito: quem integra sem referência continua funcionando.
    * E não é único: a loja é dona do próprio espaço de códigos, e recusar um
    * repetido faria a nossa trava derrubar um envio legítimo dela. A
@@ -306,7 +302,7 @@ model Shipment {
   /// envio muda de status. Opcional: envio criado pelo painel, antes de
   /// existirem perfis, ou por conta que só tem um, não tem dono de marca — e
   /// sem perfil simplesmente não há mensagem a enviar.
-  perfilId               String?
+  perfilId String?
 
   user           User            @relation(fields: [userId], references: [id], onDelete: Restrict)
   perfil         Perfil?         @relation(fields: [perfilId], references: [id], onDelete: SetNull)
@@ -604,24 +600,22 @@ model EmailDelivery {
 /// mensagem, webhook). O que é da conta continua na conta: carteira, tokens
 /// de API e endereços — dinheiro e credencial não se multiplicam por marca.
 model Perfil {
-  id       String   @id @default(cuid())
-  userId   String
+  id           String   @id @default(cuid())
+  userId       String
   /// Nome interno, para o lojista se achar no seletor de perfil.
-  nome     String
+  nome         String
   /**
    * Nome que o COMPRADOR vê nas mensagens.
-   *
    * Existe porque os dois raramente coincidem. O operador precisa distinguir
    * "Best Buy Tech" de "Loja PG" no painel; o comprador nunca ouviu falar de
    * nenhum dos dois — ele lembra do lugar onde comprou. Sem este campo, ou o
    * painel fica com três perfis de nome igual, ou o comprador recebe uma
    * mensagem de um remetente que não reconhece e denuncia como spam.
-   *
    * Nulo usa `nome`. É o comportamento de quem não configurou nada.
    */
   nomeExibicao String?
-  ativo    Boolean  @default(true)
-  criadoEm DateTime @default(now())
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
 
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   whatsappConfig    WhatsappConfig?
@@ -690,6 +684,15 @@ model WhatsappConfig {
 enum CanalMensagem {
   WHATSAPP
   SMS
+  /**
+   * E-mail enviado pela LOJA, reportado à plataforma.
+   * Diferente dos outros dois, a plataforma não envia — ela registra. A loja
+   * já tem provedor e domínio verificados; o que faltava era o painel poder
+   * responder "o comprador foi avisado?" sem trocar de sistema.
+   * Por isso uma mensagem de e-mail nasce com o desfecho já conhecido
+   * (`ENVIADA` ou `DESISTIU`), nunca `PENDENTE`: não há fila daqui para ela.
+   */
+  EMAIL
 }
 
 /// Credenciais de SMS, por perfil.
@@ -702,8 +705,8 @@ enum CanalMensagem {
 /// aberto, e um enum obrigaria a uma migration a cada troca — exatamente o que
 /// a interface `SmsProvider` existe para evitar.
 model SmsConfig {
-  id            String   @id @default(cuid())
-  perfilId      String   @unique
+  id            String    @id @default(cuid())
+  perfilId      String    @unique
   provedor      String
   /// Conta no provedor, quando ele exigir uma além da chave.
   identificador String?
@@ -711,11 +714,11 @@ model SmsConfig {
   dicaChave     String
   /// Número ou nome que aparece como remetente, quando o provedor permitir.
   remetente     String?
-  ativo         Boolean  @default(true)
+  ativo         Boolean   @default(true)
   verificadaEm  DateTime?
   ultimoErro    String?
-  criadoEm      DateTime @default(now())
-  atualizadoEm  DateTime @updatedAt
+  criadoEm      DateTime  @default(now())
+  atualizadoEm  DateTime  @updatedAt
 
   perfil Perfil @relation(fields: [perfilId], references: [id], onDelete: Cascade)
 
@@ -727,7 +730,6 @@ model MensagemTemplate {
   perfilId     String
   /**
    * Canal por onde este texto sai.
-   *
    * Muda o papel de `previa`. No WhatsApp o texto vive aprovado na Meta e
    * `nome` é o que o identifica lá — `previa` serve só para a tela mostrar ao
    * lojista o que será enviado. No SMS não há aprovação nenhuma: `previa` É a
@@ -740,12 +742,12 @@ model MensagemTemplate {
   /// aqui proibiria disparar mensagem nos status que o próprio cliente criou.
   evento       String
   nome         String
-  idioma       String   @default("pt_BR")
+  idioma       String        @default("pt_BR")
   previa       String
-  variaveis    Json     @default("[]")
-  ativo        Boolean  @default(true)
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
+  variaveis    Json          @default("[]")
+  ativo        Boolean       @default(true)
+  criadoEm     DateTime      @default(now())
+  atualizadoEm DateTime      @updatedAt
 
   perfil    Perfil             @relation(fields: [perfilId], references: [id], onDelete: Cascade)
   mensagens MensagemEnvio[]
@@ -789,6 +791,16 @@ model Pedido {
   /// Para onde mandar o comprador que quer terminar a compra.
   checkoutUrl   String?
   shipmentId    String?
+  /**
+   * O comprovante que o comprador mandou para a loja.
+   * Guarda o que a loja tem: hoje uma URI de dados
+   * (`data:image/jpeg;base64,…`), cerca de 95 KB cada, e são dezenas — não
+   * milhares. Um endereço http também cabe aqui, e é para onde isto deve
+   * caminhar: no dia em que a loja guardar o arquivo fora do banco, nada
+   * neste campo precisa mudar.
+   */
+  comprovante   String?
+  comprovanteEm DateTime?
   criadoEm      DateTime     @default(now())
   atualizadoEm  DateTime     @updatedAt
   pagoEm        DateTime?
@@ -799,6 +811,10 @@ model Pedido {
 
   @@unique([perfilId, externalId])
   @@index([perfilId, status, criadoEm])
+  /// Quem mandou comprovante é um recorte que se procura, e são poucos entre
+  /// muitos. O índice no banco é PARCIAL (`WHERE comprovanteEm IS NOT NULL`) —
+  /// o Prisma não sabe escrever isso, então a migration é a fonte da verdade.
+  @@index([perfilId, comprovanteEm])
   @@map("pedidos")
 }
 
@@ -869,17 +885,14 @@ model MensagemEnvio {
   enviadaEm          DateTime?
   /**
    * Quando a mensagem chegou ao APARELHO, segundo a operadora.
-   *
    * Existe porque `enviadaEm` só diz que o provedor aceitou, e os dois estados
    * se separam na prática: num teste real, duas mensagens quase idênticas
    * saíram com minutos de diferença — uma foi confirmada no aparelho, a outra
    * ficou sete minutos em "aceita" e nunca chegou.
-   *
    * Sem este campo o aviso de situação do provedor não tinha onde escrever, e
    * gravava o mesmo estado que a mensagem já tinha. O recurso existia e não
    * produzia informação nenhuma: para saber se chegou era preciso consultar o
    * provedor à mão, uma mensagem por vez.
-   *
    * Nulo não significa "não chegou" — significa "ninguém confirmou". Nem toda
    * operadora devolve a confirmação.
    */
@@ -896,7 +909,7 @@ model MensagemEnvio {
   /// desenho da régua — 15 minutos, 2 horas, 24 horas. Sem ela, a segunda
   /// seria barrada como se fosse repetição da primeira, e a régua inteira
   /// mandaria uma mensagem só.
-  regraId            String?
+  regraId String?
 
   /// A trava contra mandar a mesma mensagem duas vezes.
   ///

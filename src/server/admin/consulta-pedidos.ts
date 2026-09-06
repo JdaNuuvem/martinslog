@@ -35,6 +35,9 @@ export type PedidoAdmin = {
   shipmentId: string | null
   /** Quantas mensagens saíram para o comprador deste pedido. */
   mensagens: number
+  /** O comprador anexou comprovante, e quando. */
+  temComprovante: boolean
+  comprovanteEm: Date | null
 }
 
 export type FiltroPedidos = {
@@ -42,6 +45,8 @@ export type FiltroPedidos = {
   busca?: string
   perfilId?: string
   pagina?: number
+  /** Só os que têm comprovante anexado. É o recorte que se procura à mão. */
+  comComprovante?: boolean
 }
 
 export type ResultadoPedidos = {
@@ -51,6 +56,8 @@ export type ResultadoPedidos = {
   paginas: number
   /** Contagem por status, para os números do topo não dependerem do filtro. */
   porStatus: { status: StatusPedido; total: number }[]
+  /** Quantos têm comprovante, ignorando o filtro de status pelo mesmo motivo. */
+  comComprovante: number
 }
 
 function montarWhere(filtro: FiltroPedidos): Prisma.PedidoWhereInput {
@@ -58,6 +65,7 @@ function montarWhere(filtro: FiltroPedidos): Prisma.PedidoWhereInput {
 
   if (filtro.status) where.status = filtro.status
   if (filtro.perfilId) where.perfilId = filtro.perfilId
+  if (filtro.comComprovante) where.comprovanteEm = { not: null }
 
   const busca = filtro.busca?.trim()
   if (busca) {
@@ -81,7 +89,7 @@ export async function listarPedidosAdmin(filtro: FiltroPedidos = {}): Promise<Re
   const where = montarWhere(filtro)
   const pagina = Math.max(1, filtro.pagina ?? 1)
 
-  const [total, linhas, agrupado] = await Promise.all([
+  const [total, linhas, agrupado, comComprovante] = await Promise.all([
     prisma.pedido.count({ where }),
     prisma.pedido.findMany({
       where,
@@ -99,6 +107,7 @@ export async function listarPedidosAdmin(filtro: FiltroPedidos = {}): Promise<Re
         checkoutUrl: true,
         criadoEm: true,
         pagoEm: true,
+        comprovanteEm: true,
         shipmentId: true,
         perfil: { select: { id: true, nome: true } },
         _count: { select: { mensagens: true } },
@@ -113,6 +122,14 @@ export async function listarPedidosAdmin(filtro: FiltroPedidos = {}): Promise<Re
       by: ['status'],
       where: { ...where, status: undefined },
       _count: { _all: true },
+    }),
+    /*
+      Quantos têm comprovante — sem o filtro de status E sem o próprio filtro
+      de comprovante, pelo mesmo motivo das contagens acima: o número no topo
+      descreve o que existe, não o que sobrou do recorte ativo.
+    */
+    prisma.pedido.count({
+      where: { ...where, status: undefined, comprovanteEm: { not: null } },
     }),
   ])
 
@@ -167,6 +184,8 @@ export async function listarPedidosAdmin(filtro: FiltroPedidos = {}): Promise<Re
       checkoutUrl: l.checkoutUrl,
       criadoEm: l.criadoEm,
       pagoEm: l.pagoEm,
+      temComprovante: l.comprovanteEm !== null,
+      comprovanteEm: l.comprovanteEm,
       loja: l.perfil.nome,
       lojaId: l.perfil.id,
       shipmentId: l.shipmentId ?? envioPorPedido.get(`${l.perfil.id}|${l.externalId}`)?.id ?? null,
@@ -178,6 +197,7 @@ export async function listarPedidosAdmin(filtro: FiltroPedidos = {}): Promise<Re
     pagina,
     paginas: Math.max(1, Math.ceil(total / POR_PAGINA)),
     porStatus: agrupado.map((g) => ({ status: g.status, total: g._count._all })),
+    comComprovante,
   }
 }
 

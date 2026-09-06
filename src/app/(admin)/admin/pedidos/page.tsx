@@ -32,7 +32,13 @@ const STATUS: { valor: StatusPedido; rotulo: string }[] = [
   { valor: 'CANCELADO', rotulo: 'Cancelados' },
 ]
 
-type Busca = { status?: string; busca?: string; loja?: string; pagina?: string }
+type Busca = {
+  status?: string
+  busca?: string
+  loja?: string
+  pagina?: string
+  comprovante?: string
+}
 
 function reais(centavos: number): string {
   return (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -77,6 +83,7 @@ export default async function PaginaPedidos({ searchParams }: { searchParams: Pr
     busca: parametros.busca,
     perfilId: parametros.loja || undefined,
     pagina: Number(parametros.pagina) || 1,
+    comComprovante: parametros.comprovante === '1',
   }
 
   const [lista, lojas] = await Promise.all([listarPedidosAdmin(filtro), listarLojasComPedido()])
@@ -158,6 +165,29 @@ export default async function PaginaPedidos({ searchParams }: { searchParams: Pr
             {item.rotulo} ({(porStatus.get(item.valor) ?? 0).toLocaleString('pt-BR')})
           </Link>
         ))}
+
+        {/*
+          Comprovante é um recorte de OUTRA natureza: não é situação do pedido,
+          é "o comprador mandou a prova e alguém precisa olhar". Fica separado
+          por isso, e some quando não há nenhum — pílula que sempre marca zero
+          vira ruído.
+        */}
+        {lista.comComprovante > 0 ? (
+          <Link
+            href={comParametros(parametros, {
+              comprovante: parametros.comprovante === '1' ? undefined : '1',
+              pagina: undefined,
+            })}
+            aria-current={parametros.comprovante === '1' ? 'page' : undefined}
+            className={`${PILULA} ${
+              parametros.comprovante === '1'
+                ? 'bg-atencao text-white'
+                : 'bg-atencao/10 text-atencao'
+            }`}
+          >
+            Com comprovante ({lista.comComprovante.toLocaleString('pt-BR')})
+          </Link>
+        ) : null}
       </nav>
 
       <section className="flex flex-col gap-4 rounded-xl bg-superficie-card p-4 sm:p-6">
@@ -174,6 +204,7 @@ export default async function PaginaPedidos({ searchParams }: { searchParams: Pr
             { rotulo: 'Comprador' },
             { rotulo: 'Valor' },
             { rotulo: 'Situação' },
+            { rotulo: 'Comprovante' },
             { rotulo: 'Rastreio' },
             { rotulo: 'Quando' },
           ]}
@@ -209,6 +240,18 @@ export default async function PaginaPedidos({ searchParams }: { searchParams: Pr
               >
                 {STATUS.find((s) => s.valor === p.status)?.rotulo ?? p.status}
               </span>,
+              p.temComprovante ? (
+                <a
+                  href={`/admin/pedidos/${p.id}/comprovante`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-brand-texto underline underline-offset-2"
+                >
+                  ver
+                </a>
+              ) : (
+                <span className="text-texto-secundario">—</span>
+              ),
               p.codigoRastreio ? (
                 <a
                   href={`/r/${p.codigoRastreio}`}

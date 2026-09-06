@@ -23,6 +23,10 @@ export const dynamic = 'force-dynamic'
 
 const CANAIS: { valor: CanalMensagem; rotulo: string }[] = [
   { valor: 'SMS', rotulo: 'SMS' },
+  // O e-mail é enviado pela LOJA e reportado à plataforma — por isso aparece
+  // aqui, na mesma lista, em vez de numa tela à parte: a pergunta que se faz
+  // nesta tela ("o comprador foi avisado?") não distingue canal.
+  { valor: 'EMAIL', rotulo: 'E-mail' },
   { valor: 'WHATSAPP', rotulo: 'WhatsApp' },
 ]
 
@@ -226,7 +230,9 @@ async function AbaMensagens({ parametros, pagina }: { parametros: Busca; pagina:
           linhas={lista.mensagens.map((m) => ({
             chave: m.id,
             celulas: [
-              <span className="font-medium text-texto-principal">{telefone(m.para)}</span>,
+              <span className="break-all font-medium text-texto-principal">
+                {m.canal === 'EMAIL' ? m.para : telefone(m.para)}
+              </span>,
               <>
                 <span className="text-texto-principal">{m.canal}</span>
                 {m.provedor ? (
