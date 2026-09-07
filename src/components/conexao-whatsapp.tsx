@@ -301,7 +301,10 @@ export function ConexaoWhatsapp() {
         `autoComplete="off"` sozinho não basta em campo de senha: os navegadores
         o ignoram de propósito. `new-password` é o valor que eles respeitam.
       */}
+      {/* `method="post"`: sem ele um submit nativo levaria o token da Meta
+          para a URL. Ver o comentário em `(auth)/login/page.tsx`. */}
       <form
+        method="post"
         onSubmit={conectar}
         autoComplete="off"
         className="mt-5 flex flex-col gap-4"

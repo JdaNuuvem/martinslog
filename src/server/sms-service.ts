@@ -1,5 +1,7 @@
 import type { CanalMensagem } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
+import { NaoAutorizadoError } from '@/domain/errors'
+import { acharPerfil } from '@/server/perfil-service'
 import { env } from '@/env'
 import { cifrar, decifrar, dicaDaChave } from '@/infra/crypto/segredo'
 import { smsProvider, type CredenciaisSms } from '@/infra/sms'
@@ -86,8 +88,52 @@ export type EntradaConfigSms = {
   remetente?: string | null
 }
 
-/** Guarda a conta própria de uma loja. A chave nunca volta em leitura. */
-export async function salvarConfig(perfilId: string, entrada: EntradaConfigSms) {
+export type ConfigSmsVisivel = {
+  provedor: string
+  identificador: string | null
+  dicaChave: string
+  remetente: string | null
+  ativo: boolean
+  verificadaEm: Date | null
+  ultimoErro: string | null
+}
+
+/**
+ * Configuração visível de uma loja. A chave **nunca** sai daqui — só a dica.
+ *
+ * Um segredo que volta numa resposta transforma qualquer falha de autorização
+ * em permissão de mandar SMS na conta do lojista, que é dinheiro dele.
+ */
+export async function obterConfig(
+  userId: string,
+  perfilId: string,
+): Promise<ConfigSmsVisivel | null> {
+  if (!(await acharPerfil(userId, perfilId))) throw new NaoAutorizadoError('Perfil não encontrado.')
+
+  return prisma.smsConfig.findUnique({
+    where: { perfilId },
+    select: {
+      provedor: true,
+      identificador: true,
+      dicaChave: true,
+      remetente: true,
+      ativo: true,
+      verificadaEm: true,
+      ultimoErro: true,
+    },
+  })
+}
+
+/**
+ * Guarda a conta própria de uma loja. A chave nunca volta em leitura.
+ *
+ * `userId` não é enfeite: sem ele, quem chamasse com o `perfilId` de outra
+ * conta gravaria credencial na loja alheia. O perfil é sempre conferido
+ * contra o dono da sessão.
+ */
+export async function salvarConfig(userId: string, perfilId: string, entrada: EntradaConfigSms) {
+  if (!(await acharPerfil(userId, perfilId))) throw new NaoAutorizadoError('Perfil não encontrado.')
+
   const atual = await prisma.smsConfig.findUnique({ where: { perfilId } })
   const chave = entrada.chave?.trim()
 
@@ -108,6 +154,21 @@ export async function salvarConfig(perfilId: string, entrada: EntradaConfigSms) 
     create: { perfilId, chaveCifrada: cifrar(chave!), dicaChave: dicaDaChave(chave!), ...dados },
     update: dados,
   })
+}
+
+/**
+ * Desliga o SMS da loja.
+ *
+ * Apaga a linha em vez de só marcar `ativo: false`: o que se quer ao
+ * desconectar é que a chave do provedor deixe de existir aqui. Uma credencial
+ * inativa continua sendo uma credencial guardada.
+ *
+ * A fila não é tocada — mensagens já registradas seguem no histórico, e
+ * `resolverCredencial` passa a devolver `nenhuma`, que a fila trata sem erro.
+ */
+export async function desconectar(userId: string, perfilId: string): Promise<void> {
+  if (!(await acharPerfil(userId, perfilId))) throw new NaoAutorizadoError('Perfil não encontrado.')
+  await prisma.smsConfig.deleteMany({ where: { perfilId } })
 }
 
 /* ===================== Textos ===================== */
