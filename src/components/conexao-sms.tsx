@@ -27,7 +27,7 @@ export function ConexaoSms() {
   const idBase = useId()
   const [config, setConfig] = useState<Config | null>(null)
   const [perfilId, setPerfilId] = useState<string | null>(null)
-  const [provedor, setProvedor] = useState('')
+  const [provedorAtivo, setProvedorAtivo] = useState<string | null>(null)
   const [chave, setChave] = useState('')
   const [identificador, setIdentificador] = useState('')
   const [remetente, setRemetente] = useState('')
@@ -42,6 +42,7 @@ export function ConexaoSms() {
       const corpo = (await resposta.json().catch(() => ({}))) as {
         perfil?: { id: string }
         config?: Config | null
+        provedorAtivo?: string
         mensagem?: string
       }
 
@@ -53,8 +54,8 @@ export function ConexaoSms() {
 
       setPerfilId(corpo.perfil?.id ?? null)
       setConfig(corpo.config ?? null)
+      setProvedorAtivo(corpo.provedorAtivo ?? null)
       if (corpo.config) {
-        setProvedor(corpo.config.provedor)
         setIdentificador(corpo.config.identificador ?? '')
         setRemetente(corpo.config.remetente ?? '')
       }
@@ -80,7 +81,7 @@ export function ConexaoSms() {
       const resposta = await fetch('/api/sms', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ perfilId, provedor, chave, identificador, remetente }),
+        body: JSON.stringify({ perfilId, chave, identificador, remetente }),
       })
 
       if (!resposta.ok) {
@@ -120,10 +121,26 @@ export function ConexaoSms() {
       <div>
         <h2 className="text-lg font-bold text-texto-principal">SMS de atualizações</h2>
         <p className="text-sm text-texto-secundario">
-          Conecte a conta do seu provedor de SMS para avisar o comprador a cada mudança de status.
-          As mensagens saem com a sua chave e são cobradas na sua conta do provedor.
+          Conecte a sua conta do{' '}
+          {provedorAtivo && provedorAtivo !== 'registrado' ? provedorAtivo : 'provedor de SMS'} para
+          avisar o comprador a cada mudança de status. As mensagens saem com a sua chave e são
+          cobradas na sua conta do provedor.
         </p>
       </div>
+
+      {/*
+        Sem provedor ativo no servidor, a fila roda inteira e a mensagem morre
+        na última milha — marcada como enviada, sem ter saído. Dizer isso aqui
+        é o que evita o lojista descobrir na primeira venda que não avisou
+        ninguém.
+      */}
+      {!carregando && provedorAtivo === 'registrado' ? (
+        <p role="alert" className="rounded-lg bg-superficie-bloco p-3 text-sm text-erro">
+          Nenhum provedor de SMS está ativo neste servidor. A chave pode ser guardada, mas as
+          mensagens não sairão até que <span className="font-mono">SMS_PROVEDOR</span> seja
+          configurada.
+        </p>
+      ) : null}
 
       {erro ? (
         <p role="alert" className="rounded-lg bg-superficie-bloco p-3 text-sm text-erro">
@@ -165,22 +182,6 @@ export function ConexaoSms() {
         // `method="post"`: sem ele um submit nativo levaria a chave do provedor
         // para a URL. Ver o comentário em `(auth)/login/page.tsx`.
         <form method="post" onSubmit={conectar} className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor={`${idBase}-provedor`}
-              className="text-sm font-medium text-texto-secundario"
-            >
-              Provedor
-            </label>
-            <input
-              id={`${idBase}-provedor`}
-              value={provedor}
-              onChange={(e) => setProvedor(e.target.value)}
-              placeholder="zenvia"
-              className={CAMPO}
-            />
-          </div>
-
           <div className="flex flex-col gap-1">
             <label htmlFor={`${idBase}-chave`} className="text-sm font-medium text-texto-secundario">
               {config ? 'Trocar a chave de API' : 'Chave de API'}
@@ -238,7 +239,7 @@ export function ConexaoSms() {
 
           <button
             type="submit"
-            disabled={salvando || !provedor.trim() || (!config && !chave.trim())}
+            disabled={salvando || (!config && !chave.trim())}
             className="self-start rounded-pilula bg-brand px-6 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
             {salvando ? 'Conectando…' : config ? 'Salvar' : 'Conectar'}

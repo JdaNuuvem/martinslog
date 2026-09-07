@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { DomainError } from '@/domain/errors'
 import { lerSessao } from '@/server/auth/sessao'
 import { listarPerfis } from '@/server/perfil-service'
+import { smsProvider } from '@/infra/sms'
 import { desconectar, obterConfig, salvarConfig } from '@/server/sms-service'
 
 /**
@@ -17,9 +18,20 @@ import { desconectar, obterConfig, salvarConfig } from '@/server/sms-service'
  * alheia gastando dinheiro do lojista.
  */
 
+/*
+  `provedor` não vem da tela de propósito.
+
+  Quem decide por onde o SMS sai é `SMS_PROVEDOR` no ambiente do servidor
+  (ver `src/infra/sms/index.ts`) — o campo em `SmsConfig` é rótulo, para o
+  histórico dizer por onde saiu mesmo depois de uma troca de fornecedor.
+
+  Enquanto isso foi um campo aberto na tela, dava para digitar o nome de um
+  fornecedor que o sistema não sabe falar: a tela confirmava "conectado", e a
+  mensagem morria no provedor que só registra. Gravar aqui o nome do provedor
+  que de fato está ativo é o que impede o rótulo de mentir.
+*/
 const corpoSchema = z.object({
   perfilId: z.string().min(1),
-  provedor: z.string().trim().min(1, 'Informe o provedor.'),
   /** Ausente numa atualização mantém a chave atual. */
   chave: z.string().trim().optional().or(z.literal('')),
   identificador: z.string().trim().optional().or(z.literal('')),
@@ -48,7 +60,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const config = await obterConfig(sessao.userId, perfil.id)
-  return NextResponse.json({ perfil: { id: perfil.id, nome: perfil.nome }, config })
+
+  /*
+    `provedorAtivo` vai junto para a tela poder dizer por onde a mensagem sai,
+    em vez de perguntar. E é o que denuncia a configuração pela metade: com
+    `SMS_PROVEDOR` ausente isto vem `registrado`, o provedor que só escreve no
+    log — a tela avisa antes de o lojista descobrir na primeira venda.
+  */
+  return NextResponse.json({
+    perfil: { id: perfil.id, nome: perfil.nome },
+    config,
+    provedorAtivo: smsProvider.nome,
+  })
 }
 
 export async function PUT(request: NextRequest): Promise<NextResponse> {
@@ -79,7 +102,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
 
   try {
     await salvarConfig(sessao.userId, analisado.data.perfilId, {
-      provedor: analisado.data.provedor,
+      provedor: smsProvider.nome,
       chave: analisado.data.chave || null,
       identificador: analisado.data.identificador || null,
       remetente: analisado.data.remetente || null,
