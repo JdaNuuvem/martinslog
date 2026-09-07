@@ -21,6 +21,7 @@
  *
  * Uso: DATABASE_URL=… node scripts/reparar-mensagens.mjs [--aplicar]
  */
+import { createHash } from 'crypto'
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
@@ -42,13 +43,15 @@ function primeiroNome(completo) {
 async function separarAssunto() {
   const comAssuntoNoEvento = await prisma.mensagemEnvio.findMany({
     where: { canal: 'EMAIL', assunto: null, evento: { contains: ' — ' } },
-    select: { id: true, evento: true },
+    select: { id: true, evento: true, canal: true, para: true, criadoEm: true, idExterno: true },
   })
 
   console.log(`[assunto] ${comAssuntoNoEvento.length} e-mails com o assunto preso no evento`)
   if (!aplicar) return
 
   let feitos = 0
+  let colidiram = 0
+
   for (const m of comAssuntoNoEvento) {
     // "PAGO — Pagamento confirmado — pedido PED-X" → evento "PAGO",
     // assunto "Pagamento confirmado — pedido PED-X". O primeiro separador é o
@@ -57,14 +60,45 @@ async function separarAssunto() {
     const evento = m.evento.slice(0, corte)
     const assunto = m.evento.slice(corte + 3)
 
-    await prisma.mensagemEnvio.update({
-      where: { id: m.id },
-      data: { evento, assunto },
-    })
-    feitos++
-    if (feitos % 500 === 0) console.log(`   … ${feitos}`)
+    /*
+      A IDENTIDADE tem que vir junto, no mesmo update.
+
+      Enquanto o assunto morava dentro do evento, ele é que tornava cada linha
+      única — por acidente. Separá-lo derruba milhares de e-mails para o mesmo
+      `(perfil, PAGO, EMAIL, null, null, null, null)` e a segunda linha colide.
+      Estes foram importados antes de a identidade sintética existir, então
+      chegaram com `idExterno` nulo.
+
+      Mesma semente do serviço, e o mesmo prefixo `reportado:` — quem ler a
+      coluna depois precisa saber que o valor foi construído aqui.
+    */
+    const idExterno =
+      m.idExterno ??
+      `reportado:${createHash('sha1')
+        .update([m.canal, evento, m.para.trim().toLowerCase(), m.criadoEm.toISOString(), assunto].join('|'))
+        .digest('hex')
+        .slice(0, 24)}`
+
+    try {
+      await prisma.mensagemEnvio.update({
+        where: { id: m.id },
+        data: { evento, assunto, idExterno },
+      })
+      feitos++
+    } catch (erro) {
+      /*
+        Duas mensagens de fato idênticas — mesmo destinatário, mesmo evento,
+        mesmo assunto, mesmo segundo. Deixar como está é melhor do que apagar
+        uma: o histórico continua legível, só não fica separado.
+      */
+      if (erro?.code === 'P2002') colidiram++
+      else throw erro
+    }
+
+    if ((feitos + colidiram) % 500 === 0) console.log(`   … ${feitos + colidiram}`)
   }
-  console.log(`[assunto] ${feitos} separados`)
+
+  console.log(`[assunto] ${feitos} separados, ${colidiram} deixados como estavam (duplicata real)`)
 }
 
 async function recomporSms() {
