@@ -13,12 +13,39 @@ type EstadoErro = { tipo: 'invalido' | 'nao-encontrado' | 'indisponivel' | 'limi
  * excedida) tem um texto próprio, porque confundir "não encontrado" com
  * "sistema indisponível" faz a pessoa duvidar de um código correto.
  */
-function mensagemDeStatus(status: number): EstadoErro {
-  if (status === 404) {
+function mensagemDeStatus(status: number, codigo?: string): EstadoErro {
+  /*
+    404 SÓ é "não encontrei seu pedido" quando o corpo diz que foi o handler
+    que respondeu. Qualquer outro 404 é indisponibilidade nossa: janela de
+    troca de versão, reescrita de caminho errada no proxy, portal cativo de
+    operadora. Julgar pelo número nu transformava um tropeço de dez segundos
+    na frase mais destrutiva que esta tela tem — "não encontramos nenhum
+    pedido com esse código" —, dita para quem tem o código certo na mão e
+    acabou de pagar. Quem lê aquilo não tenta de novo.
+  */
+  if (status === 404 && codigo === 'ENVIO_NAO_ENCONTRADO') {
     return {
       tipo: 'nao-encontrado',
       mensagem:
         'Não encontramos nenhum pedido com esse código. Confira se todos os caracteres foram digitados certinho — se o pedido acabou de ser postado, pode levar algumas horas até aparecer aqui.',
+    }
+  }
+  if (status === 404) {
+    return {
+      tipo: 'indisponivel',
+      mensagem: 'No momento não conseguimos consultar seu pedido. Tente novamente em instantes.',
+    }
+  }
+  if (status === 422 && codigo === 'CODIGO_SANDBOX') {
+    /*
+      Código do ambiente de teste da loja. Dizer "código inválido" aqui joga a
+      culpa no comprador por um erro de configuração de quem vende — e ele
+      relê a própria digitação dez vezes sem chance de acertar.
+    */
+    return {
+      tipo: 'invalido',
+      mensagem:
+        'Esse é um código de teste da loja e não tem rastreio público. Fale com a loja para receber o código definitivo.',
     }
   }
   if (status === 429) {
@@ -70,14 +97,25 @@ export function RastrearForm() {
     const idRequisicao = (idRequisicaoRef.current += 1)
     setConsultando(true)
     try {
-      const resposta = await fetch(`/api/rastreio/${encodeURIComponent(analise.data)}`)
+      /*
+        `no-store` porque 404 é cacheável por heurística, e o caso comum é
+        justamente consultar ANTES da etiqueta existir: a própria mensagem
+        convida a voltar mais tarde. Sem isto, o "não encontrado" de agora pode
+        ser servido de cache horas depois, para um código que já existe.
+      */
+      const resposta = await fetch(`/api/rastreio/${encodeURIComponent(analise.data)}`, {
+        cache: 'no-store',
+      })
       // Uma consulta mais antiga que ainda estava em voo não deve sobrescrever
       // o estado de uma mais recente (ex.: usuário corrigiu o código e enviou
       // de novo antes da primeira resposta voltar).
       if (idRequisicao !== idRequisicaoRef.current) return
 
       if (!resposta.ok) {
-        setErro(mensagemDeStatus(resposta.status))
+        // O corpo distingue "não achei este envio" de "não consegui
+        // responder" — e as duas coisas chegam aqui como 404.
+        const corpo = (await resposta.json().catch(() => null)) as { codigo?: string } | null
+        setErro(mensagemDeStatus(resposta.status, corpo?.codigo))
         return
       }
 
