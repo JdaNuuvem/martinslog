@@ -273,8 +273,30 @@ export async function sincronizarEnviosPendentesDoUsuario(
   let sincronizados = 0
 
   for (const envio of desatualizados) {
-    await sincronizarEnvio(envio.id, agora)
-    sincronizados += 1
+    try {
+      await sincronizarEnvio(envio.id, agora)
+      sincronizados += 1
+    } catch (error) {
+      /*
+        Um envio que falha não pode levar os seguintes junto.
+
+        A falha esperada aqui é a corrida: `sincronizarEnvio` grava com
+        `where: { id, status }`, e se a consulta pública do comprador tiver
+        avançado o mesmo envio no intervalo, o `update` não encontra linha e o
+        Prisma lança `P2025`. Sem este `catch`, essa exceção subia e abortava
+        a varredura inteira daquela conta — a loja com quatrocentos envios
+        cujo terceiro estava em corrida ficava com trezentos e noventa e sete
+        sem sincronizar, e a resposta não dizia quantos ficaram para trás.
+
+        E é a conta com MAIS tráfego de rastreio que mais sofre, porque é o
+        comprador abrindo a página que cria a corrida.
+
+        Perder este envio nesta passada não custa nada: a varredura é
+        periódica, e na próxima ele entra de novo — já com o status que a
+        outra execução gravou.
+      */
+      console.error('Falha ao sincronizar envio na varredura', { envio: envio.id, cause: error })
+    }
   }
 
   return sincronizados
