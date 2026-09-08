@@ -12,6 +12,7 @@ import {
 } from '@/server/admin/consulta-pedidos'
 import { AtualizaSozinho } from '@/components/admin/atualiza-sozinho'
 import { TabelaResponsiva } from '@/components/admin/tabela-responsiva'
+import { exigirAdminNaPagina } from '@/server/admin/guarda'
 
 /**
  * Todos os pedidos das lojas, em uma tela.
@@ -76,6 +77,7 @@ const PILULA =
   'rounded-pilula px-3 py-1.5 text-sm focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand'
 
 export default async function PaginaPedidos({ searchParams }: { searchParams: Promise<Busca> }) {
+  await exigirAdminNaPagina()
   const parametros = await searchParams
 
   const filtro: FiltroPedidos = {

@@ -4,6 +4,7 @@ import { prisma } from '@/infra/db/client'
 import { PainelSimulacaoEnvio } from '@/components/admin/painel-simulacao-envio'
 import { codigosPadraoDoMotor } from '@/domain/simulacao/roteiro'
 import { catalogoDoUsuario } from '@/server/status-rastreio-service'
+import { exigirAdminNaPagina } from '@/server/admin/guarda'
 
 function dataHora(valor: Date): string {
   return valor.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' })
@@ -23,6 +24,7 @@ export default async function PaginaSimulacaoEnvio({
 }: {
   params: Promise<{ id: string }>
 }) {
+  await exigirAdminNaPagina()
   const { id } = await params
   const agora = new Date()
 

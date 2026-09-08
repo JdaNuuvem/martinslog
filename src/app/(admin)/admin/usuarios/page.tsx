@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { listarUsuarios } from '@/server/admin/usuarios'
+import { exigirAdminNaPagina } from '@/server/admin/guarda'
 
 function reais(centavos: number): string {
   return (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -21,6 +22,7 @@ export default async function PaginaUsuarios({
 }: {
   searchParams: Promise<{ busca?: string }>
 }) {
+  await exigirAdminNaPagina()
   const { busca = '' } = await searchParams
   const usuarios = await listarUsuarios(busca)
 

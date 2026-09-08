@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { listarCotacoes, type FiltroCotacoes } from '@/server/admin/cotacoes'
+import { exigirAdminNaPagina } from '@/server/admin/guarda'
 
 type Busca = {
   cep?: string
@@ -60,6 +61,7 @@ export default async function PaginaCotacoesAdmin({
 }: {
   searchParams: Promise<Busca>
 }) {
+  await exigirAdminNaPagina()
   const parametros = await searchParams
 
   const filtro: FiltroCotacoes = {

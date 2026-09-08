@@ -1,6 +1,7 @@
 import { prisma } from '@/infra/db/client'
 import { DispararWebhooks } from '@/components/admin/disparar-webhooks'
 import { MAXIMO_TENTATIVAS } from '@/domain/webhook/retentativa'
+import { exigirAdminNaPagina } from '@/server/admin/guarda'
 
 function formatarData(data: Date): string {
   return data.toLocaleString('pt-BR', {
@@ -18,6 +19,7 @@ function formatarData(data: Date): string {
  * primeiro: é onde se vê qual cliente está com endpoint quebrado, e por quê.
  */
 export default async function PaginaWebhooks() {
+  await exigirAdminNaPagina()
   const [pendentes, entregues, desistidas, fila] = await Promise.all([
     prisma.webhookDelivery.count({
       where: { entregueEm: null, proximaTentativaEm: { not: null } },

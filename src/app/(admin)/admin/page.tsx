@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { prisma } from '@/infra/db/client'
 import { AtualizaSozinho } from '@/components/admin/atualiza-sozinho'
+import { exigirAdminNaPagina } from '@/server/admin/guarda'
 
 /** Os números do painel são de agora, não do último build. */
 export const dynamic = 'force-dynamic'
@@ -31,6 +32,7 @@ type Cartao = {
  * trabalhar perde tempo procurando.
  */
 export default async function PaginaAdmin() {
+  await exigirAdminNaPagina()
   const [
     regras,
     envios,

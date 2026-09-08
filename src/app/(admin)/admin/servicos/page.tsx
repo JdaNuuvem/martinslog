@@ -1,5 +1,6 @@
 import { listarTransportadoras } from '@/server/admin/servicos'
 import { PainelServicos } from '@/components/admin/painel-servicos'
+import { exigirAdminNaPagina } from '@/server/admin/guarda'
 
 /**
  * Transportadoras e serviços.
@@ -9,6 +10,7 @@ import { PainelServicos } from '@/components/admin/painel-servicos'
  * tela nenhuma.
  */
 export default async function PaginaServicos() {
+  await exigirAdminNaPagina()
   const transportadoras = await listarTransportadoras()
   const servicos = transportadoras.flatMap((t) => t.servicos)
   const ativos = servicos.filter((s) => s.ativo).length

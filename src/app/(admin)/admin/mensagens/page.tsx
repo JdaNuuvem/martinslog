@@ -8,6 +8,7 @@ import type { CanalMensagem, StatusMensagem } from '@prisma/client'
 import { listarEmailsAdmin, listarMensagensAdmin } from '@/server/admin/consulta-mensagens'
 import { AtualizaSozinho } from '@/components/admin/atualiza-sozinho'
 import { TabelaResponsiva } from '@/components/admin/tabela-responsiva'
+import { exigirAdminNaPagina } from '@/server/admin/guarda'
 
 /**
  * O que já saiu para o comprador: SMS, WhatsApp e e-mail.
@@ -87,6 +88,7 @@ export default async function PaginaMensagens({
 }: {
   searchParams: Promise<Busca>
 }) {
+  await exigirAdminNaPagina()
   const parametros = await searchParams
   const emails = parametros.tipo === 'email'
   const pagina = Number(parametros.pagina) || 1
