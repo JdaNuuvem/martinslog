@@ -290,5 +290,16 @@ describe('API pública /api/v0', () => {
     }
 
     expect(ultimaResposta).toBe(429)
-  }, 20_000)
+    /*
+      Sessenta e cinco chamadas em série. Com o banco ao lado isso leva
+      segundos; atrás de um túnel SSH, cada ida e volta custa centenas de
+      milissegundos e o teto de vinte segundos estoura — vermelho que não
+      significa defeito, e que faz procurar bug onde só havia distância.
+
+      `VITEST_TIMEOUT_MS` é o mesmo botão que `vitest.config.ts` já oferece
+      para quem roda contra banco remoto; aqui ele precisa ser lido à mão
+      porque o teto local do `it` tem precedência sobre o global. O piso de
+      vinte segundos continua valendo quando a variável não existe.
+    */
+  }, Math.max(20_000, Number(process.env.VITEST_TIMEOUT_MS) || 0))
 })
