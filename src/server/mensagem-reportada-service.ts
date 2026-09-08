@@ -1,4 +1,4 @@
-import { createHash } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import type { CanalMensagem, StatusMensagem } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { normalizarTelefone } from '@/infra/whatsapp/cloud-api'
@@ -114,7 +114,8 @@ export async function registrarMensagemEnviada(
  * O id do provedor é a resposta certa quando existe — é único por natureza e
  * permite conferir a mensagem lá na origem. Quando não existe (envio que
  * falhou antes de ganhar id, provedor que não devolve um), a identidade é
- * derivada do que a mensagem É: destinatário, evento e momento.
+ * derivada do que a mensagem É: destinatário, evento, assunto e — nesta
+ * ordem de preferência — o momento do envio ou a referência do pedido.
  *
  * Sem isso, duas mensagens diferentes com o mesmo evento e sem id colidiriam
  * na chave — e a segunda voltaria contada como "repetida", que é o número em
@@ -127,11 +128,27 @@ export async function registrarMensagemEnviada(
 function identidade(entrada: MensagemReportada): string {
   if (entrada.idExterno) return entrada.idExterno
 
+  /*
+    A semente precisa ser ESTÁVEL: ela é a única coisa que faz o mesmo lote,
+    reenviado, voltar como "repetido" em vez de duplicar o histórico.
+
+    Aqui havia um `new Date()` colhido na hora quando `enviadaEm` não vinha.
+    Isso tornava a identidade diferente a cada chamada — a loja reenviava o
+    mesmo lote dois minutos depois e as duas gravações passavam, cada uma com
+    seu carimbo de milissegundo, sem colidir. A rota prometia, em voz alta,
+    que repetir era seguro, e não era.
+
+    Sem hora do envio, quem identifica é a referência do pedido: mesma loja,
+    mesmo pedido, mesmo evento, mesmo assunto é a MESMA mensagem, e é isso que
+    "repetida" quer dizer. Sem os dois — nem hora nem referência — não há como
+    distinguir, e a linha entra como nova, que é o menos pior: perder um
+    registro é irreversível, uma duplicata é só ruído.
+  */
   const semente = [
     entrada.canal,
     entrada.evento,
     entrada.para.trim().toLowerCase(),
-    (entrada.enviadaEm ?? new Date()).toISOString(),
+    entrada.enviadaEm?.toISOString() ?? entrada.externalId ?? randomUUID(),
     entrada.assunto ?? '',
   ].join('|')
 

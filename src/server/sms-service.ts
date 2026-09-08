@@ -391,6 +391,34 @@ export async function dispararSmsPendentes(limite = LOTE_PADRAO): Promise<Result
 
     const tentativas = item.tentativas + 1
 
+    /*
+      Sem fornecedor contratado, quem "atende" é o provedor que escreve no log
+      e devolve OK. Gravar isso como ENVIADA é a pior das saídas: a fila
+      esvazia, o painel diz que a mensagem saiu e o comprador não recebeu
+      nada. Uma fila parada é visível; uma fila esvaziada em falso é mentira —
+      e foi assim que 33 mensagens sumiram na migração para a máquina nova.
+
+      A mensagem fica PENDENTE e **não consome tentativa**: são cinco no total,
+      e queimá-las contra a ausência de credencial faria o histórico desistir
+      de gente que nunca teve chance de ser avisada. O texto é composto e
+      registrado assim mesmo, que é o motivo de este provedor existir: telefone
+      malformado e variável vazia aparecem no log, de graça, antes de haver
+      contrato.
+    */
+    if (smsProvider.nome === 'registrado') {
+      await prisma.mensagemEnvio.update({
+        where: { id: item.id },
+        data: {
+          status: 'PENDENTE',
+          texto,
+          erro: 'Nenhum provedor de SMS configurado — a mensagem não saiu e continua na fila.',
+          proximaTentativaEm: new Date(Date.now() + 15 * 60 * 1000),
+          provedor: smsProvider.nome,
+        },
+      })
+      continue
+    }
+
     if (resultado.ok) {
       await prisma.mensagemEnvio.update({
         where: { id: item.id },
