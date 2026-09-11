@@ -65,6 +65,41 @@ export function TextosAutomaticos() {
   const [carregando, setCarregando] = useState(true)
   /** Qual campo recebe a variável clicada. Nulo antes do primeiro foco. */
   const [editando, setEditando] = useState<string | null>(null)
+  const [numeroTeste, setNumeroTeste] = useState('')
+  const [testando, setTestando] = useState<string | null>(null)
+
+  /**
+   * Manda o texto para um número escolhido, com valores de exemplo.
+   *
+   * Usa o rascunho, e não o que está salvo: o ponto é conferir o que se
+   * acabou de escrever antes de gravar.
+   */
+  async function testar(evento: string) {
+    setTestando(evento)
+    setErro(null)
+    setAviso(null)
+    try {
+      const resposta = await fetch('/api/mensagens/teste', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ para: numeroTeste, texto: rascunhos[evento] ?? '' }),
+      })
+      const corpo = (await resposta.json().catch(() => ({}))) as {
+        mensagem?: string
+        custo?: { partes: number }
+      }
+      if (!resposta.ok) {
+        setErro(corpo.mensagem ?? 'Não foi possível enviar o teste.')
+        return
+      }
+      setAviso(
+        `Teste enviado para ${numeroTeste}` +
+          (corpo.custo && corpo.custo.partes > 1 ? ` (${corpo.custo.partes} SMS).` : '.'),
+      )
+    } finally {
+      setTestando(null)
+    }
+  }
 
   /**
    * Insere a variável onde o cursor está, e não no fim do texto.
@@ -176,6 +211,25 @@ export function TextosAutomaticos() {
         </p>
       ) : null}
 
+      <div className="flex flex-wrap items-end gap-2 rounded-lg border border-borda-campo p-3">
+        <div className="flex flex-col gap-1">
+          <label htmlFor="numero-teste" className="text-sm font-medium text-texto-principal">
+            Testar no meu número
+          </label>
+          <input
+            id="numero-teste"
+            value={numeroTeste}
+            onChange={(e) => setNumeroTeste(e.target.value)}
+            placeholder="11999998888"
+            className="w-52 rounded-lg border border-borda-campo bg-superficie-bloco px-3 py-2 text-texto-principal"
+          />
+        </div>
+        <p className="flex-1 text-xs text-texto-secundario">
+          O teste sai na hora, com valores de exemplo, e não entra no histórico do cliente. Cobra
+          normalmente do seu provedor de SMS.
+        </p>
+      </div>
+
       {erro ? (
         <p role="alert" className="rounded-lg bg-superficie-bloco p-3 text-sm text-erro">
           {erro}
@@ -251,14 +305,30 @@ export function TextosAutomaticos() {
               )
             })()}
 
-            <button
-              type="button"
-              onClick={() => void salvar(t.evento)}
-              disabled={salvando === t.evento || rascunhos[t.evento] === t.texto}
-              className="self-start rounded-pilula bg-brand px-5 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {salvando === t.evento ? 'Salvando…' : 'Salvar'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void salvar(t.evento)}
+                disabled={salvando === t.evento || rascunhos[t.evento] === t.texto}
+                className="rounded-pilula bg-brand px-5 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {salvando === t.evento ? 'Salvando…' : 'Salvar'}
+              </button>
+
+              {/*
+                Testar antes de valer. Sem isto, o primeiro a ver um texto novo
+                é um comprador de verdade — e um `{{codigo_rastreio}}` com um
+                sublinhado a menos só aparece lá, quando não há como voltar.
+              */}
+              <button
+                type="button"
+                onClick={() => void testar(t.evento)}
+                disabled={testando === t.evento || !numeroTeste.trim()}
+                className="rounded-pilula border border-borda-campo px-5 py-1.5 text-sm font-medium text-texto-secundario disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {testando === t.evento ? 'Enviando…' : 'Enviar teste'}
+              </button>
+            </div>
           </div>
         ))}
       </div>

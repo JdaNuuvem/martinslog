@@ -1,4 +1,5 @@
 import { CampanhasWhatsapp } from '@/components/campanhas-whatsapp'
+import { ProtecaoMensagens } from '@/components/protecao-mensagens'
 import { RespostasRobo } from '@/components/respostas-robo'
 import { TextosAutomaticos } from '@/components/textos-automaticos'
 import { exigirSessaoNaPagina } from '@/server/auth/sessao-servidor'
@@ -27,6 +28,7 @@ export default async function PaginaMensagens() {
       </div>
 
       <TextosAutomaticos />
+      <ProtecaoMensagens />
       {ehAdmin ? <RespostasRobo /> : null}
       {ehAdmin ? <CampanhasWhatsapp /> : null}
     </div>

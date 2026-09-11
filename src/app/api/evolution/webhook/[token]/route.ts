@@ -5,6 +5,7 @@ import { prisma } from '@/infra/db/client'
 import { env } from '@/env'
 import { enviarNaConversa, registrarEntrada, roboPodeResponder } from '@/server/conversa-service'
 import { responder } from '@/server/robo-atendimento'
+import { pediuParaParar, registrarNaoPerturbe } from '@/server/pode-enviar'
 
 type Params = { params: Promise<{ token: string }> }
 
@@ -132,6 +133,38 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   if (!registro || registro.repetida) {
     return NextResponse.json({ ok: true, repetida: true })
+  }
+
+  /*
+    "PARE" antes de qualquer resposta automática.
+
+    Vem primeiro porque é o único pedido que não pode esperar nem ser
+    interpretado: quem escreve isso já está incomodado, e responder com robô
+    antes de registrar a saída é exatamente o que transforma incômodo em
+    denúncia — que, no WhatsApp não oficial, derruba o número.
+
+    A confirmação é enviada mesmo com o bloqueio já gravado: ela é resposta a
+    um pedido dele, não mensagem da loja, e sem ela a pessoa não tem como
+    saber se funcionou.
+  */
+  if (pediuParaParar(texto)) {
+    await registrarNaoPerturbe({
+      perfilId: config.perfilId,
+      contato: de,
+      origem: 'CLIENTE',
+      motivo: texto.slice(0, 200),
+    })
+
+    await enviarNaConversa({
+      perfilId: config.perfilId,
+      contato: de,
+      texto:
+        'Pronto, não vamos mais te mandar mensagens sobre pedidos. ' +
+        'Se mudar de ideia, é só escrever aqui.',
+      autor: 'ROBO',
+    })
+
+    return NextResponse.json({ ok: true, robo: 'nao-perturbe' })
   }
 
   /*

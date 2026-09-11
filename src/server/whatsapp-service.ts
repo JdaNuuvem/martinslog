@@ -11,6 +11,7 @@ import {
 import { montarParametros } from '@/domain/mensagem/eventos'
 import { compor } from '@/domain/mensagem/texto'
 import { montarValores } from '@/server/valores-da-mensagem'
+import { podeEnviar } from '@/server/pode-enviar'
 import { catalogoPronto } from '@/domain/mensagem/whatsapp-textos'
 import { acharPerfil } from '@/server/perfil-service'
 import { cancelarCobrancasDePedidoResolvido } from '@/server/recuperacao-service'
@@ -411,6 +412,36 @@ export async function dispararPendentes(limite = LOTE_PADRAO): Promise<Resultado
       precisa — credencial removida, celular nunca pareado, ou a Evolution
       sequer instalada neste servidor.
     */
+    /*
+      Mesmas duas perguntas do SMS, pelo mesmo motivo e com o mesmo módulo:
+      esta pessoa quer receber, e agora é hora? No WhatsApp o peso é maior —
+      quem se incomoda aqui denuncia, e denúncia derruba o número.
+    */
+    const permissao = await podeEnviar(item.perfilId, item.para)
+
+    if (!permissao.pode && permissao.motivo === 'nao-perturbe') {
+      await prisma.mensagemEnvio.update({
+        where: { id: item.id },
+        data: {
+          status: 'DESISTIU',
+          erro: 'O destinatário pediu para não receber mensagens desta loja.',
+          proximaTentativaEm: null,
+        },
+      })
+      desistidas++
+      continue
+    }
+
+    if (!permissao.pode && permissao.motivo === 'silencio') {
+      // Adia sem contar tentativa: a mensagem não falhou, só ainda não pode
+      // sair. Ver o comentário equivalente em `sms-service`.
+      await prisma.mensagemEnvio.update({
+        where: { id: item.id },
+        data: { proximaTentativaEm: permissao.tentarEm },
+      })
+      continue
+    }
+
     const credencial = credencialDaLoja(item.perfil)
 
     if (!credencial || !item.template) {

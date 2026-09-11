@@ -86,7 +86,7 @@ function enviadosPara(telefone: string) {
 async function lojaComPerfil(nome: string) {
   const usuario = await criarUsuarioComSaldo(50_000)
   usuariosCriados.push(usuario.id)
-  const perfil = await prisma.perfil.create({ data: { userId: usuario.id, nome } })
+  const perfil = await prisma.perfil.create({ data: { userId: usuario.id, nome, silencioAtivo: false } })
   return { usuario, perfil }
 }
 
@@ -217,7 +217,7 @@ describe('nome de exibição', () => {
       separado, o SMS sairia assinado com um remetente que ele nunca viu.
     */
     const perfil = await prisma.perfil.create({
-      data: { userId: usuario.id, nome: 'Best Buy Tech', nomeExibicao: 'Tiktok shop' },
+      data: { silencioAtivo: false, userId: usuario.id, nome: 'Best Buy Tech', nomeExibicao: 'Tiktok shop' },
     })
 
     await venderPara(usuario.id, perfil.id, destinatarioCom('11988880007'))
@@ -232,7 +232,7 @@ describe('nome de exibição', () => {
     const usuario = await criarUsuarioComSaldo(50_000)
     usuariosCriados.push(usuario.id)
     const perfil = await prisma.perfil.create({
-      data: { userId: usuario.id, nome: 'Loja Sem Exibicao' },
+      data: { silencioAtivo: false, userId: usuario.id, nome: 'Loja Sem Exibicao' },
     })
 
     await venderPara(usuario.id, perfil.id, destinatarioCom('11988880008'))

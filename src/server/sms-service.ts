@@ -8,6 +8,7 @@ import { smsProvider, type CredenciaisSms } from '@/infra/sms'
 import { normalizarTelefone } from '@/infra/whatsapp/cloud-api'
 import { compor, custoDoTexto, TEXTOS_PADRAO_SMS } from '@/domain/mensagem/texto'
 import { montarValores } from '@/server/valores-da-mensagem'
+import { podeEnviar } from '@/server/pode-enviar'
 
 /**
  * Canal de SMS: da configuração ao envio.
@@ -345,6 +346,44 @@ export async function dispararSmsPendentes(limite = LOTE_PADRAO): Promise<Result
         },
       })
       desistidas++
+      continue
+    }
+
+    /*
+      Antes de qualquer coisa: esta pessoa quer receber, e agora é hora?
+
+      Na hora do DISPARO, não do enfileiramento. Entre uma coisa e outra o
+      comprador pode ter pedido para parar, e a fila guarda mensagem por
+      horas — mandar assim mesmo seria ignorar um pedido feito no meio.
+    */
+    const permissao = await podeEnviar(item.perfilId, item.para)
+
+    if (!permissao.pode && permissao.motivo === 'nao-perturbe') {
+      await prisma.mensagemEnvio.update({
+        where: { id: item.id },
+        data: {
+          status: 'DESISTIU',
+          erro: 'O destinatário pediu para não receber mensagens desta loja.',
+          proximaTentativaEm: null,
+        },
+      })
+      desistidas++
+      continue
+    }
+
+    if (!permissao.pode && permissao.motivo === 'silencio') {
+      /*
+        Adia, não desiste. Desistir faria o comprador nunca saber que o pedido
+        foi postado só porque a postagem caiu de madrugada.
+
+        Também não conta tentativa: a mensagem não falhou, ela apenas ainda
+        não pode sair. Gastar tentativa aqui esgotaria a fila de uma mensagem
+        que nunca chegou a ser mandada.
+      */
+      await prisma.mensagemEnvio.update({
+        where: { id: item.id },
+        data: { proximaTentativaEm: permissao.tentarEm },
+      })
       continue
     }
 

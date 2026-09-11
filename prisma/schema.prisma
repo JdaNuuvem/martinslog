@@ -628,6 +628,24 @@ model Perfil {
    */
   whatsappProvedor ProvedorWhatsapp @default(META)
 
+  /**
+   * Janela de silêncio: nada sai entre estas horas.
+   * A fila roda de minuto em minuto e nunca olhou as horas — pagamento
+   * confirmado às três da manhã virava SMS às três da manhã. Mensagem nesse
+   * horário não é ignorada, é denunciada, e denúncia é o que tira um número
+   * não oficial do ar.
+   * Guardadas como hora local (0–23), e não como faixa de UTC: quem configura
+   * pensa "não mandar de madrugada", não em fuso. A conversão acontece na
+   * leitura, contra `America/Sao_Paulo`.
+   * O padrão 22h–8h é conservador de propósito. Quem quiser mandar de
+   * madrugada muda; quem nunca abrir esta tela fica protegido.
+   */
+  silencioInicioHora Int     @default(22)
+  silencioFimHora    Int     @default(8)
+  /// Desligar é decisão consciente, e por isso é um campo próprio: zerar as
+  /// horas para "desligar" deixaria a intenção ilegível seis meses depois.
+  silencioAtivo      Boolean @default(true)
+
   user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   whatsappConfig       WhatsappConfig?
   evolutionConfig      EvolutionConfig?
@@ -641,6 +659,7 @@ model Perfil {
   apiTokens            ApiToken[]
   conversas            Conversa[]
   respostasAutomaticas RespostaAutomatica[]
+  naoPerturbe          NaoPerturbe[]
   campanhas            Campanha[]
 
   /// Dois perfis com o mesmo nome na mesma conta tornam a lista inútil — é
@@ -737,6 +756,44 @@ model EvolutionConfig {
 /// escreveu.
 ///
 /// Só a API oficial e a Evolution entregam mensagem de entrada; SMS não.
+/// Quem pediu para parar de receber mensagem.
+///
+/// Existe porque não havia como parar. O comprador respondia "PARE" e nada
+/// acontecia — a fila continuava mandando, e a única saída dele era bloquear
+/// o número ou denunciar. Denúncia, no WhatsApp não oficial, é o que tira o
+/// número do ar e leva junto o canal de todas as lojas daquele celular.
+///
+/// Por telefone e por loja: quem não quer saber da Loja A pode continuar
+/// querendo saber da Loja B, e um opt-out global decidiria pelo comprador uma
+/// coisa que é dele.
+///
+/// Vale para TODOS os canais daquele número. Quem pediu para parar de receber
+/// WhatsApp não está pedindo para receber SMS no lugar.
+model NaoPerturbe {
+  id       String @id @default(cuid())
+  perfilId String
+  /// Telefone normalizado, só dígitos, como a fila o usa.
+  contato  String
+
+  /**
+   * Como o pedido chegou.
+   * `CLIENTE` é o comprador que escreveu "pare"; `LOJA` é alguém do painel
+   * que registrou por telefone ou e-mail. A diferença importa numa eventual
+   * disputa: o primeiro é prova de vontade do titular.
+   */
+  origem String  @default("CLIENTE")
+  /// O que a pessoa escreveu, quando foi ela. Guardado como prova.
+  motivo String?
+
+  criadoEm DateTime @default(now())
+
+  perfil Perfil @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+
+  @@unique([perfilId, contato])
+  @@index([contato])
+  @@map("nao_perturbe")
+}
+
 /// Resposta pronta que o robô dá quando o comprador escreve certa coisa.
 ///
 /// Existe porque o robô nasceu sabendo só o que a plataforma sabe: rastreio.
