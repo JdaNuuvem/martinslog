@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { DomainError } from '@/domain/errors'
 import { prisma } from '@/infra/db/client'
-import { lerSessao } from '@/server/auth/sessao'
+import { exigirAdmin } from '@/server/admin/guarda'
 import { listarPerfis } from '@/server/perfil-service'
 import { evolutionDisponivel } from '@/infra/whatsapp'
 import { desconectar, escolherProvedor, obterConexao } from '@/server/evolution-service'
@@ -44,8 +44,9 @@ async function provedorDaLoja(perfilId: string): Promise<'META' | 'EVOLUTION'> {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const sessao = await lerSessao(request)
-  if (!sessao) return NextResponse.json({ mensagem: 'Não autenticado.' }, { status: 401 })
+  const guarda = await exigirAdmin(request)
+  if (!guarda.autorizado) return guarda.resposta
+  const sessao = guarda.sessao
 
   const perfil = await perfilDaConta(sessao.userId)
   if (!perfil) {
@@ -94,8 +95,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function PUT(request: NextRequest): Promise<NextResponse> {
-  const sessao = await lerSessao(request)
-  if (!sessao) return NextResponse.json({ mensagem: 'Não autenticado.' }, { status: 401 })
+  const guarda = await exigirAdmin(request)
+  if (!guarda.autorizado) return guarda.resposta
+  const sessao = guarda.sessao
 
   const perfil = await perfilDaConta(sessao.userId)
   if (!perfil) return NextResponse.json({ mensagem: 'Loja não encontrada.' }, { status: 404 })
@@ -133,8 +135,9 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function DELETE(request: NextRequest): Promise<NextResponse> {
-  const sessao = await lerSessao(request)
-  if (!sessao) return NextResponse.json({ mensagem: 'Não autenticado.' }, { status: 401 })
+  const guarda = await exigirAdmin(request)
+  if (!guarda.autorizado) return guarda.resposta
+  const sessao = guarda.sessao
 
   const perfil = await perfilDaConta(sessao.userId)
   if (!perfil) return NextResponse.json({ mensagem: 'Loja não encontrada.' }, { status: 404 })

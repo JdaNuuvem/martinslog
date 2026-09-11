@@ -1,7 +1,20 @@
 import { ConexaoEvolution } from '@/components/conexao-evolution'
 import { ConexaoWhatsapp } from '@/components/conexao-whatsapp'
+import { exigirSessaoNaPagina } from '@/server/auth/sessao-servidor'
 
-export default function PaginaWhatsapp() {
+export default async function PaginaWhatsapp() {
+  /*
+    A Evolution é só para administradores.
+    Parear um celular copia a agenda do aparelho para este servidor, e quem
+    faz isso precisa entender o que está aceitando. Deixar a opção à mão de
+    todo lojista transforma uma decisão de infraestrutura em um botão
+    convidativo na tela de configuração.
+    A guarda de verdade está em `/api/evolution`, que responde 404 para quem
+    não é admin. Esconder aqui só evita desenhar o que a API recusaria.
+  */
+  const sessao = await exigirSessaoNaPagina()
+  const ehAdmin = sessao.papel === 'ADMIN'
+
   return (
     <div className="flex flex-col gap-secao">
       <div className="flex flex-col gap-2">
@@ -18,13 +31,12 @@ export default function PaginaWhatsapp() {
         */}
         <p className="max-w-leitura text-dado text-texto-secundario">
           O WhatsApp oficial exige verificação da sua empresa na Meta, com CNPJ e documentos. Esse
-          passo acontece no painel deles e costuma levar alguns dias. Se você não pode esperar, dá
-          para parear um celular aqui embaixo — com o risco que vem junto.
+          passo acontece no painel deles e costuma levar alguns dias.
         </p>
       </div>
 
       <ConexaoWhatsapp />
-      <ConexaoEvolution />
+      {ehAdmin ? <ConexaoEvolution /> : null}
     </div>
   )
 }

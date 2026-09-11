@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/infra/db/client'
-import { lerSessao } from '@/server/auth/sessao'
+import { exigirAdmin } from '@/server/admin/guarda'
 import { acharPerfil } from '@/server/perfil-service'
 import { listarPerfis } from '@/server/perfil-service'
 
@@ -26,8 +26,9 @@ async function perfilDaConta(userId: string) {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const sessao = await lerSessao(request)
-  if (!sessao) return NextResponse.json({ mensagem: 'Não autenticado.' }, { status: 401 })
+  const guarda = await exigirAdmin(request)
+  if (!guarda.autorizado) return guarda.resposta
+  const sessao = guarda.sessao
 
   const perfil = await perfilDaConta(sessao.userId)
   if (!perfil) return NextResponse.json({ mensagens: [], naoLidas: 0 })
@@ -58,8 +59,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
-  const sessao = await lerSessao(request)
-  if (!sessao) return NextResponse.json({ mensagem: 'Não autenticado.' }, { status: 401 })
+  const guarda = await exigirAdmin(request)
+  if (!guarda.autorizado) return guarda.resposta
+  const sessao = guarda.sessao
 
   const perfil = await perfilDaConta(sessao.userId)
   if (!perfil) return NextResponse.json({ mensagem: 'Loja não encontrada.' }, { status: 404 })

@@ -182,15 +182,27 @@ export function ConexaoEvolution() {
       </div>
 
       {/*
-        O aviso de banimento fica em destaque e antes do QR de propósito. É a
-        única diferença que o lojista não descobre sozinho testando, e a que
-        custa o número da loja quando descoberta tarde.
+        Os dois avisos ficam antes do QR de propósito: são o que não se
+        descobre testando, e o que custa caro quando se descobre depois.
+
+        O segundo nasceu de um caso real — alguém pareou o celular pessoal
+        para ver a tela funcionar, e ao parear o WhatsApp sincronizou a agenda
+        inteira para o servidor. Ninguém pediu isso, e não havia como saber
+        antes de acontecer.
       */}
-      <p className="rounded-lg border border-borda-campo bg-superficie-bloco p-3 text-sm text-texto-secundario">
-        <span className="font-medium text-texto-principal">Antes de conectar:</span> este caminho não
-        é oficial. A Meta pode bloquear o número se o volume ou o conteúdo parecer disparo em massa,
-        e um número bloqueado não volta. Use um chip dedicado à loja, nunca o pessoal.
-      </p>
+      <div className="flex flex-col gap-2">
+        <p className="rounded-lg border border-borda-campo bg-superficie-bloco p-3 text-sm text-texto-secundario">
+          <span className="font-medium text-texto-principal">Risco do número:</span> este caminho não
+          é oficial. A Meta pode bloquear o número se o volume ou o conteúdo parecer disparo em
+          massa, e um número bloqueado não volta.
+        </p>
+        <p className="rounded-lg border border-borda-campo bg-superficie-bloco p-3 text-sm text-texto-secundario">
+          <span className="font-medium text-texto-principal">Use um chip só da loja:</span> ao
+          parear, o WhatsApp copia para este servidor a lista de contatos do aparelho — é como o
+          protocolo funciona, não é opção que dê para desligar. Com um celular pessoal, a agenda
+          pessoal vem junto. Desconectar apaga o que foi copiado.
+        </p>
+      </div>
 
       {erro ? (
         <p role="alert" className="rounded-lg bg-superficie-bloco p-3 text-sm text-erro">
