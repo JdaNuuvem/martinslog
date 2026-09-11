@@ -74,6 +74,7 @@ describe('robô de atendimento', () => {
       nomeLoja: 'Loja Teste',
     })
 
+    if (resposta.tipo === 'calar') throw new Error('robô calou quando devia responder')
     expect(resposta.tipo).toBe('responder')
     expect(resposta.texto).toContain('EC000999001BR')
     expect(resposta.texto).toContain('a caminho')
@@ -90,6 +91,7 @@ describe('robô de atendimento', () => {
       nomeLoja: 'Loja Teste',
     })
 
+    if (resposta.tipo === 'calar') throw new Error('robô calou quando devia responder')
     expect(resposta.texto).toContain('entregue')
     expect(resposta.texto).not.toContain('DELIVERED')
   })
@@ -108,6 +110,7 @@ describe('robô de atendimento', () => {
       nomeLoja: 'Loja Teste',
     })
 
+    if (resposta.tipo === 'calar') throw new Error('robô calou quando devia chamar humano')
     expect(resposta.tipo).toBe('chamar-humano')
     expect(resposta.texto).not.toMatch(/não (existe|há) (nenhum )?pedido/i)
   })
@@ -122,6 +125,7 @@ describe('robô de atendimento', () => {
       nomeLoja: 'Loja Teste',
     })
 
+    if (resposta.tipo === 'calar') throw new Error('robô calou quando devia chamar humano')
     expect(resposta.tipo).toBe('chamar-humano')
   })
 
@@ -135,6 +139,7 @@ describe('robô de atendimento', () => {
       nomeLoja: 'Loja Teste',
     })
 
+    if (resposta.tipo === 'calar') throw new Error('robô calou quando devia chamar humano')
     expect(resposta.tipo).toBe('chamar-humano')
   })
 
@@ -149,6 +154,7 @@ describe('robô de atendimento', () => {
       nomeLoja: 'Loja Teste',
     })
 
+    if (resposta.tipo === 'calar') throw new Error('robô calou quando devia responder')
     expect(resposta.tipo).toBe('responder')
     expect(resposta.texto).toContain('EC000999003BR')
   })
@@ -163,6 +169,7 @@ describe('robô de atendimento', () => {
       nomeLoja: 'Loja Teste',
     })
 
+    if (resposta.tipo === 'calar') throw new Error('robô calou quando devia responder')
     expect(resposta.tipo).toBe('responder')
     expect(resposta.texto).toContain('Loja Teste')
   })

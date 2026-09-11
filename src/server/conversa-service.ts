@@ -113,17 +113,30 @@ export async function enviarNaConversa(entrada: {
     select: { whatsappProvedor: true, evolutionConfig: true },
   })
 
+  const conversa = await conversaDoContato(entrada.perfilId, entrada.contato)
+
   const servidor = credenciaisDoServidor()
   if (loja?.whatsappProvedor !== 'EVOLUTION' || !servidor || !loja.evolutionConfig?.conectadoEm) {
     /*
       Só pela Evolution. A API oficial da Meta não manda texto livre fora da
       janela de 24h — ela exigiria um template aprovado, e uma resposta de
       atendimento não é template.
-    */
-    return { ok: false, erro: 'Esta loja não está com o WhatsApp pareado pela Evolution.' }
-  }
 
-  const conversa = await conversaDoContato(entrada.perfilId, entrada.contato)
+      Grava a tentativa com o motivo em vez de só devolver o erro. Sem isto, o
+      que o atendente escreveu desaparecia da tela junto com o aviso de falha,
+      e ele não tinha como saber se chegou a mandar — nem o que tinha escrito.
+    */
+    const motivo = 'Esta loja não está com o WhatsApp pareado pela Evolution.'
+    await prisma.conversaMensagem.create({
+      data: {
+        conversaId: conversa.id,
+        autor: entrada.autor,
+        texto: entrada.texto,
+        erro: motivo,
+      },
+    })
+    return { ok: false, erro: motivo }
+  }
 
   const resultado = await whatsappProvider('EVOLUTION').enviar(
     {
