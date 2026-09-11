@@ -56,6 +56,7 @@ async function lojaComEnvio(opcoes: {
 afterAll(async () => {
   const perfis = await prisma.perfil.findMany({ where: { userId: { in: usuariosCriados } } })
   const perfilIds = perfis.map((p) => p.id)
+  await prisma.respostaAutomatica.deleteMany({ where: { perfilId: { in: perfilIds } } })
   await prisma.shipment.deleteMany({ where: { perfilId: { in: perfilIds } } })
   await prisma.perfil.deleteMany({ where: { id: { in: perfilIds } } })
   await prisma.wallet.deleteMany({ where: { userId: { in: usuariosCriados } } })
@@ -172,5 +173,114 @@ describe('robô de atendimento', () => {
     if (resposta.tipo === 'calar') throw new Error('robô calou quando devia responder')
     expect(resposta.tipo).toBe('responder')
     expect(resposta.texto).toContain('Loja Teste')
+  })
+})
+
+describe('respostas escritas pela loja', () => {
+  async function comResposta(
+    perfilId: string,
+    dados: { nome: string; gatilhos: string[]; resposta: string; ordem?: number },
+  ) {
+    await prisma.respostaAutomatica.create({
+      data: {
+        perfilId,
+        nome: dados.nome,
+        gatilhos: dados.gatilhos,
+        resposta: dados.resposta,
+        ordem: dados.ordem ?? 0,
+      },
+    })
+  }
+
+  it('usa a resposta da loja e troca a variável da marca', async () => {
+    const perfilId = await lojaComEnvio({ telefone: '5511900001000' })
+    await comResposta(perfilId, {
+      nome: 'Sábado',
+      gatilhos: ['sabado'],
+      resposta: 'A {{loja}} entrega de segunda a sexta.',
+    })
+
+    const resposta = await responder({
+      perfilId,
+      contato: '5511900001000',
+      texto: 'vocês entregam no SÁBADO?',
+      nomeLoja: 'Loja Teste',
+    })
+
+    if (resposta.tipo === 'calar') throw new Error('robô calou quando devia responder')
+    expect(resposta.texto).toBe('A Loja Teste entrega de segunda a sexta.')
+  })
+
+  /**
+   * A regra da loja tem que ganhar da embutida. Se a de fábrica respondesse
+   * primeiro, o campo na tela seria decoração: a loja escreveria a própria
+   * resposta para "prazo" e continuaria vendo a genérica.
+   */
+  it('a resposta da loja vence a regra de fábrica sobre rastreio', async () => {
+    const perfilId = await lojaComEnvio({ telefone: '5511900001001', rastreio: 'EC000999900BR' })
+    await comResposta(perfilId, {
+      nome: 'Prazo',
+      gatilhos: ['prazo'],
+      resposta: 'Nosso prazo é de 5 a 8 dias úteis.',
+    })
+
+    const resposta = await responder({
+      perfilId,
+      contato: '5511900001001',
+      texto: 'qual o prazo?',
+      nomeLoja: 'Loja Teste',
+    })
+
+    if (resposta.tipo === 'calar') throw new Error('robô calou quando devia responder')
+    expect(resposta.texto).toContain('5 a 8 dias')
+    expect(resposta.texto).not.toContain('EC000999900BR')
+  })
+
+  it('quando duas regras pegam a frase, a de menor ordem responde', async () => {
+    const perfilId = await lojaComEnvio({ telefone: '5511900001002' })
+    await comResposta(perfilId, {
+      nome: 'Genérica',
+      gatilhos: ['troca'],
+      resposta: 'Resposta genérica.',
+      ordem: 10,
+    })
+    await comResposta(perfilId, {
+      nome: 'Específica',
+      gatilhos: ['troca de tamanho'],
+      resposta: 'Resposta específica.',
+      ordem: 1,
+    })
+
+    const resposta = await responder({
+      perfilId,
+      contato: '5511900001002',
+      texto: 'quero troca de tamanho',
+      nomeLoja: 'Loja Teste',
+    })
+
+    if (resposta.tipo === 'calar') throw new Error('robô calou quando devia responder')
+    expect(resposta.texto).toBe('Resposta específica.')
+  })
+
+  it('ignora regra desligada', async () => {
+    const perfilId = await lojaComEnvio({ telefone: '5511900001003' })
+    await prisma.respostaAutomatica.create({
+      data: {
+        perfilId,
+        nome: 'Desligada',
+        gatilhos: ['cupom'],
+        resposta: 'Não deveria sair.',
+        ativo: false,
+      },
+    })
+
+    const resposta = await responder({
+      perfilId,
+      contato: '5511900001003',
+      texto: 'tem cupom?',
+      nomeLoja: 'Loja Teste',
+    })
+
+    expect(resposta.tipo).toBe('chamar-humano')
   })
 })

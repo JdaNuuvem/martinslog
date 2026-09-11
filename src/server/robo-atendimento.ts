@@ -1,4 +1,5 @@
 import { prisma } from '@/infra/db/client'
+import { compor } from '@/domain/mensagem/texto'
 
 /**
  * Robô de atendimento da loja.
@@ -59,6 +60,32 @@ function contem(texto: string, termos: string[]): boolean {
   return termos.some((t) => alvo.includes(normalizar(t)))
 }
 
+/**
+ * A resposta que a loja escreveu para aquilo, se houver.
+ *
+ * Compara sem acento e sem maiúscula porque é assim que se escreve no
+ * WhatsApp: "sabado", "SÁBADO" e "Sábado" são a mesma pergunta, e uma regra
+ * que só pega a forma exata não pega quase nada.
+ *
+ * A primeira regra que casar responde — por isso a lista vem ordenada. Sem
+ * ordem, "prazo" e "prazo de entrega" disputariam a mesma frase no sorteio.
+ */
+async function respostaDaLoja(perfilId: string, texto: string): Promise<string | null> {
+  const regras = await prisma.respostaAutomatica.findMany({
+    where: { perfilId, ativo: true },
+    orderBy: { ordem: 'asc' },
+    select: { gatilhos: true, resposta: true },
+  })
+
+  const alvo = normalizar(texto)
+  for (const regra of regras) {
+    if (regra.gatilhos.some((g) => g.trim() && alvo.includes(normalizar(g)))) {
+      return regra.resposta
+    }
+  }
+  return null
+}
+
 export type RespostaDoRobo =
   | { tipo: 'responder'; texto: string }
   /** O robô sabe que não sabe. A conversa fica para um humano. */
@@ -117,6 +144,16 @@ export async function responder(entrada: {
   nomeLoja: string
 }): Promise<RespostaDoRobo> {
   const { texto, nomeLoja } = entrada
+
+  /*
+    As respostas da loja vêm ANTES das regras de fábrica.
+
+    A ordem não é detalhe: se o embutido viesse primeiro, uma loja que
+    escrevesse a própria resposta para "prazo" continuaria vendo a genérica,
+    e o campo na tela seria decoração. Quem configurou tem que ganhar.
+  */
+  const daLoja = await respostaDaLoja(entrada.perfilId, texto)
+  if (daLoja) return { tipo: 'responder', texto: compor(daLoja, { loja: nomeLoja }) }
 
   if (contem(texto, QUER_HUMANO)) {
     return {

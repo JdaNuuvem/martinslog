@@ -628,18 +628,20 @@ model Perfil {
    */
   whatsappProvedor ProvedorWhatsapp @default(META)
 
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  whatsappConfig    WhatsappConfig?
-  evolutionConfig   EvolutionConfig?
-  smsConfig         SmsConfig?
-  templates         MensagemTemplate[]
-  pedidos           Pedido[]
-  mensagens         MensagemEnvio[]
-  regrasRecuperacao RegraRecuperacao[]
-  webhookApps       WebhookApp[]
-  shipments         Shipment[]
-  apiTokens         ApiToken[]
-  conversas         Conversa[]
+  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  whatsappConfig       WhatsappConfig?
+  evolutionConfig      EvolutionConfig?
+  smsConfig            SmsConfig?
+  templates            MensagemTemplate[]
+  pedidos              Pedido[]
+  mensagens            MensagemEnvio[]
+  regrasRecuperacao    RegraRecuperacao[]
+  webhookApps          WebhookApp[]
+  shipments            Shipment[]
+  apiTokens            ApiToken[]
+  conversas            Conversa[]
+  respostasAutomaticas RespostaAutomatica[]
+  campanhas            Campanha[]
 
   /// Dois perfis com o mesmo nome na mesma conta tornam a lista inútil — é
   /// por ele que a pessoa escolhe no seletor do topo.
@@ -735,6 +737,109 @@ model EvolutionConfig {
 /// escreveu.
 ///
 /// Só a API oficial e a Evolution entregam mensagem de entrada; SMS não.
+/// Resposta pronta que o robô dá quando o comprador escreve certa coisa.
+///
+/// Existe porque o robô nasceu sabendo só o que a plataforma sabe: rastreio.
+/// "Vocês entregam no sábado?" e "qual o prazo para minha cidade?" são
+/// perguntas da LOJA, não da plataforma — e cada loja responde diferente.
+///
+/// Sem isto, toda pergunta fora do rastreio virava "vou chamar alguém", e o
+/// atendimento humano recebia de volta as mesmas cinco perguntas todo dia.
+model RespostaAutomatica {
+  id       String   @id @default(cuid())
+  perfilId String
+  /// Nome interno, para a loja se achar na lista. Não vai para o comprador.
+  nome     String
+  /**
+   * Palavras que disparam esta resposta. Qualquer uma basta.
+   * Comparadas sem acento e sem maiúscula: quem escreve no WhatsApp escreve
+   * "sabado" e "SÁBADO", e uma regra que só pega a forma exata não vale nada.
+   */
+  gatilhos String[]
+  resposta String
+  /**
+   * Ordem de avaliação. A primeira que casar responde.
+   * Importa porque gatilhos se sobrepõem: "prazo" e "prazo de entrega" pegam
+   * a mesma frase, e sem ordem definida qual responde vira sorteio.
+   */
+  ordem    Int      @default(0)
+  ativo    Boolean  @default(true)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  perfil Perfil @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+
+  @@index([perfilId, ativo, ordem])
+  @@map("respostas_automaticas")
+}
+
+enum StatusCampanha {
+  RASCUNHO
+  AGENDADA
+  ENVIANDO
+  CONCLUIDA
+  CANCELADA
+}
+
+enum StatusDestinatario {
+  PENDENTE
+  ENVIADA
+  FALHA
+}
+
+/// Um disparo de mensagem para vários compradores.
+///
+/// PERIGOSO POR NATUREZA, e o desenho reflete isso. Mandar a mesma mensagem
+/// para muita gente de um número não-oficial é o padrão que a Meta procura
+/// para banir — e número banido não volta.
+///
+/// Por isso o envio não é imediato nem paralelo: a fila solta aos poucos
+/// (ver `campanha-service`), e o limite por hora é do serviço, não da tela.
+/// Uma trava que mora só na interface é uma trava que a primeira chamada
+/// direta à API ignora.
+model Campanha {
+  id       String @id @default(cuid())
+  perfilId String
+  nome     String
+  /// O texto, com as mesmas variáveis das mensagens de evento.
+  texto    String
+
+  status       StatusCampanha @default(RASCUNHO)
+  /// Quando começar a soltar. Nulo em rascunho.
+  agendadaPara DateTime?
+  iniciadaEm   DateTime?
+  concluidaEm  DateTime?
+
+  criadoEm DateTime @default(now())
+
+  perfil        Perfil                 @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+  destinatarios CampanhaDestinatario[]
+
+  @@index([status, agendadaPara])
+  @@index([perfilId, criadoEm])
+  @@map("campanhas")
+}
+
+model CampanhaDestinatario {
+  id         String             @id @default(cuid())
+  campanhaId String
+  contato    String
+  nome       String?
+  status     StatusDestinatario @default(PENDENTE)
+  erro       String?
+  idExterno  String?
+  enviadaEm  DateTime?
+
+  campanha Campanha @relation(fields: [campanhaId], references: [id], onDelete: Cascade)
+
+  /// O mesmo número não recebe a mesma campanha duas vezes, nem que ele
+  /// apareça repetido na lista colada pela loja.
+  @@unique([campanhaId, contato])
+  @@index([campanhaId, status])
+  @@map("campanha_destinatarios")
+}
+
 /// Quem escreveu uma mensagem da conversa.
 ///
 /// `ROBO` e `ATENDENTE` saem os dois pelo mesmo número e chegam iguais para o
