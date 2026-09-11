@@ -617,8 +617,20 @@ model Perfil {
   ativo        Boolean  @default(true)
   criadoEm     DateTime @default(now())
 
+  /**
+   * Qual provedor de WhatsApp atende esta loja.
+   * Explícito, e não derivado de "qual config existe", porque as duas podem
+   * existir ao mesmo tempo: quem está migrando da Evolution para a oficial
+   * mantém as duas ligadas durante a verificação da Meta, que leva dias. Sem
+   * este campo, o desempate seria uma regra implícita no código — e a loja
+   * descobriria por qual número a mensagem saiu depois de ela ter saído.
+   * `META` é o padrão por ser o que já existia quando este campo nasceu.
+   */
+  whatsappProvedor ProvedorWhatsapp @default(META)
+
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   whatsappConfig    WhatsappConfig?
+  evolutionConfig   EvolutionConfig?
   smsConfig         SmsConfig?
   templates         MensagemTemplate[]
   pedidos           Pedido[]
@@ -627,6 +639,7 @@ model Perfil {
   webhookApps       WebhookApp[]
   shipments         Shipment[]
   apiTokens         ApiToken[]
+  recebidas         MensagemRecebida[]
 
   /// Dois perfis com o mesmo nome na mesma conta tornam a lista inútil — é
   /// por ele que a pessoa escolhe no seletor do topo.
@@ -668,6 +681,91 @@ model WhatsappConfig {
   perfil Perfil @relation(fields: [perfilId], references: [id], onDelete: Cascade)
 
   @@map("whatsapp_configs")
+}
+
+/// Por onde o WhatsApp da loja sai.
+///
+/// `META` é a API oficial: exige verificação da empresa, cobra por conversa e
+/// só deixa iniciar conversa com template aprovado. `EVOLUTION` fala o
+/// protocolo do WhatsApp Web a partir de um celular pareado por QR — não tem
+/// verificação nem template, e por isso mesmo o número pode ser banido pela
+/// Meta. São dois compromissos diferentes, e a escolha é da loja.
+enum ProvedorWhatsapp {
+  META
+  EVOLUTION
+}
+
+/// Instância da Evolution API que atende uma loja.
+///
+/// A `apikey` NÃO mora aqui: ela é do servidor inteiro (`EVOLUTION_API_KEY`),
+/// não de uma loja. O que é da loja é a instância — o pareamento com um
+/// celular, que é o que de fato manda a mensagem.
+///
+/// Separada de `WhatsappConfig` de propósito. Afrouxar aquele modelo para
+/// caber os dois provedores tornaria `phoneNumberId` e `tokenCifrado`
+/// opcionais para sempre, e todo código que hoje confia que uma config da
+/// Meta TEM token passaria a tratar um nulo que só existe por causa da
+/// Evolution.
+model EvolutionConfig {
+  id           String    @id @default(cuid())
+  perfilId     String    @unique
+  /// Nome da instância na Evolution. Único no servidor inteiro, não só na
+  /// conta — é a chave que a API usa em todas as rotas.
+  instancia    String    @unique
+  /// Número pareado, como o comprador o vê. Vem da Evolution ao conectar.
+  numero       String?
+  /// Última vez que o pareamento foi confirmado como aberto. Nulo é "nunca
+  /// conectou", diferente de "caiu".
+  conectadoEm  DateTime?
+  ultimoErro   String?
+  criadoEm     DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
+
+  perfil    Perfil             @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+  recebidas MensagemRecebida[]
+
+  @@map("evolution_configs")
+}
+
+/// Mensagem que o COMPRADOR mandou para a loja.
+///
+/// `MensagemEnvio` não serve para isto: ela é a fila de saída, com tentativas,
+/// backoff e template. O que chega não tem nada disso — chega uma vez, ou não
+/// chega. Misturar os dois faria toda consulta de fila ter que filtrar por
+/// direção, e um bug nesse filtro tentaria "reenviar" o que o cliente
+/// escreveu.
+///
+/// Só a API oficial e a Evolution entregam mensagem de entrada; SMS não.
+model MensagemRecebida {
+  id          String    @id @default(cuid())
+  perfilId    String
+  /// Instância da Evolution que recebeu. Nulo quando vier pela Meta.
+  evolutionId String?
+  /// Telefone de quem escreveu, em dígitos, como a Evolution entrega.
+  de          String
+  /// Nome do contato no WhatsApp. Escolhido por quem manda — trate como texto
+  /// de terceiro, nunca como identidade confirmada.
+  nomeContato String?
+  texto       String
+  /// Id da mensagem no provedor. Único para não gravar duas vezes o mesmo
+  /// evento: webhook reentrega quando não recebe 200.
+  idExterno   String    @unique
+  /// Quando o provedor diz que a mensagem foi enviada pelo comprador.
+  recebidaEm  DateTime
+  /// Quando alguém da loja abriu a conversa. Nulo é não lida.
+  lidaEm      DateTime?
+  /// Corpo cru do webhook. Guardado porque a Evolution muda o formato entre
+  /// versões, e sem o original um campo novo vira "mensagem sem conteúdo"
+  /// impossível de investigar depois.
+  payload     Json
+  criadoEm    DateTime  @default(now())
+
+  perfil    Perfil           @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+  evolution EvolutionConfig? @relation(fields: [evolutionId], references: [id], onDelete: SetNull)
+
+  @@index([perfilId, recebidaEm])
+  @@index([perfilId, lidaEm])
+  @@map("mensagens_recebidas")
 }
 
 /// Amarração entre um evento nosso e um template aprovado pela Meta.

@@ -1,3 +1,4 @@
+import { ConexaoEvolution } from '@/components/conexao-evolution'
 import { ConexaoWhatsapp } from '@/components/conexao-whatsapp'
 
 export default function PaginaWhatsapp() {
@@ -17,11 +18,13 @@ export default function PaginaWhatsapp() {
         */}
         <p className="max-w-leitura text-dado text-texto-secundario">
           O WhatsApp oficial exige verificação da sua empresa na Meta, com CNPJ e documentos. Esse
-          passo acontece no painel deles e costuma levar alguns dias.
+          passo acontece no painel deles e costuma levar alguns dias. Se você não pode esperar, dá
+          para parear um celular aqui embaixo — com o risco que vem junto.
         </p>
       </div>
 
       <ConexaoWhatsapp />
+      <ConexaoEvolution />
     </div>
   )
 }

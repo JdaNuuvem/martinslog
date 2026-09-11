@@ -63,6 +63,31 @@ const schema = z.object({
   SMS_CHAVE: z.string().min(1).optional(),
   SMS_IDENTIFICADOR: z.string().optional(),
   SMS_REMETENTE: z.string().optional(),
+
+  /**
+   * Evolution API: onde ela responde e a chave que abre tudo nela.
+   *
+   * Do SERVIDOR, não da loja. A mesma instalação atende todas as lojas, cada
+   * uma com a sua instância — por isso a chave não fica em `EvolutionConfig`.
+   *
+   * A URL é interna (`http://evolution:8080`) de propósito: a Evolution não
+   * tem porta pública. Quem alcança uma Evolution exposta com a apikey em mãos
+   * manda mensagem pelo WhatsApp de qualquer loja.
+   *
+   * Ambas opcionais: sem elas o canal EVOLUTION simplesmente não fica
+   * disponível, e a tela avisa. Derrubar a aplicação inteira por causa de um
+   * canal não configurado seria trocar um recurso a menos por um site fora.
+   */
+  EVOLUTION_API_URL: z.string().url().optional(),
+  EVOLUTION_API_KEY: z.string().min(1).optional(),
+  /**
+   * Segredo que a Evolution devolve nos webhooks para provar que é ela.
+   *
+   * A rota de entrada é pública — precisa ser, o webhook chega de fora da
+   * sessão. Sem este segredo, qualquer um que descubra a URL escreve mensagem
+   * falsa na caixa de entrada da loja.
+   */
+  EVOLUTION_WEBHOOK_TOKEN: z.string().min(16).optional(),
 })
 
 export type Env = z.infer<typeof schema>

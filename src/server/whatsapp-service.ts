@@ -1,7 +1,13 @@
 import { prisma } from '@/infra/db/client'
 import { ArquivoInvalidoError, NaoAutorizadoError } from '@/domain/errors'
 import { cifrar, decifrar, dicaDaChave } from '@/infra/crypto/segredo'
-import { enviarTemplate, normalizarTelefone, verificarCredencial } from '@/infra/whatsapp/cloud-api'
+import type { EvolutionConfig, ProvedorWhatsapp, WhatsappConfig } from '@prisma/client'
+import { normalizarTelefone, verificarCredencial } from '@/infra/whatsapp/cloud-api'
+import {
+  credenciaisDoServidor,
+  whatsappProvider,
+  type CredenciaisWhatsapp,
+} from '@/infra/whatsapp'
 import { montarParametros } from '@/domain/mensagem/eventos'
 import { compor } from '@/domain/mensagem/texto'
 import { catalogoPronto } from '@/domain/mensagem/whatsapp-textos'
@@ -213,11 +219,33 @@ export type PedidoDeMensagem = {
  * dois disparos simultâneos.
  */
 export async function enfileirarMensagem(entrada: PedidoDeMensagem): Promise<'enfileirada' | 'sem-template' | 'sem-whatsapp' | 'telefone-invalido' | 'repetida'> {
-  const config = await prisma.whatsappConfig.findUnique({
-    where: { perfilId: entrada.perfilId },
-    select: { ativo: true, verificadaEm: true },
+  /*
+    O canal está de pé para ESTA loja?
+
+    Olhar só `whatsappConfig` deixava de fora quem usa a Evolution: a loja
+    parearia o celular e nada entraria na fila, sem erro nenhum aparecendo.
+
+    Nos dois casos a exigência é a mesma — não basta a credencial existir, ela
+    precisa ter funcionado uma vez (`verificadaEm` na Meta, `conectadoEm` na
+    Evolution). Enfileirar contra uma credencial nunca testada só empurra a
+    descoberta do problema para a hora do envio, quando o comprador já está
+    esperando.
+  */
+  const loja = await prisma.perfil.findUnique({
+    where: { id: entrada.perfilId },
+    select: {
+      whatsappProvedor: true,
+      whatsappConfig: { select: { ativo: true, verificadaEm: true } },
+      evolutionConfig: { select: { conectadoEm: true } },
+    },
   })
-  if (!config?.ativo || !config.verificadaEm) return 'sem-whatsapp'
+
+  const canalDePe =
+    loja?.whatsappProvedor === 'EVOLUTION'
+      ? Boolean(loja.evolutionConfig?.conectadoEm)
+      : Boolean(loja?.whatsappConfig?.ativo && loja.whatsappConfig.verificadaEm)
+
+  if (!canalDePe) return 'sem-whatsapp'
 
   const template = await prisma.mensagemTemplate.findUnique({
     where: {
@@ -272,6 +300,52 @@ export type ResultadoDisparo = {
  * Como a fila de webhooks, é sob demanda: quem chama é o agendador. Enquanto
  * ninguém chamar, nada se perde — as mensagens ficam pendentes no banco.
  */
+/** O que a fila precisa saber da loja para escolher por onde mandar. */
+type LojaParaEnvio = {
+  whatsappProvedor: ProvedorWhatsapp
+  whatsappConfig: WhatsappConfig | null
+  evolutionConfig: EvolutionConfig | null
+}
+
+/**
+ * A credencial do provedor que a loja escolheu, ou null se ela não existe.
+ *
+ * Null aqui NÃO é erro de programação: é canal desligado, celular nunca
+ * pareado, ou Evolution ausente deste servidor. Quem chama trata como
+ * `DESISTIU` com o motivo, em vez de estourar no meio de um lote.
+ */
+function credencialDaLoja(loja: LojaParaEnvio): CredenciaisWhatsapp | null {
+  if (loja.whatsappProvedor === 'EVOLUTION') {
+    const servidor = credenciaisDoServidor()
+    if (!servidor || !loja.evolutionConfig?.conectadoEm) return null
+    return {
+      tipo: 'EVOLUTION',
+      baseUrl: servidor.baseUrl,
+      apiKey: servidor.apiKey,
+      instancia: loja.evolutionConfig.instancia,
+    }
+  }
+
+  const config = loja.whatsappConfig
+  if (!config?.ativo) return null
+  return {
+    tipo: 'META',
+    phoneNumberId: config.phoneNumberId,
+    token: decifrar(config.tokenCifrado),
+  }
+}
+
+/** Por que não houve credencial — o texto vai para o histórico. */
+function motivoDaCredencialAusente(loja: LojaParaEnvio): string {
+  if (loja.whatsappProvedor !== 'EVOLUTION') {
+    return 'WhatsApp desconectado depois do agendamento.'
+  }
+  if (!credenciaisDoServidor()) {
+    return 'A Evolution não está configurada neste servidor.'
+  }
+  return 'O celular desta loja não está pareado na Evolution.'
+}
+
 export async function dispararPendentes(limite = LOTE_PADRAO): Promise<ResultadoDisparo> {
   const comecou = Date.now()
   const agora = new Date()
@@ -306,7 +380,14 @@ export async function dispararPendentes(limite = LOTE_PADRAO): Promise<Resultado
     include: {
       template: true,
       pedido: true,
-      perfil: { select: { nome: true, whatsappConfig: true } },
+      perfil: {
+        select: {
+          nome: true,
+          whatsappProvedor: true,
+          whatsappConfig: true,
+          evolutionConfig: true,
+        },
+      },
     },
   })
 
@@ -317,15 +398,29 @@ export async function dispararPendentes(limite = LOTE_PADRAO): Promise<Resultado
   for (const item of pendentes) {
     if (Date.now() - comecou > ORCAMENTO_MS) break
 
-    const config = item.perfil.whatsappConfig
-    if (!config || !config.ativo || !item.template) {
-      // A credencial foi removida ou o template apagado depois do
-      // enfileiramento. Não é falha de rede: insistir nunca vai funcionar.
+    /*
+      Qual provedor atende esta loja, e com que credencial.
+
+      A escolha é do perfil e não de "qual config existe": as duas podem estar
+      configuradas ao mesmo tempo durante uma migração, e um desempate
+      implícito faria a mensagem sair por um número que a loja não escolheu.
+
+      `credencialDaLoja` devolve null quando falta o que aquele provedor
+      precisa — credencial removida, celular nunca pareado, ou a Evolution
+      sequer instalada neste servidor.
+    */
+    const credencial = credencialDaLoja(item.perfil)
+
+    if (!credencial || !item.template) {
+      // Credencial removida ou template apagado depois do enfileiramento.
+      // Não é falha de rede: insistir nunca vai funcionar.
       await prisma.mensagemEnvio.update({
         where: { id: item.id },
         data: {
           status: 'DESISTIU',
-          erro: 'WhatsApp desconectado ou template removido depois do agendamento.',
+          erro: !item.template
+            ? 'O texto foi removido depois do agendamento.'
+            : motivoDaCredencialAusente(item.perfil),
           proximaTentativaEm: null,
         },
       })
@@ -348,13 +443,22 @@ export async function dispararPendentes(limite = LOTE_PADRAO): Promise<Resultado
     const valores = await valoresDe(item)
     const textoEnviado = compor(item.template.previa, valores)
 
-    const resultado = await enviarTemplate({
-      phoneNumberId: config.phoneNumberId,
-      token: decifrar(config.tokenCifrado),
+    const provedor = whatsappProvider(item.perfil.whatsappProvedor)
+
+    const resultado = await provedor.enviar(credencial, {
       para: item.para,
-      nomeTemplate: item.template.nome,
-      idioma: item.template.idioma,
-      parametros: montarParametros(ordem, valores),
+      /*
+        A Evolution manda este texto como está. A Meta o ignora e usa o
+        template — ele viaja junto porque é o mesmo texto que será GRAVADO no
+        histórico nos dois casos, e compor duas vezes é como as duas versões
+        acabam divergindo.
+      */
+      texto: textoEnviado,
+      template: {
+        nome: item.template.nome,
+        idioma: item.template.idioma,
+        parametros: montarParametros(ordem, valores),
+      },
     })
 
     if (resultado.ok) {
@@ -368,6 +472,12 @@ export async function dispararPendentes(limite = LOTE_PADRAO): Promise<Resultado
           erro: null,
           proximaTentativaEm: null,
           texto: textoEnviado,
+          /*
+            Grava por onde saiu. Com dois provedores possíveis, "enviada" sem
+            dizer por qual número deixa o suporte sem resposta quando o
+            comprador pergunta de quem era a mensagem.
+          */
+          provedor: provedor.nome,
         },
       })
       enviadas++
