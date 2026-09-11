@@ -1,6 +1,7 @@
 'use client'
 
 import Image from 'next/image'
+import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 
 type Conexao = {
@@ -10,15 +11,6 @@ type Conexao = {
   ultimoErro: string | null
   estado: string | null
   qrcode: string | null
-}
-
-type Recebida = {
-  id: string
-  de: string
-  nomeContato: string | null
-  texto: string
-  recebidaEm: string
-  lidaEm: string | null
 }
 
 /** Enquanto o QR não é lido, a Evolution troca o código a cada ~40s. */
@@ -34,19 +26,16 @@ function telefoneLegivel(digitos: string): string {
 }
 
 /**
- * WhatsApp pela Evolution: parear o celular e ver o que o comprador respondeu.
+ * WhatsApp pela Evolution: parear o celular e escolher por onde a loja fala.
  *
- * A diferença que a tela precisa deixar clara é o risco: aqui não há
- * verificação nem template, e por isso mesmo o número PODE ser banido pela
- * Meta. Quem escolhe este caminho tem que saber disso antes de parear, não
- * depois de perder o número da loja.
+ * As conversas moram em tela própria (`/whatsapp/conversas`) — aqui é só a
+ * conexão. Misturar as duas faria a tela de configuração crescer sem parar,
+ * e conversa é coisa que se abre o dia inteiro, não uma vez por mês.
  */
 export function ConexaoEvolution() {
   const [disponivel, setDisponivel] = useState<boolean | null>(null)
   const [provedor, setProvedor] = useState<'META' | 'EVOLUTION'>('META')
   const [conexao, setConexao] = useState<Conexao | null>(null)
-  const [recebidas, setRecebidas] = useState<Recebida[]>([])
-  const [naoLidas, setNaoLidas] = useState(0)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
@@ -77,18 +66,9 @@ export function ConexaoEvolution() {
     }
   }, [])
 
-  const carregarRecebidas = useCallback(async () => {
-    const resposta = await fetch('/api/evolution/recebidas')
-    if (!resposta.ok) return
-    const corpo = (await resposta.json()) as { mensagens: Recebida[]; naoLidas: number }
-    setRecebidas(corpo.mensagens)
-    setNaoLidas(corpo.naoLidas)
-  }, [])
-
   useEffect(() => {
     void carregar()
-    void carregarRecebidas()
-  }, [carregar, carregarRecebidas])
+  }, [carregar])
 
   /*
     Reconsulta enquanto o QR está na tela.
@@ -138,15 +118,6 @@ export function ConexaoEvolution() {
     await carregar()
   }
 
-  async function marcarLidas() {
-    await fetch('/api/evolution/recebidas', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({}),
-    })
-    await carregarRecebidas()
-  }
-
   if (carregando) {
     return (
       <section className="rounded-xl bg-superficie-card p-6">
@@ -177,7 +148,7 @@ export function ConexaoEvolution() {
         <h2 className="text-lg font-bold text-texto-principal">WhatsApp sem verificação</h2>
         <p className="text-sm text-texto-secundario">
           Pareia um celular por QR, como no WhatsApp Web. Não exige CNPJ, verificação na Meta nem
-          template aprovado — e permite receber o que o comprador responde.
+          template aprovado — e permite conversar com o comprador.
         </p>
       </div>
 
@@ -200,7 +171,8 @@ export function ConexaoEvolution() {
           <span className="font-medium text-texto-principal">Use um chip só da loja:</span> ao
           parear, o WhatsApp copia para este servidor a lista de contatos do aparelho — é como o
           protocolo funciona, não é opção que dê para desligar. Com um celular pessoal, a agenda
-          pessoal vem junto. Desconectar apaga o que foi copiado.
+          pessoal vem junto. Desconectar apaga as conversas copiadas; a lista de números fica em
+          cache no servidor até alguém limpá-la.
         </p>
       </div>
 
@@ -242,21 +214,29 @@ export function ConexaoEvolution() {
       </div>
 
       {conectado ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-borda-campo bg-superficie-bloco p-4">
-          <div>
-            <p className="text-sm font-medium text-texto-principal">
-              Celular conectado
-              {conexao?.numero ? ` · ${telefoneLegivel(conexao.numero)}` : ''}
-            </p>
-            <p className="text-sm text-texto-secundario">Instância {conexao?.instancia}</p>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-borda-campo bg-superficie-bloco p-4">
+            <div>
+              <p className="text-sm font-medium text-texto-principal">
+                Celular conectado
+                {conexao?.numero ? ` · ${telefoneLegivel(conexao.numero)}` : ''}
+              </p>
+              <p className="text-sm text-texto-secundario">Instância {conexao?.instancia}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void desconectar()}
+              className="text-sm font-medium text-erro hover:underline"
+            >
+              Desconectar
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => void desconectar()}
-            className="text-sm font-medium text-erro hover:underline"
+          <Link
+            href="/whatsapp/conversas"
+            className="self-start rounded-pilula bg-brand px-6 py-2 text-sm font-medium text-white"
           >
-            Desconectar
-          </button>
+            Abrir conversas
+          </Link>
         </div>
       ) : (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-borda-campo bg-superficie-bloco p-6">
@@ -280,55 +260,6 @@ export function ConexaoEvolution() {
           </p>
         </div>
       )}
-
-      <div className="flex flex-col gap-2 border-t border-borda-campo pt-4">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-bold text-texto-principal">
-            O que os compradores responderam
-            {naoLidas > 0 ? ` · ${naoLidas} não lida${naoLidas > 1 ? 's' : ''}` : ''}
-          </h3>
-          {naoLidas > 0 ? (
-            <button
-              type="button"
-              onClick={() => void marcarLidas()}
-              className="text-sm font-medium text-brand-texto hover:underline"
-            >
-              Marcar todas como lidas
-            </button>
-          ) : null}
-        </div>
-
-        {recebidas.length === 0 ? (
-          <p className="text-sm text-texto-secundario">
-            Nada recebido ainda. As respostas dos compradores aparecem aqui.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {recebidas.map((m) => (
-              <li
-                key={m.id}
-                className={`rounded-lg p-3 ${
-                  m.lidaEm ? 'bg-superficie-bloco' : 'bg-brand-bg'
-                }`}
-              >
-                <p className="text-sm font-medium text-texto-principal">
-                  {m.nomeContato ?? telefoneLegivel(m.de)}{' '}
-                  <span className="font-normal text-texto-secundario">
-                    · {telefoneLegivel(m.de)} ·{' '}
-                    {new Date(m.recebidaEm).toLocaleString('pt-BR', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                </p>
-                <p className="whitespace-pre-wrap text-sm text-texto-secundario">{m.texto}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
     </section>
   )
 }

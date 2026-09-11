@@ -639,7 +639,7 @@ model Perfil {
   webhookApps       WebhookApp[]
   shipments         Shipment[]
   apiTokens         ApiToken[]
-  recebidas         MensagemRecebida[]
+  conversas         Conversa[]
 
   /// Dois perfis com o mesmo nome na mesma conta tornam a lista inútil — é
   /// por ele que a pessoa escolhe no seletor do topo.
@@ -721,8 +721,7 @@ model EvolutionConfig {
   criadoEm     DateTime  @default(now())
   atualizadoEm DateTime  @updatedAt
 
-  perfil    Perfil             @relation(fields: [perfilId], references: [id], onDelete: Cascade)
-  recebidas MensagemRecebida[]
+  perfil Perfil @relation(fields: [perfilId], references: [id], onDelete: Cascade)
 
   @@map("evolution_configs")
 }
@@ -736,36 +735,90 @@ model EvolutionConfig {
 /// escreveu.
 ///
 /// Só a API oficial e a Evolution entregam mensagem de entrada; SMS não.
-model MensagemRecebida {
-  id          String    @id @default(cuid())
+/// Quem escreveu uma mensagem da conversa.
+///
+/// `ROBO` e `ATENDENTE` saem os dois pelo mesmo número e chegam iguais para o
+/// comprador — a distinção é nossa, e existe para duas perguntas que aparecem
+/// sempre: "isso foi o robô que respondeu?" e "alguém de verdade já atendeu
+/// esta pessoa?".
+enum AutorMensagem {
+  CLIENTE
+  ROBO
+  ATENDENTE
+}
+
+/// Uma conversa com um comprador, por loja.
+///
+/// A chave é o par loja + telefone: a mesma pessoa falando com duas lojas são
+/// duas conversas, porque quem atende é outro e o histórico não deve vazar de
+/// uma marca para a outra.
+model Conversa {
+  id          String  @id @default(cuid())
   perfilId    String
-  /// Instância da Evolution que recebeu. Nulo quando vier pela Meta.
-  evolutionId String?
-  /// Telefone de quem escreveu, em dígitos, como a Evolution entrega.
-  de          String
-  /// Nome do contato no WhatsApp. Escolhido por quem manda — trate como texto
-  /// de terceiro, nunca como identidade confirmada.
+  /// Telefone do comprador, só dígitos, como a Evolution entrega.
+  contato     String
+  /// Nome que a pessoa escolheu no WhatsApp. Texto de terceiro, nunca
+  /// identidade confirmada — não use para decidir nada.
   nomeContato String?
-  texto       String
-  /// Id da mensagem no provedor. Único para não gravar duas vezes o mesmo
-  /// evento: webhook reentrega quando não recebe 200.
-  idExterno   String    @unique
-  /// Quando o provedor diz que a mensagem foi enviada pelo comprador.
-  recebidaEm  DateTime
-  /// Quando alguém da loja abriu a conversa. Nulo é não lida.
-  lidaEm      DateTime?
-  /// Corpo cru do webhook. Guardado porque a Evolution muda o formato entre
-  /// versões, e sem o original um campo novo vira "mensagem sem conteúdo"
-  /// impossível de investigar depois.
-  payload     Json
-  criadoEm    DateTime  @default(now())
 
-  perfil    Perfil           @relation(fields: [perfilId], references: [id], onDelete: Cascade)
-  evolution EvolutionConfig? @relation(fields: [evolutionId], references: [id], onDelete: SetNull)
+  /// Ordenação da lista. Redundante com a última mensagem, e de propósito:
+  /// sem isto, listar conversas por atividade exigiria juntar com a tabela de
+  /// mensagens e agregar a cada abertura de tela.
+  ultimaMensagemEm DateTime @default(now())
+  /// Quantas o comprador mandou e ninguém leu. Mantido no lugar de contar na
+  /// hora pelo mesmo motivo acima.
+  naoLidas         Int      @default(0)
 
-  @@index([perfilId, recebidaEm])
-  @@index([perfilId, lidaEm])
-  @@map("mensagens_recebidas")
+  /**
+   * Até quando o robô fica calado nesta conversa.
+   * Quando um atendente assume, o robô precisa parar — duas respostas para a
+   * mesma pergunta, uma humana e uma automática, é pior que só a automática.
+   * É prazo e não booleano porque ninguém lembra de "devolver" a conversa ao
+   * robô: sem expirar sozinho, toda conversa atendida uma vez ficaria sem
+   * automação para sempre.
+   */
+  roboPausadoAte DateTime?
+
+  criadoEm DateTime @default(now())
+
+  mensagens ConversaMensagem[]
+  loja      Perfil             @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+
+  @@unique([perfilId, contato])
+  @@index([perfilId, ultimaMensagemEm])
+  @@map("conversas")
+}
+
+/// Uma mensagem da conversa, nas duas direções.
+///
+/// Entrada e saída na mesma tabela porque a tela mostra as duas na mesma
+/// lista, em ordem. Separá-las obrigaria a unir e reordenar a cada abertura, e
+/// a ordem é o que faz uma conversa ser legível.
+model ConversaMensagem {
+  id         String        @id @default(cuid())
+  conversaId String
+  autor      AutorMensagem
+  texto      String
+
+  /// Id no provedor. Único para o webhook poder reentregar sem duplicar, e
+  /// nulo enquanto uma mensagem nossa não foi aceita pelo provedor.
+  idExterno String? @unique
+  /// Erro do provedor, quando a nossa mensagem não saiu.
+  erro      String?
+
+  /// Quando aconteceu, segundo o provedor. É por ele que a lista ordena.
+  ocorridoEm DateTime @default(now())
+  criadoEm   DateTime @default(now())
+
+  /// Corpo cru do webhook, só para mensagem recebida. A Evolution muda o
+  /// formato entre versões, e sem o original um campo novo vira "mensagem
+  /// sem conteúdo" impossível de investigar depois.
+  payload Json?
+
+  conversa Conversa @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+
+  @@index([conversaId, ocorridoEm])
+  @@map("conversa_mensagens")
 }
 
 /// Amarração entre um evento nosso e um template aprovado pela Meta.

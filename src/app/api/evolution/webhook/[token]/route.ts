@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { timingSafeEqual } from 'crypto'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { env } from '@/env'
+import { enviarNaConversa, registrarEntrada, roboPodeResponder } from '@/server/conversa-service'
+import { responder } from '@/server/robo-atendimento'
 
 type Params = { params: Promise<{ token: string }> }
 
@@ -105,35 +108,73 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   const config = await prisma.evolutionConfig.findUnique({
     where: { instancia },
-    select: { id: true, perfilId: true },
+    select: {
+      perfilId: true,
+      perfil: { select: { nome: true, nomeExibicao: true } },
+    },
   })
   if (!config) {
     return NextResponse.json({ ok: true, ignorado: 'instancia sem loja' })
   }
 
   const carimbo = Number(corpo.data?.messageTimestamp ?? 0)
-  const recebidaEm = carimbo > 0 ? new Date(carimbo * 1000) : new Date()
+  const ocorridoEm = carimbo > 0 ? new Date(carimbo * 1000) : new Date()
 
-  try {
-    await prisma.mensagemRecebida.create({
-      data: {
-        perfilId: config.perfilId,
-        evolutionId: config.id,
-        de,
-        nomeContato: corpo.data?.pushName ?? null,
-        texto,
-        idExterno,
-        recebidaEm,
-        payload: corpo as object,
-      },
-    })
-  } catch (erro) {
-    // P2002: o mesmo evento já foi gravado. A Evolution reentrega quando não
-    // recebe 200 a tempo, e isso é o caminho normal — não é erro.
-    if (!(erro && typeof erro === 'object' && 'code' in erro && erro.code === 'P2002')) {
-      throw erro
-    }
+  const registro = await registrarEntrada({
+    perfilId: config.perfilId,
+    contato: de,
+    nomeContato: corpo.data?.pushName ?? null,
+    texto,
+    idExterno,
+    ocorridoEm,
+    payload: corpo as Prisma.InputJsonValue,
+  })
+
+  if (!registro || registro.repetida) {
+    return NextResponse.json({ ok: true, repetida: true })
   }
 
-  return NextResponse.json({ ok: true })
+  /*
+    O robô responde depois de gravar, nunca antes.
+
+    Se ele falhar — rede, Evolution fora — a mensagem do comprador já está
+    salva e aparece na tela para um humano responder. Na ordem inversa, uma
+    falha no robô apagaria o registro de que alguém escreveu.
+  */
+  if (!(await roboPodeResponder(registro.conversaId))) {
+    return NextResponse.json({ ok: true, robo: 'pausado' })
+  }
+
+  const nomeLoja = config.perfil.nomeExibicao ?? config.perfil.nome
+  const resposta = await responder({
+    perfilId: config.perfilId,
+    contato: de,
+    texto,
+    nomeLoja,
+  })
+
+  if (resposta.tipo === 'calar') {
+    return NextResponse.json({ ok: true, robo: 'calou' })
+  }
+
+  await enviarNaConversa({
+    perfilId: config.perfilId,
+    contato: de,
+    texto: resposta.texto,
+    autor: 'ROBO',
+  })
+
+  /*
+    "Vou chamar alguém" tem que virar conversa esperando humano de verdade.
+    Sem pausar o robô aqui, a próxima mensagem do comprador receberia de novo
+    a promessa de chamar alguém, em laço.
+  */
+  if (resposta.tipo === 'chamar-humano') {
+    await prisma.conversa.update({
+      where: { id: registro.conversaId },
+      data: { roboPausadoAte: new Date(Date.now() + 60 * 60 * 1000) },
+    })
+  }
+
+  return NextResponse.json({ ok: true, robo: resposta.tipo })
 }
