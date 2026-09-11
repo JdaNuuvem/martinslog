@@ -10,6 +10,7 @@ import {
 } from '@/infra/whatsapp'
 import { montarParametros } from '@/domain/mensagem/eventos'
 import { compor } from '@/domain/mensagem/texto'
+import { montarValores } from '@/server/valores-da-mensagem'
 import { catalogoPronto } from '@/domain/mensagem/whatsapp-textos'
 import { acharPerfil } from '@/server/perfil-service'
 import { cancelarCobrancasDePedidoResolvido } from '@/server/recuperacao-service'
@@ -383,6 +384,7 @@ export async function dispararPendentes(limite = LOTE_PADRAO): Promise<Resultado
       perfil: {
         select: {
           nome: true,
+          nomeExibicao: true,
           whatsappProvedor: true,
           whatsappConfig: true,
           evolutionConfig: true,
@@ -539,44 +541,14 @@ export async function dispararPendentes(limite = LOTE_PADRAO): Promise<Resultado
 async function valoresDe(item: {
   para: string
   shipmentId: string | null
-  perfil: { nome: string }
-  pedido: { clienteNome: string; valorCentavos: number; checkoutUrl: string | null } | null
+  perfil: { nome: string; nomeExibicao: string | null }
+  pedido: {
+    clienteNome: string
+    valorCentavos: number
+    checkoutUrl: string | null
+    externalId?: string | null
+    produtos?: unknown
+  } | null
 }): Promise<Record<string, string>> {
-  const base = process.env.APP_URL ?? 'https://app.martinslog.net'
-  const valores: Record<string, string> = { loja: item.perfil.nome }
-
-  if (item.pedido) {
-    valores.cliente = item.pedido.clienteNome
-    valores.valor = (item.pedido.valorCentavos / 100).toLocaleString('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    })
-    valores.link_checkout = item.pedido.checkoutUrl ?? ''
-  }
-
-  /*
-    O rastreio faltava aqui, e o catálogo de textos tem um template inteiro
-    sobre ele (`ETIQUETA_EMITIDA`: "já tem código de rastreio:
-    {{codigo_rastreio}}"). Sem estes valores, esse texto sairia com as duas
-    variáveis vazias — a mesma mensagem quebrada que o lado do SMS já
-    aprendeu a não mandar.
-  */
-  if (item.shipmentId) {
-    const envio = await prisma.shipment.findUnique({
-      where: { id: item.shipmentId },
-      select: { codigoRastreio: true, destinatario: true },
-    })
-
-    if (envio?.codigoRastreio) {
-      valores.codigo_rastreio = envio.codigoRastreio
-      valores.link_rastreio = `${base}/r/${envio.codigoRastreio}`
-    }
-
-    const destinatario = envio?.destinatario as { nome?: string } | null
-    if (!valores.cliente && destinatario?.nome) {
-      valores.cliente = destinatario.nome
-    }
-  }
-
-  return valores
+  return montarValores(item)
 }

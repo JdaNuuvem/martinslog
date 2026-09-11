@@ -5,6 +5,7 @@ import { lerSessao } from '@/server/auth/sessao'
 import { listarPerfis } from '@/server/perfil-service'
 import { acharPerfil } from '@/server/perfil-service'
 import { TEXTOS_PADRAO_SMS } from '@/domain/mensagem/texto'
+import { VARIAVEIS_DISPONIVEIS } from '@/server/valores-da-mensagem'
 
 /**
  * Os textos que saem sozinhos a cada evento do pedido.
@@ -58,7 +59,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     que estão mandando mensagem agora mesmo.
   */
   return NextResponse.json({
-    variaveis: ['loja', 'cliente', 'link_rastreio'],
+    /*
+      O catálogo inteiro, e não a mão-cheia que a tela mostrava antes. Havia
+      seis variáveis funcionando e três anunciadas — `valor`, `link_checkout`
+      e `codigo_rastreio` existiam e ninguém sabia. Variável que funciona e
+      não aparece é recurso que não existe na prática.
+    */
+    variaveis: VARIAVEIS_DISPONIVEIS,
     templates: EVENTOS.map((e) => {
       const salvo = porEvento.get(e.codigo)
       return {

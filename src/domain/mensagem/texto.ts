@@ -108,15 +108,29 @@ export function custoDoTexto(texto: string): CustoTexto {
  * número curto, não um nome: sem ele escrito aqui, o comprador não tem como
  * saber quem mandou.
  */
+/*
+  O código do pedido entra nos textos padrão; a lista de produtos não.
+
+  Quem compra em três lojas na mesma semana recebe "seu pedido foi postado"
+  três vezes e não sabe qual é qual — `{{pedido}}` custa uns dez caracteres e
+  resolve isso.
+
+  `{{produtos}}` fica disponível, mas fora do padrão: SMS é cobrado a cada 160
+  caracteres, e uma lista de itens pode dobrar o preço de toda mensagem da
+  conta. Quem quiser, acrescenta na tela e vê o custo antes de salvar.
+*/
 export const TEXTOS_PADRAO_SMS: Record<string, string> = {
   PEDIDO_PAGO:
-    '{{loja}}: pagamento confirmado, {{cliente}}! Segue o link de rastreio do seu pedido: {{link_rastreio}}',
-  ETIQUETA_EMITIDA: '{{loja}}: seu pedido foi postado! Rastreie em {{link_rastreio}}',
-  POSTADO: '{{loja}}: seu pedido saiu para a transportadora. Acompanhe em {{link_rastreio}}',
-  SAIU_PARA_ENTREGA: '{{loja}}: seu pedido sai para entrega hoje! {{link_rastreio}}',
+    '{{loja}}: pagamento confirmado, {{cliente}}! Pedido {{pedido}}. Rastreie em: {{link_rastreio}}',
+  ETIQUETA_EMITIDA:
+    '{{loja}}: pedido {{pedido}} postado! Codigo {{codigo_rastreio}}. Acompanhe em {{link_rastreio}}',
+  POSTADO:
+    '{{loja}}: pedido {{pedido}} saiu para a transportadora. Acompanhe em {{link_rastreio}}',
+  SAIU_PARA_ENTREGA:
+    '{{loja}}: {{cliente}}, seu pedido {{pedido}} sai para entrega hoje em {{cidade}}! {{link_rastreio}}',
   TENTATIVA_FRUSTRADA:
-    '{{loja}}: tentamos entregar e nao encontramos ninguem. Nova tentativa no proximo dia util. {{link_rastreio}}',
+    '{{loja}}: tentamos entregar o pedido {{pedido}} e nao encontramos ninguem. Nova tentativa no proximo dia util. {{link_rastreio}}',
   AGUARDANDO_RETIRADA:
-    '{{loja}}: seu pedido aguarda retirada. Leve um documento com foto. Detalhes em {{link_rastreio}}',
-  ENTREGUE: '{{loja}}: seu pedido foi entregue! Obrigado pela compra.',
+    '{{loja}}: pedido {{pedido}} aguarda retirada. Leve um documento com foto. Detalhes em {{link_rastreio}}',
+  ENTREGUE: '{{loja}}: {{cliente}}, seu pedido {{pedido}} foi entregue! Obrigado pela compra.',
 }

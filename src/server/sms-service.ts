@@ -7,6 +7,7 @@ import { cifrar, decifrar, dicaDaChave } from '@/infra/crypto/segredo'
 import { smsProvider, type CredenciaisSms } from '@/infra/sms'
 import { normalizarTelefone } from '@/infra/whatsapp/cloud-api'
 import { compor, custoDoTexto, TEXTOS_PADRAO_SMS } from '@/domain/mensagem/texto'
+import { montarValores } from '@/server/valores-da-mensagem'
 
 /**
  * Canal de SMS: da configuração ao envio.
@@ -492,56 +493,15 @@ async function valoresDe(item: {
   perfilId: string
   shipmentId: string | null
   perfil: { nome: string; nomeExibicao: string | null }
-  pedido: { clienteNome: string; valorCentavos: number; checkoutUrl: string | null } | null
+  pedido: {
+    clienteNome: string
+    valorCentavos: number
+    checkoutUrl: string | null
+    externalId?: string | null
+    produtos?: unknown
+  } | null
 }): Promise<Record<string, string>> {
-  const base = process.env.APP_URL ?? 'https://app.martinslog.net'
-  /*
-    O comprador vê `nomeExibicao`; o nome interno é do painel. Quem não
-    configurou nada cai no interno, que é melhor do que uma mensagem sem
-    remetente nenhum.
-  */
-  const valores: Record<string, string> = {
-    loja: item.perfil.nomeExibicao?.trim() || item.perfil.nome,
-  }
-
-  if (item.pedido) {
-    valores.cliente = primeiroNome(item.pedido.clienteNome)
-    valores.valor = (item.pedido.valorCentavos / 100).toLocaleString('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    })
-    valores.link_checkout = item.pedido.checkoutUrl ?? ''
-  }
-
-  if (item.shipmentId) {
-    const envio = await prisma.shipment.findUnique({
-      where: { id: item.shipmentId },
-      select: { codigoRastreio: true, destinatario: true },
-    })
-
-    if (envio?.codigoRastreio) {
-      valores.codigo_rastreio = envio.codigoRastreio
-      valores.link_rastreio = `${base}/r/${envio.codigoRastreio}`
-    }
-
-    const destinatario = envio?.destinatario as { nome?: string } | null
-    if (!valores.cliente && destinatario?.nome) {
-      valores.cliente = primeiroNome(destinatario.nome)
-    }
-  }
-
-  return valores
-}
-
-/**
- * Só o primeiro nome.
- *
- * Cabe no limite de 160 caracteres e soa como gente. "Maria" em vez de
- * "Maria Aparecida da Conceição Santos" pode ser a diferença entre uma
- * mensagem e duas cobradas.
- */
-function primeiroNome(completo: string): string {
-  return completo.trim().split(/\s+/)[0] ?? completo
+  return montarValores(item)
 }
 
 export { custoDoTexto }
