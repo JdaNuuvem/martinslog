@@ -119,6 +119,14 @@ type Tx = Prisma.TransactionClient
  *
  * A busca por chave é exata nas três: as colunas são únicas, e o que decide
  * se dois valores são "o mesmo" já foi resolvido na normalização.
+ *
+ * O `orderBy` tem três níveis, e não um só. Com contato empatado, sobrevive
+ * o que entrou na base primeiro (`criadoEm`); `id` fecha a ordem total, pois
+ * dois leads podem até empatar em `criadoEm`. Sem esse desempate, uma carga
+ * inicial com horários iguais — ou dois eventos que aconteceram ao mesmo
+ * tempo — faria o Postgres devolver as linhas empatadas em ordem arbitrária,
+ * e o sobrevivente da fusão viraria sorteio a cada execução; e esse id pode
+ * já estar referenciado em outro lugar que leu a base antes.
  */
 async function leadsQueCasam(tx: Tx, chaves: Chaves) {
   const achados = await tx.lead.findMany({
@@ -129,7 +137,7 @@ async function leadsQueCasam(tx: Tx, chaves: Chaves) {
         ...(chaves.email ? [{ emailNormalizado: chaves.email }] : []),
       ],
     },
-    orderBy: { primeiroContatoEm: 'asc' },
+    orderBy: [{ primeiroContatoEm: 'asc' }, { criadoEm: 'asc' }, { id: 'asc' }],
   })
 
   return achados

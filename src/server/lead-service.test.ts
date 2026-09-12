@@ -83,7 +83,12 @@ describe('registrarLead', () => {
       leads mais completos (com CPF E WhatsApp) que a duplicata apareceria.
     */
     const porConversa = await registrarLead(
-      base({ tipo: 'CONVERSA', telefone: '21999990002', conversaId: 'c1' }),
+      base({
+        tipo: 'CONVERSA',
+        telefone: '21999990002',
+        conversaId: 'c1',
+        ocorridoEm: new Date('2026-08-01T10:00:00Z'),
+      }),
     )
     const porCpf = await registrarLead(
       base({ cpf: CPF, pedidoId: 'p1', valorCentavos: 7000 }),
@@ -105,6 +110,28 @@ describe('registrarLead', () => {
     // O sobrevivente é o de contato mais antigo: é ele que carrega a data
     // verdadeira do primeiro contato daquela pessoa.
     expect(sobrevivente.id).toBe(porConversa)
+  })
+
+  it('com contato empatado, sobrevive o lead que entrou na base primeiro', async () => {
+    /*
+      O caso da carga inicial: eventos importados de uma vez só chegam com o
+      mesmo horário, ou dois eventos de verdade aconteceram ao mesmo tempo.
+      `primeiroContatoEm` sozinho não desempata, e é o `criadoEm` — a ordem
+      real de entrada na base — que decide quem sobrevive.
+    */
+    const porTelefone = await registrarLead(
+      base({ tipo: 'CONVERSA', telefone: '21999990010', conversaId: 'c10' }),
+    )
+    const porCpf = await registrarLead(base({ cpf: CPF, pedidoId: 'p10' }))
+    expect(porCpf).not.toBe(porTelefone)
+
+    await registrarLead(
+      base({ tipo: 'ENVIO', cpf: CPF, telefone: '21999990010', shipmentId: 's10' }),
+    )
+
+    expect(await prisma.lead.count()).toBe(1)
+    const sobrevivente = await prisma.lead.findFirstOrThrow()
+    expect(sobrevivente.id).toBe(porTelefone)
   })
 
   it('funde também quando a busca casa primeiro pelo CPF', async () => {
