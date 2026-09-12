@@ -56,6 +56,9 @@ export default defineConfig({
       // Chave mestra da cifra de segredos de terceiros. Valor só de teste;
       // em produção vem do ambiente e não tem padrão nenhum.
       SECRET_ENCRYPTION_KEY: 'y'.repeat(48),
+      // Segredo para impressão digital de CPF na base de leads. Valor de teste;
+      // em produção vem do ambiente e é validado em src/env.ts.
+      LEAD_FINGERPRINT_KEY: process.env.LEAD_FINGERPRINT_KEY ?? 'chave-de-teste-para-impressao-digital-de-cpf-nao-use-em-producao',
       NODE_ENV: 'test',
     },
     coverage: {

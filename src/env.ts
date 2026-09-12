@@ -28,6 +28,20 @@ const schema = z.object({
   WEBHOOK_CRON_TOKEN: z.string().min(32).optional(),
 
   /**
+   * Segredo que transforma o CPF em impressão digital na base de leads.
+   *
+   * Separado de `SECRET_ENCRYPTION_KEY` de propósito: as duas protegem
+   * coisas diferentes, e rotacionar uma não deve invalidar a outra.
+   *
+   * CUIDADO AO TROCAR: as impressões digitais deixam de bater e TODO lead
+   * antigo vira inencontrável — a mesma pessoa passa a ser criada de novo,
+   * do zero. É consequência inevitável de qualquer chave derivada de
+   * segredo, e não há migração que conserte, porque o CPF de origem não
+   * está guardado em claro em lugar nenhum.
+   */
+  LEAD_FINGERPRINT_KEY: z.string().min(32).optional(),
+
+  /**
    * Endereço público da aplicação, usado para montar o link de rastreio que
    * vai no SMS e no WhatsApp do comprador.
    *
