@@ -1279,3 +1279,102 @@ model MensagemEnvio {
   @@index([perfilId, criadoEm])
   @@map("mensagem_envios")
 }
+
+/// De onde um lead veio. Cada aparição da pessoa gera uma linha em
+/// `LeadOrigem`; este enum diz qual porta ela usou daquela vez.
+enum OrigemLead {
+  PEDIDO_PAGO
+  PEDIDO_PENDENTE
+  ENVIO
+  CONVERSA
+}
+
+/// Uma pessoa que comprou (ou quase comprou) em alguma loja da plataforma.
+///
+/// Existe porque o dado do comprador estava espalhado por `Pedido`,
+/// `Shipment.destinatario`, `Address` e `Conversa`, sem nada que dissesse
+/// "esta pessoa": a mesma compradora com três pedidos em duas lojas e uma
+/// conversa era sete linhas desconexas.
+///
+/// A base é da PLATAFORMA, não da loja: o mesmo comprador aparece uma vez
+/// ainda que tenha comprado em três lugares, e `LeadOrigem` guarda de quais
+/// lojas ele veio.
+model Lead {
+  id String @id @default(cuid())
+
+  nome String?
+
+  /// Como a pessoa informou. O normalizado ao lado é o que compara.
+  email             String?
+  /// Minúsculas e sem espaços. Chave de reserva quando não há CPF.
+  emailNormalizado  String? @unique
+
+  telefone            String?
+  /// Só dígitos, sem o DDI 55. Sem isso "(21) 99999-0001" e "5521999990001"
+  /// viram duas pessoas.
+  telefoneNormalizado String? @unique
+
+  /// HMAC-SHA256 do CPF — a chave principal de identidade.
+  ///
+  /// HMAC, e não SHA-256 puro: existem cerca de um bilhão de CPFs válidos, e
+  /// testar todos contra um hash sem segredo leva segundos numa placa de
+  /// vídeo comum. Sem o segredo do servidor, esta coluna não diz nada a quem
+  /// rouba o banco.
+  cpfHash    String? @unique
+  /// O CPF em si, cifrado. Só é decifrado quando alguém pede para ver, e o
+  /// pedido fica registrado em `AuditLog`.
+  cpfCifrado String?
+
+  primeiroContatoEm DateTime
+  ultimoContatoEm   DateTime
+
+  /// Resumo mantido na escrita, para a lista não somar nada na leitura.
+  totalPedidos       Int @default(0)
+  totalEnvios        Int @default(0)
+  valorTotalCentavos Int @default(0)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  origens LeadOrigem[]
+
+  @@index([ultimoContatoEm])
+  @@index([nome])
+  @@map("leads")
+}
+
+/// Cada vez que a pessoa apareceu, e por onde.
+model LeadOrigem {
+  id     String     @id @default(cuid())
+  leadId String
+  tipo   OrigemLead
+
+  /// De qual loja veio. Nulo só em origem que não tem perfil.
+  perfilId String?
+
+  pedidoId   String?
+  shipmentId String?
+  conversaId String?
+
+  ocorridoEm DateTime
+
+  criadoEm DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  /// Reprocessar a mesma origem não cria linha repetida — é o que torna a
+  /// carga inicial idempotente e permite interrompê-la e retomá-la.
+  ///
+  /// CUIDADO — ISTO AQUI NÃO É A VERDADE INTEIRA. No banco, o índice é criado
+  /// com `NULLS NOT DISTINCT`, cláusula que o Prisma não sabe escrever. Sem
+  /// ela, cada origem preenche só uma das três colunas (pedidoId OU
+  /// shipmentId OU conversaId) e o Postgres trata as duas nulas restantes
+  /// como sempre diferentes — a trava não vale justamente para o caso que
+  /// acontece sempre. Mesmo cuidado de `20260903090000_trava_duplicata_com_nulos`.
+  /// Quem regenerar migration a partir deste schema precisa conferir se a
+  /// cláusula sobreviveu: ver `20260912192405_base_de_leads/migration.sql`.
+  @@unique([tipo, pedidoId, shipmentId, conversaId], map: "lead_origens_dedupe_key")
+  @@index([leadId, ocorridoEm])
+  @@index([perfilId])
+  @@map("lead_origens")
+}
