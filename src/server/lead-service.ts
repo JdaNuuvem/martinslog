@@ -143,6 +143,8 @@ async function leadsQueCasam(tx: Tx, chaves: Chaves) {
   return achados
 }
 
+type Candidato = Awaited<ReturnType<typeof leadsQueCasam>>[number]
+
 async function criarLead(tx: Tx, entrada: EntradaLead, chaves: Chaves & { cpf: string | null }) {
   const lead = await tx.lead.create({
     data: {
@@ -164,23 +166,59 @@ async function criarLead(tx: Tx, entrada: EntradaLead, chaves: Chaves & { cpf: s
 /**
  * Reduz os candidatos a um lead só e escreve nele o que a aparição trouxe.
  *
- * O SOBREVIVENTE é o de contato mais antigo, e não o mais completo: ele é o
- * que carrega o `primeiroContatoEm` verdadeiro daquela pessoa, e é o id que
- * já pode estar referenciado em qualquer lugar que tenha lido a base antes.
+ * O ALVO é o primeiro da ordem (contato mais antigo) ENTRE os candidatos
+ * COMPATÍVEIS com o CPF da entrada — `cpfHash` nulo, ou igual ao da entrada.
+ * Sem CPF na entrada, todos são compatíveis e vale o primeiro da ordem puro e
+ * simples, como sempre foi.
+ *
+ * Não basta pegar sempre o primeiro da ordem, ignorando o CPF: um candidato
+ * mais antigo que carrega o CPF de OUTRA pessoa — e só casou pelo telefone
+ * compartilhado — não pode virar o dono da aparição de quem tem o CPF da
+ * entrada. Isso jogaria a origem na pessoa errada. E não basta ir direto no
+ * dono do CPF, ignorando a ordem: isso faria o CPF vencer mesmo quando não
+ * há conflito nenhum, quebrando a regra de que o de contato mais antigo
+ * sobrevive.
+ *
+ * Nem todo candidato é fundido no alvo. Dois leads com `cpfHash` PREENCHIDOS
+ * e DIFERENTES são pessoas distintas por definição — um casal ou uma loja
+ * dividindo o mesmo telefone, por exemplo — e fundi-los apagaria o CPF de um
+ * deles. Esses candidatos ficam de fora da fusão; a aparição só atualiza o
+ * alvo.
+ *
+ * O alvo é relido após cada fusão, porque ele pode ter ganhado um `cpfHash`
+ * do absorvido — e esse CPF novo pode entrar em conflito com o próximo
+ * candidato da lista.
  */
 async function consolidar(
   tx: Tx,
-  candidatos: { id: string }[],
+  candidatos: Candidato[],
   entrada: EntradaLead,
   chaves: Chaves & { cpf: string | null },
 ): Promise<string> {
-  const [sobrevivente, ...gemeos] = candidatos
+  const compativelComEntrada = (c: Candidato) =>
+    chaves.cpfHash === null || c.cpfHash === null || c.cpfHash === chaves.cpfHash
 
-  for (const gemeo of gemeos) {
-    await fundir(tx, sobrevivente!.id, gemeo.id)
+  const alvo = candidatos.find(compativelComEntrada) ?? candidatos[0]!
+  const alvoId = alvo.id
+  let alvoCpfHash = alvo.cpfHash
+
+  for (const candidato of candidatos) {
+    if (candidato.id === alvoId) continue
+
+    const pessoasDistintas =
+      alvoCpfHash !== null && candidato.cpfHash !== null && alvoCpfHash !== candidato.cpfHash
+    if (pessoasDistintas) continue
+
+    await fundir(tx, alvoId, candidato.id)
+
+    const atualizado = await tx.lead.findUniqueOrThrow({
+      where: { id: alvoId },
+      select: { cpfHash: true },
+    })
+    alvoCpfHash = atualizado.cpfHash
   }
 
-  return aplicarDados(tx, sobrevivente!.id, entrada, chaves)
+  return aplicarDados(tx, alvoId, entrada, chaves)
 }
 
 /**
@@ -191,6 +229,13 @@ async function consolidar(
  * únicos, então copiar o telefone do absorvido para o sobrevivente enquanto
  * os dois existem viola a restrição e aborta a transação inteira. Por isso o
  * absorvido é lido, depois apagado, e só então os valores são reatribuídos.
+ *
+ * O `cpfHash` (e o `cpfCifrado` junto) entra na mesma regra de "preenche só
+ * se estiver vazio" que os outros campos — e não pode ficar de fora dela.
+ * Sem copiar o CPF do absorvido, um lead só com telefone que absorve um lead
+ * com CPF e e-mail perderia o CPF na fusão; o próximo pedido com aquele CPF
+ * não encontraria mais nenhum lead com ele e recriaria a duplicata que a
+ * fusão devia ter eliminado.
  */
 async function fundir(tx: Tx, sobreviventeId: string, absorvidoId: string): Promise<void> {
   const absorvido = await tx.lead.findUniqueOrThrow({ where: { id: absorvidoId } })
@@ -203,6 +248,20 @@ async function fundir(tx: Tx, sobreviventeId: string, absorvidoId: string): Prom
 
   await tx.lead.delete({ where: { id: absorvidoId } })
 
+  /*
+    totalPedidos não é soma. Cada lead pode ter contado o MESMO pedido — um
+    pedido pendente registrado num lead só com telefone e o mesmo pedido,
+    já pago, registrado noutro lead só com e-mail — antes de a fusão revelar
+    que eram a mesma pessoa. Somar os dois totais contaria esse pedido duas
+    vezes. Por isso o total é recalculado do zero, contando `pedidoId`
+    distintos entre as origens (já movidas para o sobrevivente) de pedido.
+  */
+  const origensDePedido = await tx.leadOrigem.findMany({
+    where: { leadId: sobreviventeId, tipo: { in: ['PEDIDO_PENDENTE', 'PEDIDO_PAGO'] } },
+    select: { pedidoId: true },
+  })
+  const totalPedidos = new Set(origensDePedido.map((o) => o.pedidoId)).size
+
   await tx.lead.update({
     where: { id: sobreviventeId },
     data: {
@@ -211,7 +270,12 @@ async function fundir(tx: Tx, sobreviventeId: string, absorvidoId: string): Prom
       emailNormalizado: sobrevivente.emailNormalizado ?? absorvido.emailNormalizado,
       telefone: sobrevivente.telefone ?? absorvido.telefone,
       telefoneNormalizado: sobrevivente.telefoneNormalizado ?? absorvido.telefoneNormalizado,
-      totalPedidos: sobrevivente.totalPedidos + absorvido.totalPedidos,
+      cpfHash: sobrevivente.cpfHash ?? absorvido.cpfHash,
+      cpfCifrado: sobrevivente.cpfCifrado ?? absorvido.cpfCifrado,
+      totalPedidos,
+      // ENVIO e PEDIDO_PAGO têm chave de idempotência global (shipmentId e
+      // pedidoId não se repetem entre leads diferentes), então somar os dois
+      // lados aqui não conta nada duas vezes — diferente de totalPedidos.
       totalEnvios: sobrevivente.totalEnvios + absorvido.totalEnvios,
       valorTotalCentavos: sobrevivente.valorTotalCentavos + absorvido.valorTotalCentavos,
       primeiroContatoEm:
@@ -224,6 +288,24 @@ async function fundir(tx: Tx, sobreviventeId: string, absorvidoId: string): Prom
           : sobrevivente.ultimoContatoEm,
     },
   })
+}
+
+/**
+ * Verdadeiro quando nenhum OUTRO lead já segura este valor normalizado.
+ *
+ * Existe porque um candidato pulado por `consolidar` — pessoa distinta, CPF
+ * diferente — pode mesmo assim compartilhar telefone ou e-mail com o alvo
+ * que está sendo atualizado agora. Gravar por cima sem checar bateria na
+ * restrição única daquele outro lead e abortaria a transação inteira.
+ */
+async function semConflito(
+  tx: Tx,
+  leadId: string,
+  campo: 'emailNormalizado' | 'telefoneNormalizado' | 'cpfHash',
+  valor: string,
+): Promise<boolean> {
+  const outro = await tx.lead.findFirst({ where: { [campo]: valor, NOT: { id: leadId } } })
+  return outro === null
 }
 
 /**
@@ -251,18 +333,34 @@ async function aplicarDados(
   const nomeVence =
     nomeNovo !== null && (atual.nome === null || ORIGENS_COM_NOME_CONFIAVEL.includes(entrada.tipo))
 
+  // Só preenche um campo vazio se nenhum outro lead já segurar aquele valor
+  // (ver `semConflito`). Campo já preenchido nunca é reavaliado aqui.
+  const emailLivre =
+    !atual.emailNormalizado && chaves.email
+      ? await semConflito(tx, leadId, 'emailNormalizado', chaves.email)
+      : false
+  const telefoneLivre =
+    !atual.telefoneNormalizado && chaves.telefone
+      ? await semConflito(tx, leadId, 'telefoneNormalizado', chaves.telefone)
+      : false
+  // O CPF, uma vez conhecido, nunca é trocado: ele é a chave de identidade,
+  // e trocá-lo transformaria o lead em outra pessoa. Só entra quando o atual
+  // está vazio.
+  const cpfHashLivre =
+    !atual.cpfHash && chaves.cpfHash
+      ? await semConflito(tx, leadId, 'cpfHash', chaves.cpfHash)
+      : false
+
   await tx.lead.update({
     where: { id: leadId },
     data: {
       nome: nomeVence ? nomeNovo : atual.nome,
-      email: atual.email ?? entrada.email?.trim() ?? null,
-      emailNormalizado: atual.emailNormalizado ?? chaves.email,
-      telefone: atual.telefone ?? entrada.telefone?.trim() ?? null,
-      telefoneNormalizado: atual.telefoneNormalizado ?? chaves.telefone,
-      // O CPF, uma vez conhecido, nunca é trocado: ele é a chave de
-      // identidade, e trocá-lo transformaria o lead em outra pessoa.
-      cpfHash: atual.cpfHash ?? chaves.cpfHash,
-      cpfCifrado: atual.cpfCifrado ?? (chaves.cpf ? cifrar(chaves.cpf) : null),
+      email: emailLivre ? entrada.email?.trim() || null : atual.email,
+      emailNormalizado: emailLivre ? chaves.email : atual.emailNormalizado,
+      telefone: telefoneLivre ? entrada.telefone?.trim() || null : atual.telefone,
+      telefoneNormalizado: telefoneLivre ? chaves.telefone : atual.telefoneNormalizado,
+      cpfHash: cpfHashLivre ? chaves.cpfHash : atual.cpfHash,
+      cpfCifrado: cpfHashLivre && chaves.cpf ? cifrar(chaves.cpf) : atual.cpfCifrado,
       primeiroContatoEm:
         entrada.ocorridoEm < atual.primeiroContatoEm ? entrada.ocorridoEm : atual.primeiroContatoEm,
       ultimoContatoEm:
@@ -337,7 +435,13 @@ async function registrarOrigem(tx: Tx, leadId: string, entrada: EntradaLead): Pr
           ? { increment: 1 }
           : undefined,
       totalEnvios: entrada.tipo === 'ENVIO' ? { increment: 1 } : undefined,
-      valorTotalCentavos: entrada.valorCentavos ? { increment: entrada.valorCentavos } : undefined,
+      // Só PEDIDO_PAGO carrega valor de compra de verdade; um valor vindo de
+      // outro tipo de origem não deveria existir, mas a checagem explícita
+      // evita que um `valorCentavos` incidental de ENVIO ou CONVERSA some.
+      valorTotalCentavos:
+        entrada.tipo === 'PEDIDO_PAGO' && entrada.valorCentavos
+          ? { increment: entrada.valorCentavos }
+          : undefined,
     },
   })
 }

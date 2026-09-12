@@ -153,6 +153,137 @@ describe('registrarLead', () => {
     expect(await prisma.lead.count()).toBe(1)
   })
 
+  it('fusão sem CPF na entrada preserva o CPF do lead absorvido', async () => {
+    /*
+      Lead A só com telefone; lead B com CPF e e-mail. Chega uma CONVERSA
+      trazendo o telefone de A e o e-mail de B, sem CPF nenhum — a entrada
+      não sabe do CPF, mas a fusão não pode jogá-lo fora: sem ele, o próximo
+      pedido com esse CPF não encontraria mais ninguém e recriaria a
+      duplicata que esta fusão devia ter eliminado.
+    */
+    const porTelefone = await registrarLead(
+      base({ tipo: 'CONVERSA', telefone: '21999990020', conversaId: 'c20' }),
+    )
+    await registrarLead(base({ cpf: CPF, email: 'a@exemplo.com', pedidoId: 'p20' }))
+    expect(await prisma.lead.count()).toBe(2)
+
+    await registrarLead(
+      base({
+        tipo: 'CONVERSA',
+        telefone: '21999990020',
+        email: 'a@exemplo.com',
+        conversaId: 'c21',
+      }),
+    )
+
+    expect(await prisma.lead.count()).toBe(1)
+    const sobrevivente = await prisma.lead.findFirstOrThrow()
+    expect(sobrevivente.cpfHash).not.toBeNull()
+    expect(sobrevivente.id).toBe(porTelefone)
+  })
+
+  it('leads com CPFs diferentes que dividem telefone não se fundem', async () => {
+    /*
+      Um casal, ou uma loja usando o próprio número: dois CPFs diferentes
+      podem compartilhar telefone ou e-mail sem serem a mesma pessoa. Fundir
+      esses dois leads apagaria o CPF de um deles — o oposto do que a fusão
+      existe para proteger.
+    */
+    await registrarLead(base({ cpf: CPF, telefone: '21999990021', pedidoId: 'p21' }))
+    await registrarLead(base({ cpf: OUTRO_CPF, email: 'b@exemplo.com', pedidoId: 'p22' }))
+    expect(await prisma.lead.count()).toBe(2)
+
+    await expect(
+      registrarLead(
+        base({ tipo: 'CONVERSA', telefone: '21999990021', email: 'b@exemplo.com', conversaId: 'c22' }),
+      ),
+    ).resolves.not.toThrow()
+
+    expect(await prisma.lead.count()).toBe(2)
+    expect(await prisma.leadOrigem.count({ where: { conversaId: 'c22' } })).toBe(1)
+  })
+
+  it('entrada com CPF vai para o dono do CPF mesmo quando um lead mais antigo de outro CPF divide o telefone', async () => {
+    /*
+      X é mais antigo e divide o telefone com a entrada, mas o CPF dele é
+      OUTRO. Y é mais novo, mas é o dono do CPF que a entrada traz. A aparição
+      é de Y, não de X — pegar sempre "o mais antigo" jogaria a origem na
+      pessoa errada; ir direto "no dono do CPF" ignorando a ordem quebraria o
+      caso sem conflito algum, testado acima.
+    */
+    const x = await registrarLead(
+      base({
+        cpf: OUTRO_CPF,
+        telefone: '21999990030',
+        pedidoId: 'p30',
+        ocorridoEm: new Date('2026-08-01T10:00:00Z'),
+      }),
+    )
+    const y = await registrarLead(base({ cpf: CPF, pedidoId: 'p31' }))
+    expect(await prisma.lead.count()).toBe(2)
+
+    await registrarLead(
+      base({ tipo: 'ENVIO', cpf: CPF, telefone: '21999990030', shipmentId: 's30' }),
+    )
+
+    expect(await prisma.lead.count()).toBe(2)
+    const origemNova = await prisma.leadOrigem.findFirstOrThrow({ where: { shipmentId: 's30' } })
+    expect(origemNova.leadId).toBe(y)
+    const leadX = await prisma.lead.findUniqueOrThrow({ where: { id: x! } })
+    expect(leadX.cpfHash).not.toBeNull()
+  })
+
+  it('pedido pendente num lead e pago noutro conta uma vez após a fusão', async () => {
+    /*
+      O mesmo pedido pode ser contado em dois leads diferentes antes de a
+      fusão revelar que são a mesma pessoa: pendente, só com telefone; pago,
+      só com e-mail. Somar os dois totais na fusão contaria esse pedido duas
+      vezes — por isso o total é recalculado por pedidoId distinto.
+    */
+    await registrarLead(
+      base({ tipo: 'PEDIDO_PENDENTE', telefone: '21999990023', pedidoId: 'p23' }),
+    )
+    await registrarLead(
+      base({ tipo: 'PEDIDO_PAGO', email: 'c@exemplo.com', pedidoId: 'p23', valorCentavos: 4000 }),
+    )
+    expect(await prisma.lead.count()).toBe(2)
+
+    await registrarLead(
+      base({
+        tipo: 'ENVIO',
+        telefone: '21999990023',
+        email: 'c@exemplo.com',
+        shipmentId: 's23',
+      }),
+    )
+
+    expect(await prisma.lead.count()).toBe(1)
+    const lead = await prisma.lead.findFirstOrThrow()
+    expect(lead.totalPedidos).toBe(1)
+  })
+
+  it('pedido pendente com valor seguido do pago não soma valor em dobro', async () => {
+    await registrarLead(
+      base({
+        tipo: 'PEDIDO_PENDENTE',
+        telefone: '21999990024',
+        pedidoId: 'p24',
+        valorCentavos: 5000,
+      }),
+    )
+    await registrarLead(
+      base({
+        tipo: 'PEDIDO_PAGO',
+        telefone: '21999990024',
+        pedidoId: 'p24',
+        valorCentavos: 5000,
+      }),
+    )
+
+    const lead = await prisma.lead.findFirstOrThrow()
+    expect(lead.valorTotalCentavos).toBe(5000)
+  })
+
   it('não grava o CPF em claro em nenhuma coluna', async () => {
     const id = await registrarLead(base({ cpf: CPF, pedidoId: 'p1' }))
     const lead = await prisma.lead.findUniqueOrThrow({ where: { id: id! } })
