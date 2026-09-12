@@ -98,6 +98,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       filtros, que é a pergunta que se faz depois.
     */
     const cpfPorLead = new Map<string, string>()
+    let cpfsIlegiveis = 0
 
     if (cpfCompleto) {
       const cifrados = await prisma.lead.findMany({
@@ -105,8 +106,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         select: { id: true, cpfCifrado: true },
       })
 
+      /*
+        Um registro ilegível vira a célula `ilegível` e é CONTADO na
+        auditoria, em vez de derrubar a exportação das outras dez mil linhas.
+        O log leva só o id, nunca o valor cifrado.
+      */
       for (const registro of cifrados) {
-        if (registro.cpfCifrado) cpfPorLead.set(registro.id, decifrarCampo(registro.cpfCifrado))
+        if (!registro.cpfCifrado) continue
+        try {
+          cpfPorLead.set(registro.id, decifrarCampo(registro.cpfCifrado))
+        } catch {
+          cpfsIlegiveis += 1
+          console.error('CPF de lead ilegível na exportação', { leadId: registro.id })
+          cpfPorLead.set(registro.id, 'ilegível')
+        }
       }
     }
 
@@ -154,6 +167,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           linhas: leads.length,
           totalNaBase: total,
           cpfCompleto,
+          cpfsIlegiveis,
           filtros: {
             loja: filtro.perfilId ?? null,
             origem: filtro.origem ?? null,

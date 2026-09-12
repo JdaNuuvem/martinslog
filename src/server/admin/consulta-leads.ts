@@ -49,6 +49,22 @@ function mascarar(cpf: string): string {
   return `***.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-**`
 }
 
+/**
+ * Decifra e mascara, sem derrubar a tela quando o valor cifrado é ilegível.
+ *
+ * Um único registro corrompido — chave trocada, cópia de banco malfeita —
+ * não pode tirar do ar a listagem inteira, o detalhe e a exportação. O log
+ * leva só o `leadId`: o valor cifrado não vai para log nenhum.
+ */
+function mascararCpfCifrado(leadId: string, cifrado: string): string {
+  try {
+    return mascarar(decifrarCampo(cifrado))
+  } catch {
+    console.error('CPF de lead ilegível', { leadId })
+    return 'ilegível'
+  }
+}
+
 /** Um único aviso por processo quando falta a chave da impressão digital. */
 let avisouChaveAusente = false
 
@@ -164,7 +180,7 @@ export async function listarLeads(filtro: FiltroLeads = {}): Promise<ResultadoLe
       tela ou tire um print. No detalhe, ler mil exige mil ações — e cada uma
       fica registrada.
     */
-    cpfMascarado: lead.cpfCifrado ? mascarar(decifrarCampo(lead.cpfCifrado)) : null,
+    cpfMascarado: lead.cpfCifrado ? mascararCpfCifrado(lead.id, lead.cpfCifrado) : null,
     lojas: lead.origens
       .map((o) => (o.perfilId ? nomeDoPerfil.get(o.perfilId) : null))
       .filter((nome): nome is string => nome !== null && nome !== undefined),
@@ -205,7 +221,7 @@ export async function obterLead(leadId: string): Promise<LeadDetalhe | null> {
     nome: lead.nome,
     email: lead.email,
     telefone: lead.telefone,
-    cpfMascarado: lead.cpfCifrado ? mascarar(decifrarCampo(lead.cpfCifrado)) : null,
+    cpfMascarado: lead.cpfCifrado ? mascararCpfCifrado(lead.id, lead.cpfCifrado) : null,
     lojas: [
       ...new Set(
         lead.origens

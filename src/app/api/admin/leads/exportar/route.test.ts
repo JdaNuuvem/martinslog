@@ -115,6 +115,27 @@ describe('GET /api/admin/leads/exportar', () => {
     expect(registro?.entidade).toBe('Lead')
   })
 
+  it('CPF cifrado ilegível vira célula "ilegível" e é contado na auditoria', async () => {
+    const leadId = await registrarLead({
+      tipo: 'PEDIDO_PAGO',
+      ocorridoEm: new Date(),
+      nome: 'Comprador CPF Ilegível',
+      telefone: telefoneDistinto(5001),
+      cpf: '52998224725',
+    })
+    await prisma.lead.update({ where: { id: leadId! }, data: { cpfCifrado: 'c1:00:00:00' } })
+
+    const resposta = await requisitar(sessaoAdmin, '?cpfCompleto=true')
+    expect(resposta.status).toBe(200)
+    expect(await resposta.text()).toContain('ilegível')
+
+    const registro = await prisma.auditLog.findFirst({
+      where: { actorUserId: adminId, acao: 'LEADS_EXPORTADOS' },
+      orderBy: { criadoEm: 'desc' },
+    })
+    expect((registro?.depois as { cpfsIlegiveis: number }).cpfsIlegiveis).toBe(1)
+  })
+
   it('traz TODAS as linhas do filtro, não só a primeira página', async () => {
     const quantidade = POR_PAGINA + 5
 

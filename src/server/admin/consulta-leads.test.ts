@@ -132,6 +132,18 @@ describe('obterLead', () => {
     expect(JSON.stringify(detalhe)).not.toContain(CPF)
   })
 
+  it('CPF cifrado ilegível não derruba listagem nem detalhe', async () => {
+    await semear()
+    const lead = await prisma.lead.findFirstOrThrow({ where: { nome: 'Maria Aparecida' } })
+    await prisma.lead.update({ where: { id: lead.id }, data: { cpfCifrado: 'c1:00:00:00' } })
+
+    const { leads } = await listarLeads()
+    expect(leads.find((l) => l.id === lead.id)?.cpfMascarado).toBe('ilegível')
+
+    const detalhe = await obterLead(lead.id)
+    expect(detalhe?.cpfMascarado).toBe('ilegível')
+  })
+
   it('devolve null para id que não existe', async () => {
     expect(await obterLead('nao-existe')).toBeNull()
   })
