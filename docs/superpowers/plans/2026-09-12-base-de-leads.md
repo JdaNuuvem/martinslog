@@ -1167,7 +1167,10 @@ describe('ingestão de leads', () => {
       expect(envio.codigoRastreio).not.toBeNull()
       expect(await prisma.lead.count()).toBe(0)
     } finally {
-      process.env.LEAD_FINGERPRINT_KEY = segredo
+      // `undefined` atribuído a `process.env` vira o texto "undefined" em vez
+      // de apagar a variável — e vazaria para os arquivos seguintes da suíte.
+      if (segredo === undefined) delete process.env.LEAD_FINGERPRINT_KEY
+      else process.env.LEAD_FINGERPRINT_KEY = segredo
     }
   })
 })
@@ -2418,7 +2421,17 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  process.env.SECRET_ENCRYPTION_KEY = anterior
+  /*
+    Restaura com `delete` quando não havia valor.
+
+    Atribuir `undefined` a uma variável de `process.env` NÃO a apaga: o Node
+    converte para o texto "undefined". Numa máquina sem o segredo configurado,
+    todo arquivo de teste rodado depois deste encontraria a chave valendo
+    "undefined" — nove caracteres, abaixo do mínimo — e falharia com um erro
+    que não aponta para cá.
+  */
+  if (anterior === undefined) delete process.env.SECRET_ENCRYPTION_KEY
+  else process.env.SECRET_ENCRYPTION_KEY = anterior
 })
 
 describe('cifrarCampo / decifrarCampo', () => {
