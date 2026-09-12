@@ -347,6 +347,71 @@ describe('percurso geográfico do roteiro', () => {
     expect(roteiro.every((e) => ['Santos', 'Campinas'].includes(e.cidade))).toBe(true)
   })
 
+  it('percurso com mais paradas do que a geografia comporta não empilha tudo na origem', () => {
+    /*
+      A queixa que originou esta regra: o lojista desenha oito transferências
+      entre São Paulo e Curitiba — 340 km, onde não cabe escala nenhuma — e o
+      rastreio mostrava oito dias em São Paulo. Pacote parado, para quem lê.
+    */
+    const longo = [
+      passo('ETIQUETA_EMITIDA', 0),
+      passo('POSTADO', 1),
+      ...Array.from({ length: 8 }, () => passo('TRANSFERENCIA', 1)),
+      passo('SAIU_PARA_ENTREGA', 1),
+      passo('ENTREGUE', 1),
+    ]
+
+    const roteiro = gerarRoteiroDeTemplate(longo, { cidade: 'São Paulo', uf: 'SP' }, {
+      cidade: 'Curitiba',
+      uf: 'PR',
+    })
+    const transito = roteiro.filter((e) => e.codigo.startsWith('TRANSFERENCIA'))
+
+    expect(transito.every((e) => e.cidade !== 'São Paulo')).toBe(true)
+  })
+
+  it('trecho longo com muitos nós mostra muitas cidades, sem voltar para trás', () => {
+    const longo = [
+      passo('ETIQUETA_EMITIDA', 0),
+      passo('POSTADO', 1),
+      ...Array.from({ length: 8 }, () => passo('TRANSFERENCIA', 1)),
+      passo('SAIU_PARA_ENTREGA', 1),
+      passo('ENTREGUE', 1),
+    ]
+
+    const roteiro = gerarRoteiroDeTemplate(longo, ceara, gaucho)
+    const transito = roteiro.filter((e) => e.codigo.startsWith('TRANSFERENCIA'))
+
+    // Pelo menos cinco cidades diferentes no caminho: é o que separa uma
+    // viagem de um salto.
+    expect(new Set(transito.map((e) => `${e.cidade}/${e.uf}`)).size).toBeGreaterThanOrEqual(5)
+
+    const latitudes = transito.map((e) => hubDaUf(e.uf)!.lat)
+    expect(latitudes.every((lat, i) => i === 0 || lat <= latitudes[i - 1]!)).toBe(true)
+  })
+
+  it('não anuncia deslocamento de uma cidade para ela mesma', () => {
+    const longo = [
+      passo('ETIQUETA_EMITIDA', 0),
+      passo('POSTADO', 1),
+      ...Array.from({ length: 5 }, () => passo('TRANSFERENCIA', 1)),
+      passo('SAIU_PARA_ENTREGA', 1),
+      passo('ENTREGUE', 1),
+    ]
+
+    const roteiro = gerarRoteiroDeTemplate(longo, { cidade: 'São Paulo', uf: 'SP' }, {
+      cidade: 'Curitiba',
+      uf: 'PR',
+    })
+
+    // "De Curitiba para Curitiba" não informa nada e denuncia a simulação.
+    expect(
+      roteiro.every(
+        (e) => !e.unidadeDestino || e.unidadeDestino !== e.unidadeOrigem,
+      ),
+    ).toBe(true)
+  })
+
   it('cada trânsito anuncia para onde vai, sem repetir a mesma dupla', () => {
     const roteiro = gerarRoteiroDeTemplate(fluxo, ceara, gaucho)
     const duplas = roteiro

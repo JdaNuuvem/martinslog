@@ -78,6 +78,48 @@ const DESVIO_MAXIMO_KM = 450
 const DISTANCIA_MINIMA_PARA_ESCALA_KM = 300
 
 /**
+ * A cada quantos quilômetros a encomenda ganha uma parada.
+ *
+ * É o que faz o rastreio parecer uma viagem em vez de um salto. Com um teto
+ * fixo de duas escalas, um Fortaleza–Porto Alegre de 3.500 km mostrava três
+ * cidades ao todo e a encomenda passava dias "em transferência" entre duas
+ * delas — quem acompanha conclui que o pacote parou. Uma parada a cada 600 km
+ * dá a esse mesmo trecho cinco cidades, e a cada leitura da página há algo
+ * novo acontecendo.
+ */
+const KM_POR_ESCALA = 600
+
+/**
+ * Teto de escalas.
+ *
+ * Não é limite técnico, é de leitura: passado disso a linha do tempo vira uma
+ * lista de nomes de cidade em que ninguém acha a informação que importa — onde
+ * está e quando chega.
+ */
+const ESCALAS_MAXIMAS = 5
+
+/**
+ * Quantas paradas o trecho entre duas localidades comporta.
+ *
+ * Separada de `escalasDaRota` porque quem monta o roteiro precisa do número
+ * antes de ter as cidades, e porque é aqui que mora a decisão de produto —
+ * quantas vezes o comprador vê a encomenda mudar de lugar.
+ */
+export function escalasSugeridas(
+  origem: LocalidadeSimulacao,
+  destino: LocalidadeSimulacao,
+): number {
+  const partida = hubDaUf(origem.uf)
+  const chegada = hubDaUf(destino.uf)
+  if (!partida || !chegada) return 0
+
+  const distancia = distanciaKm(partida, chegada)
+  if (distancia < DISTANCIA_MINIMA_PARA_ESCALA_KM) return 0
+
+  return Math.min(ESCALAS_MAXIMAS, Math.max(1, Math.round(distancia / KM_POR_ESCALA)))
+}
+
+/**
  * As cidades por onde a encomenda passa entre a origem e o destino, na ordem
  * da viagem.
  *

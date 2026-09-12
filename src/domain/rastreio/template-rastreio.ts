@@ -477,14 +477,31 @@ export function gerarRoteiroDeTemplate(
   const escalaPorIndice = new Map<number, { cidade: string; uf: string }>()
 
   /*
-    Menos escalas que nós de trânsito é o caso comum — o percurso desenhado
-    costuma ter mais paradas do que a geografia justifica. As escalas ficam
-    com os últimos nós, e os primeiros seguem na origem: a encomenda demora a
-    sair da cidade e depois avança, que é a ordem natural.
+    NENHUM nó de trânsito fica na cidade de origem.
+
+    Antes as escalas ficavam com os ÚLTIMOS nós e a sobra toda se acumulava no
+    ponto de partida — um percurso com cinco transferências entre São Paulo e
+    Curitiba, onde a geografia não justifica escala nenhuma, mostrava cinco
+    dias seguidos de "em transferência" sem sair de São Paulo. Quem acompanha
+    lê isso como pacote parado e liga para a loja.
+
+    Agora os nós se distribuem pelas paradas do caminho, na ordem: a primeira
+    transferência já tira a encomenda da cidade de quem postou, que é o evento
+    que o comprador está esperando. Quem quiser um passo de preparo na origem
+    tem os códigos de preparo para isso — trânsito é, por definição, a
+    encomenda andando.
   */
-  const primeiroComEscala = indicesEmTransito.length - escalas.length
-  escalas.forEach((escala, i) => {
-    escalaPorIndice.set(indicesEmTransito[primeiroComEscala + i]!, escala)
+  const paradas = [...escalas, destino]
+
+  indicesEmTransito.forEach((indiceDoPasso, i) => {
+    /*
+      Com mais nós desenhados do que paradas que a geografia comporta, dois
+      nós seguidos caem na mesma cidade — o que acontece de verdade quando a
+      encomenda chega e sai do mesmo centro de triagem, e é muito melhor do
+      que empilhá-los todos no ponto de partida.
+    */
+    const posicao = Math.floor((i * paradas.length) / indicesEmTransito.length)
+    escalaPorIndice.set(indiceDoPasso, paradas[posicao]!)
   })
 
   return passos.map((passo, indice) => {
@@ -498,10 +515,21 @@ export function gerarRoteiroDeTemplate(
       nada; ali só o último anuncia o destino.
     */
     const ehTransito = ehDeslocamento(passo.codigo)
-    const proximaParada =
+    const destinoDoTrecho =
       ehTransito && !noDestino && (escalaPorIndice.has(indice) || ehUltimoTransito(indice))
         ? proximoLocal(indice)
         : null
+
+    /*
+      "De Curitiba para Curitiba" não é destino, é ruído.
+
+      Acontece quando dois nós de trânsito seguidos caem na mesma cidade —
+      inevitável num percurso com mais paradas desenhadas do que a geografia
+      comporta. Nesse caso o evento diz só onde a encomenda está, que é a
+      informação verdadeira, e omite um deslocamento que não existe.
+    */
+    const proximaParada =
+      destinoDoTrecho && !mesmaCidade(destinoDoTrecho, local) ? destinoDoTrecho : null
 
     return {
       sequencia: indice + 1,
@@ -515,6 +543,17 @@ export function gerarRoteiroDeTemplate(
       uf: local.uf,
     }
   })
+
+  /** Duas localidades são o mesmo lugar para efeito de exibição. */
+  function mesmaCidade(
+    a: { cidade: string; uf: string },
+    b: { cidade: string; uf: string },
+  ): boolean {
+    return (
+      a.cidade.trim().toLowerCase() === b.cidade.trim().toLowerCase() &&
+      a.uf.trim().toUpperCase() === b.uf.trim().toUpperCase()
+    )
+  }
 
   /** Se é o último nó de deslocamento antes da entrega. */
   function ehUltimoTransito(indice: number): boolean {
