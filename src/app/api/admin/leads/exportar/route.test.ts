@@ -252,6 +252,21 @@ describe('GET /api/admin/leads/exportar', () => {
     expect(filtros.ate).toBe('2026-03-11T02:59:59.999Z')
   })
 
+  it('a auditoria não guarda loja que não é um perfil existente', async () => {
+    const valorNaoLoja = '52998224725'
+
+    const resposta = await requisitar(sessaoAdmin, `?loja=${valorNaoLoja}`)
+    expect(resposta.status).toBe(200)
+
+    const registro = await prisma.auditLog.findFirst({
+      where: { actorUserId: adminId, acao: 'LEADS_EXPORTADOS' },
+      orderBy: { criadoEm: 'desc' },
+    })
+    expect(registro).not.toBeNull()
+    expect((registro?.depois as { filtros: { loja: string | null } }).filtros.loja).toBeNull()
+    expect(JSON.stringify(registro?.depois)).not.toContain(valorNaoLoja)
+  })
+
   it('neutraliza fórmula que começa com tabulação ou retorno de carro', async () => {
     /*
       Direto pelo Prisma, e não por `registrarLead`: o serviço faz `.trim()`

@@ -162,10 +162,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       mesmo problema que a cifra de campo resolve na tabela de leads, só que
       numa tabela sem essa proteção. Por isso só as chaves conhecidas entram,
       a busca vira um booleano, e `desde`/`ate` são o valor JÁ INTERPRETADO
-      por `dataDoParametro` — nunca o texto cru da URL. Nada do que vai para
-      `depois` chega direto da query string sem passar por uma validação
-      antes.
+      por `dataDoParametro` — nunca o texto cru da URL. `loja` também é texto
+      livre da URL (alguém pode colar um CPF ali), então só é gravada quando
+      é o id de um perfil que existe; senão vai `null`.
     */
+    const lojaExiste = filtro.perfilId
+      ? (await prisma.perfil.findUnique({ where: { id: filtro.perfilId }, select: { id: true } })) !==
+        null
+      : false
+
     await prisma.auditLog.create({
       data: {
         actorUserId: guarda.sessao.userId,
@@ -178,7 +183,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           cpfCompleto,
           cpfsIlegiveis,
           filtros: {
-            loja: filtro.perfilId ?? null,
+            loja: lojaExiste ? (filtro.perfilId ?? null) : null,
             origem: filtro.origem ?? null,
             desde: filtro.desde?.toISOString() ?? null,
             ate: filtro.ate?.toISOString() ?? null,
