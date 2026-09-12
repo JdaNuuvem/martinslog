@@ -4,6 +4,7 @@ import { NaoAutorizadoError, TelefoneInvalidoError } from '@/domain/errors'
 import { normalizarTelefone } from '@/infra/whatsapp/cloud-api'
 import { enfileirarMensagem } from '@/server/whatsapp-service'
 import { enfileirarSms } from '@/server/sms-service'
+import { registrarLead } from './lead-service'
 
 /**
  * Pedidos da loja, empurrados por ela pela API pública.
@@ -139,6 +140,33 @@ export async function registrarPedido(
           ...(entrada.criadoEm ? { criadoEm: entrada.criadoEm } : {}),
         },
       })
+
+  /*
+    O comprador entra na base de leads — AQUI, antes de qualquer `return`.
+
+    A função tem quatro saídas, e três delas saem cedo: status que não mudou,
+    pedido que não é PAGO e aviso desligado. Registrar só no final pularia
+    todo pedido pendente, que é justamente o lead no sentido literal — quem se
+    interessou e não fechou.
+
+    Nunca derruba o registro do pedido: o lead é subproduto, e a loja que
+    integrou tem direito ao seu 201 mesmo que a nossa base falhe. Mesma
+    regra do aviso por SMS em `shipment-service`.
+  */
+  try {
+    await registrarLead({
+      tipo: status === 'PAGO' ? 'PEDIDO_PAGO' : 'PEDIDO_PENDENTE',
+      perfilId,
+      pedidoId: pedido.id,
+      ocorridoEm: agora,
+      nome: entrada.clienteNome,
+      email: entrada.clienteEmail,
+      telefone: fone,
+      valorCentavos: status === 'PAGO' ? entrada.valorCentavos : 0,
+    })
+  } catch (error) {
+    console.error('Falha ao registrar o lead do pedido', { cause: error })
+  }
 
   const mudouStatus = !anterior || anterior.status !== status
   if (!mudouStatus) {

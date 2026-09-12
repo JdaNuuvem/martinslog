@@ -4,6 +4,7 @@ import { NaoAutorizadoError } from '@/domain/errors'
 import { acharPerfil } from '@/server/perfil-service'
 import { credenciaisDoServidor, whatsappProvider } from '@/infra/whatsapp'
 import { normalizarTelefone } from '@/infra/whatsapp/cloud-api'
+import { registrarLead } from './lead-service'
 
 /**
  * Conversa com o comprador: guardar o que chega, mandar o que sai, e decidir
@@ -86,6 +87,24 @@ export async function registrarEntrada(entrada: {
       },
     }),
   ])
+
+  /*
+    Quem chama a loja no WhatsApp entra na base mesmo sem ter comprado — é o
+    lead no sentido literal. Traz só telefone, e às vezes o apelido do
+    perfil, que por isso perde do nome vindo de um envio.
+  */
+  try {
+    await registrarLead({
+      tipo: 'CONVERSA',
+      perfilId: entrada.perfilId,
+      conversaId: conversa.id,
+      ocorridoEm: entrada.ocorridoEm,
+      nome: entrada.nomeContato,
+      telefone: entrada.contato,
+    })
+  } catch (error) {
+    console.error('Falha ao registrar o lead da conversa', { cause: error })
+  }
 
   return { conversaId: conversa.id, repetida: false }
 }
