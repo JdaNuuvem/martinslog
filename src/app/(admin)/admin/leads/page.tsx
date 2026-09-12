@@ -8,6 +8,7 @@ import type { OrigemLead } from '@prisma/client'
 import { listarLeads, type FiltroLeads } from '@/server/admin/consulta-leads'
 import { listarLojasComPedido } from '@/server/admin/consulta-pedidos'
 import { ORIGENS, ROTULO_ORIGEM, buscaLeadsSchema, paginaLeadsSchema } from '@/lib/leads-schema'
+import { dataDoParametro } from '@/lib/filtro-periodo'
 import { TabelaResponsiva } from '@/components/admin/tabela-responsiva'
 import { exigirAdminNaPagina } from '@/server/admin/guarda'
 
@@ -48,12 +49,6 @@ function origemValida(valor?: string): OrigemLead | undefined {
   return (ORIGENS as readonly string[]).includes(valor ?? '') ? (valor as OrigemLead) : undefined
 }
 
-function dataValida(valor?: string): Date | undefined {
-  if (!valor) return undefined
-  const data = new Date(valor)
-  return Number.isNaN(data.getTime()) ? undefined : data
-}
-
 function comParametros(atuais: Busca, mudanca: Partial<Busca>): string {
   const p = new URLSearchParams()
   for (const [chave, valor] of Object.entries({ ...atuais, ...mudanca })) {
@@ -74,8 +69,8 @@ export default async function PaginaLeads({ searchParams }: { searchParams: Prom
     busca: buscaLeadsSchema.parse(parametros.busca ?? ''),
     perfilId: parametros.loja || undefined,
     origem: origemValida(parametros.origem),
-    desde: dataValida(parametros.desde),
-    ate: dataValida(parametros.ate),
+    desde: dataDoParametro(parametros.desde),
+    ate: dataDoParametro(parametros.ate, true),
     pagina: paginaLeadsSchema.parse(parametros.pagina),
   }
 
