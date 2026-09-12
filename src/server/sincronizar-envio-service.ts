@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { EnvioNaoEncontradoError } from '@/domain/errors'
+import { env } from '@/env'
 import {
   garantirTransicao,
   transicoesValidas,
@@ -342,7 +343,6 @@ async function avisarPorEmail(shipmentId: string, codigoEvento: string): Promise
 
   if (!evento) return
 
-  const base = process.env.APP_URL ?? 'http://localhost:3000'
 
   await enviarAtualizacao({
     userId: envio.userId,
@@ -354,6 +354,6 @@ async function avisarPorEmail(shipmentId: string, codigoEvento: string): Promise
     descricao: evento.descricao,
     cidade: evento.cidade ?? destinatario?.cidade ?? '',
     uf: evento.uf ?? destinatario?.uf ?? '',
-    urlRastreio: `${base}/r/${envio.codigoRastreio}`,
+    urlRastreio: `${env.APP_URL}/r/${envio.codigoRastreio}`,
   })
 }

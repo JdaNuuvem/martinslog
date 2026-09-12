@@ -1,3 +1,4 @@
+import { env } from '@/env'
 import { prisma } from '@/infra/db/client'
 
 /**
@@ -71,7 +72,7 @@ export type ItemParaValores = {
  * "seu pedido  foi postado" com dois espaços e um buraco.
  */
 export async function montarValores(item: ItemParaValores): Promise<Record<string, string>> {
-  const base = process.env.APP_URL ?? 'https://app.martinslog.net'
+  const base = env.APP_URL
 
   /*
     O comprador vê `nomeExibicao`; o nome interno é do painel. Quem não

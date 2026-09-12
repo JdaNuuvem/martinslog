@@ -28,6 +28,26 @@ const schema = z.object({
   WEBHOOK_CRON_TOKEN: z.string().min(32).optional(),
 
   /**
+   * Endereço público da aplicação, usado para montar o link de rastreio que
+   * vai no SMS e no WhatsApp do comprador.
+   *
+   * Precisa ser validado aqui, e não lido solto de `process.env`, porque o
+   * erro dele é silencioso e caro: com a variável ausente ou apontando para
+   * um domínio que não é o desta instalação, nada quebra no servidor — a
+   * mensagem sai, o comprador recebe e clica em um link que abre uma página
+   * que não existe. Quem descobre é o suporte, dias depois, pela reclamação.
+   *
+   * A barra final é removida para que `${APP_URL}/r/CODIGO` nunca vire uma
+   * URL com duas barras, que alguns aplicativos de mensagem cortam ao
+   * transformar o texto em link.
+   */
+  APP_URL: z
+    .string()
+    .url()
+    .default('https://app.martinslog.net')
+    .transform((v) => v.replace(/\/+$/, '')),
+
+  /**
    * Se qualquer pessoa pode criar conta pela tela pública.
    *
    * Padrão FECHADO, e o padrão é a parte importante: esquecer de definir a
