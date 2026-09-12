@@ -2516,7 +2516,7 @@ Co-Authored-By: claude-flow <ruv@ruv.net>"
 - Modify: `src/app/(admin)/admin/leads/page.tsx`
 
 **Interfaces:**
-- Consumes: `listarLeads`, `TETO_EXPORTACAO` (Task 6); `exigirAdmin` (guarda); `decifrarCampo` de `src/infra/crypto/campo.ts` (Task 9).
+- Consumes: `listarLeads`, `TETO_EXPORTACAO`, `FiltroLeads` (Task 6); `ORIGENS`, `buscaLeadsSchema` de `src/lib/leads-schema.ts` (Task 6); `dataDoParametro` de `src/lib/filtro-periodo.ts` (Task 7); `exigirAdmin` (guarda); `decifrarCampo` de `src/infra/crypto/campo.ts` (Task 9).
 - Produces: `GET /api/admin/leads/exportar?...&cpfCompleto=true` devolvendo `text/csv`.
 
 - [ ] **Step 1: Escrever os testes que falham**
@@ -2547,6 +2547,9 @@ para criar a sessão e acrescente dois casos:
   `LEADS_EXPORTADOS`;
 - a exportação traz TODAS as linhas do filtro, não só a primeira página —
   semeie mais de `POR_PAGINA` leads e conte as linhas do CSV.
+- a exportação respeita os mesmos filtros da tela: com `origem=CONVERSA`, só
+  leads com origem de conversa entram no CSV; com `desde` e `ate`, só os de
+  último contato no período — e o `ate` inclui o próprio dia.
 
 - [ ] **Step 2: Rodar e ver falhar**
 
@@ -2562,7 +2565,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/infra/db/client'
 import { exigirAdmin } from '@/server/admin/guarda'
 import { decifrarCampo } from '@/infra/crypto/campo'
-import { listarLeads, TETO_EXPORTACAO } from '@/server/admin/consulta-leads'
+import { listarLeads, TETO_EXPORTACAO, type FiltroLeads } from '@/server/admin/consulta-leads'
+import { dataDoParametro } from '@/lib/filtro-periodo'
+import { ORIGENS, buscaLeadsSchema } from '@/lib/leads-schema'
 
 /**
  * `GET /api/admin/leads/exportar` — a base filtrada, em CSV.
@@ -2602,13 +2607,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const cpfCompleto = parametros.get('cpfCompleto') === 'true'
 
   /*
-    `todas: true` — a exportação leva tudo que casa com o filtro, não a
-    primeira página. Exportar cinquenta linhas de uma base de oito mil e
-    chamar o arquivo de "leads.csv" seria entregar um recorte silencioso.
+    Os MESMOS filtros da tela, com os mesmos nomes de parâmetro (`busca`, `loja`,
+    `origem`, `desde`, `ate`) e a mesma regra de data (`dataDoParametro`).
+
+    Ler só busca e loja exportaria mais do que o admin estava vendo: quem filtra
+    "pedidos não finalizados de setembro" e clica em exportar receberia a base
+    inteira daquela loja, sem nada no arquivo dizendo que o filtro foi ignorado.
+
+    `todas: true` — a exportação leva tudo que casa com o filtro, não a primeira
+    página. Exportar cinquenta linhas de uma base de oito mil e chamar o arquivo
+    de "leads.csv" seria entregar um recorte silencioso.
   */
-  const filtro = {
-    busca: parametros.get('busca') ?? undefined,
-    perfilId: parametros.get('loja') ?? undefined,
+  const origemBruta = parametros.get('origem') ?? ''
+  const filtro: FiltroLeads = {
+    busca: buscaLeadsSchema.parse(parametros.get('busca') ?? '') || undefined,
+    perfilId: parametros.get('loja') || undefined,
+    origem: (ORIGENS as readonly string[]).includes(origemBruta)
+      ? (origemBruta as FiltroLeads['origem'])
+      : undefined,
+    desde: dataDoParametro(parametros.get('desde')),
+    ate: dataDoParametro(parametros.get('ate'), true),
     todas: true,
   }
 
