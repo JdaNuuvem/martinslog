@@ -310,11 +310,30 @@ async function registrarOrigem(tx: Tx, leadId: string, entrada: EntradaLead): Pr
   // retomada, e nada mais deve acontecer — nem os totais podem subir.
   if (count === 0) return
 
+  /*
+    Um `pedidoId` pode gerar duas origens: uma como PEDIDO_PENDENTE e, depois,
+    outra como PEDIDO_PAGO — o índice de idempotência inclui o `tipo`, então
+    são linhas distintas e as duas passam pelo `count === 1` acima. Sem esta
+    checagem, `totalPedidos` subiria duas vezes para o mesmo pedido no fluxo
+    ao vivo — e divergiria da carga inicial (Task 5), que vê o pedido já pago
+    e gera uma origem só. O mesmo lead teria totais diferentes conforme a
+    aparição veio da carga ou do fluxo ao vivo.
+
+    `valorTotalCentavos` não tem esse problema: só PEDIDO_PAGO carrega valor,
+    então não há soma dupla de dinheiro a evitar. `totalEnvios` também não
+    muda aqui.
+  */
+  const ehPrimeiraOrigemDoPedido =
+    entrada.pedidoId === null || entrada.pedidoId === undefined
+      ? true
+      : (await tx.leadOrigem.count({ where: { leadId, pedidoId: entrada.pedidoId } })) === 1
+
   await tx.lead.update({
     where: { id: leadId },
     data: {
       totalPedidos:
-        entrada.tipo === 'PEDIDO_PAGO' || entrada.tipo === 'PEDIDO_PENDENTE'
+        (entrada.tipo === 'PEDIDO_PAGO' || entrada.tipo === 'PEDIDO_PENDENTE') &&
+        ehPrimeiraOrigemDoPedido
           ? { increment: 1 }
           : undefined,
       totalEnvios: entrada.tipo === 'ENVIO' ? { increment: 1 } : undefined,

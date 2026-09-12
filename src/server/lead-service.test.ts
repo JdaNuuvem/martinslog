@@ -203,6 +203,36 @@ describe('registrarLead', () => {
     expect(lead.nome).toBe('Nome Que Chegou Depois')
   })
 
+  it('pedido que passa de pendente para pago conta uma vez só', async () => {
+    /*
+      O mesmo pedido gera duas origens — PEDIDO_PENDENTE e, depois,
+      PEDIDO_PAGO — porque o índice de idempotência inclui o tipo. As duas
+      aparições ficam no histórico, mas é o MESMO pedido, e totalPedidos não
+      pode contar as duas.
+    */
+    await registrarLead(
+      base({
+        tipo: 'PEDIDO_PENDENTE',
+        telefone: '21999990055',
+        pedidoId: 'pendente-depois-pago',
+        valorCentavos: 0,
+      }),
+    )
+    await registrarLead(
+      base({
+        tipo: 'PEDIDO_PAGO',
+        telefone: '21999990055',
+        pedidoId: 'pendente-depois-pago',
+        valorCentavos: 5000,
+      }),
+    )
+
+    const lead = await prisma.lead.findFirstOrThrow()
+    expect(lead.totalPedidos).toBe(1)
+    expect(lead.valorTotalCentavos).toBe(5000)
+    expect(await prisma.leadOrigem.count()).toBe(2)
+  })
+
   it('o nome do envio vence o nome vindo da conversa', async () => {
     await registrarLead(
       base({ tipo: 'CONVERSA', telefone: '21999990003', nome: 'zezinho❤️', conversaId: 'c1' }),
