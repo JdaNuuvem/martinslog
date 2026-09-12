@@ -11,6 +11,7 @@ import { ORIGENS, ROTULO_ORIGEM, buscaLeadsSchema, paginaLeadsSchema } from '@/l
 import { dataDoParametro } from '@/lib/filtro-periodo'
 import { TabelaResponsiva } from '@/components/admin/tabela-responsiva'
 import { exigirAdminNaPagina } from '@/server/admin/guarda'
+import { ExportarLeadsBotao } from './exportar-botao'
 
 /**
  * A base de leads — todo comprador que já chegou perto de uma venda, pago ou
@@ -81,7 +82,10 @@ export default async function PaginaLeads({ searchParams }: { searchParams: Prom
   return (
     <>
       <div className="flex flex-col gap-2">
-        <h1 className="text-titulo font-bold text-texto-principal">Leads</h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 className="text-titulo font-bold text-texto-principal">Leads</h1>
+          <ExportarLeadsBotao parametros={parametros} />
+        </div>
         <p className="max-w-leitura text-corpo text-texto-secundario">
           Todo comprador que já chegou perto de uma venda — pedido pago, pedido abandonado, envio
           ou conversa — vira um registro aqui, mesmo sem nunca ter pagado nada.
