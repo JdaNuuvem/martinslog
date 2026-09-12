@@ -521,6 +521,28 @@ describe('registrarLead', () => {
     expect(sobrevivente.cpfHash).not.toBeNull()
     expect(await prisma.leadOrigem.count()).toBe(3)
     expect(sobrevivente.valorTotalCentavos).toBe(7000)
+    // O sobrevivente é o de contato mais antigo: é ele que carrega a data
+    // verdadeira do primeiro contato daquela pessoa.
+    expect(sobrevivente.id).toBe(porConversa)
+  })
+
+  it('funde também quando a busca casa primeiro pelo CPF', async () => {
+    /*
+      O espelho do caso acima, e o que denuncia uma cascata que para no
+      primeiro acerto: se a procura encontra o lead do CPF e não olha mais
+      nada, o gêmeo do telefone sobrevive para sempre.
+    */
+    const porCpf = await registrarLead(base({ cpf: CPF, pedidoId: 'p1' }))
+    const porTelefone = await registrarLead(
+      base({ tipo: 'CONVERSA', telefone: '21999990009', conversaId: 'c9' }),
+    )
+    expect(porCpf).not.toBe(porTelefone)
+
+    await registrarLead(
+      base({ tipo: 'ENVIO', cpf: CPF, telefone: '21999990009', shipmentId: 's9' }),
+    )
+
+    expect(await prisma.lead.count()).toBe(1)
   })
 
   it('não grava o CPF em claro em nenhuma coluna', async () => {
@@ -616,11 +638,21 @@ export async function registrarLead(entrada: EntradaLead): Promise<string | null
   const cpfHash = cpf ? impressaoDigitalCpf(cpf) : null
 
   return prisma.$transaction(async (tx) => {
-    const encontrado = await encontrarLead(tx, { cpfHash, telefone, email })
+    /*
+      TODOS os leads que casam com QUALQUER chave, não só o primeiro.
 
-    const leadId = encontrado
-      ? await atualizarLead(tx, encontrado.id, entrada, { cpf, cpfHash, telefone, email })
-      : await criarLead(tx, entrada, { cpf, cpfHash, telefone, email })
+      Procurar só até o primeiro acerto deixa a fusão sem efeito no caso que
+      ela existe para resolver: a pessoa que chamou no WhatsApp (telefone) e
+      depois fez um envio (CPF) tem dois leads, e o envio que traz os dois
+      dados casa pelo CPF, encontra o lead do CPF, confere que o dono do CPF
+      é ele mesmo — e nunca descobre o gêmeo do telefone.
+    */
+    const candidatos = await leadsQueCasam(tx, { cpfHash, telefone, email })
+
+    const leadId =
+      candidatos.length === 0
+        ? await criarLead(tx, entrada, { cpf, cpfHash, telefone, email })
+        : await consolidar(tx, candidatos, entrada, { cpf, cpfHash, telefone, email })
 
     await registrarOrigem(tx, leadId, entrada)
 
@@ -637,32 +669,28 @@ type Chaves = {
 type Tx = Prisma.TransactionClient
 
 /**
- * A cascata de identidade: CPF, depois telefone, depois e-mail.
+ * Todos os leads que casam com alguma das chaves, sem repetir.
  *
- * A ordem não é arbitrária. O CPF é único de verdade; o telefone muda de
- * dono com o tempo; o e-mail é o mais ausente dos três. Procurar do mais
- * forte para o mais fraco é o que evita juntar duas pessoas porque uma
- * herdou o número da outra.
+ * Devolve uma lista, e não o primeiro acerto, porque é a lista que revela a
+ * duplicata: dois leads aqui significam a mesma pessoa que entrou na base por
+ * dois caminhos diferentes, e é isso que `consolidar` conserta.
+ *
+ * A busca por chave é exata nas três: as colunas são únicas, e o que decide
+ * se dois valores são "o mesmo" já foi resolvido na normalização.
  */
-async function encontrarLead(tx: Tx, chaves: Chaves) {
-  if (chaves.cpfHash) {
-    const porCpf = await tx.lead.findUnique({ where: { cpfHash: chaves.cpfHash } })
-    if (porCpf) return porCpf
-  }
+async function leadsQueCasam(tx: Tx, chaves: Chaves) {
+  const achados = await tx.lead.findMany({
+    where: {
+      OR: [
+        ...(chaves.cpfHash ? [{ cpfHash: chaves.cpfHash }] : []),
+        ...(chaves.telefone ? [{ telefoneNormalizado: chaves.telefone }] : []),
+        ...(chaves.email ? [{ emailNormalizado: chaves.email }] : []),
+      ],
+    },
+    orderBy: { primeiroContatoEm: 'asc' },
+  })
 
-  if (chaves.telefone) {
-    const porTelefone = await tx.lead.findUnique({
-      where: { telefoneNormalizado: chaves.telefone },
-    })
-    if (porTelefone) return porTelefone
-  }
-
-  if (chaves.email) {
-    const porEmail = await tx.lead.findUnique({ where: { emailNormalizado: chaves.email } })
-    if (porEmail) return porEmail
-  }
-
-  return null
+  return achados
 }
 
 async function criarLead(tx: Tx, entrada: EntradaLead, chaves: Chaves & { cpf: string | null }) {
@@ -684,30 +712,25 @@ async function criarLead(tx: Tx, entrada: EntradaLead, chaves: Chaves & { cpf: s
 }
 
 /**
- * Atualiza o lead encontrado e, quando o dado novo revela que dois leads são
- * a mesma pessoa, funde os dois.
+ * Reduz os candidatos a um lead só e escreve nele o que a aparição trouxe.
  *
- * A fusão acontece quando a pessoa foi encontrada por telefone ou e-mail e o
- * CPF que chegou agora já pertence a OUTRO lead — sinal de que ela entrou na
- * base por dois caminhos diferentes. Sem isso a base acumula duplicatas
- * silenciosas exatamente nos leads mais completos.
+ * O SOBREVIVENTE é o de contato mais antigo, e não o mais completo: ele é o
+ * que carrega o `primeiroContatoEm` verdadeiro daquela pessoa, e é o id que
+ * já pode estar referenciado em qualquer lugar que tenha lido a base antes.
  */
-async function atualizarLead(
+async function consolidar(
   tx: Tx,
-  leadId: string,
+  candidatos: { id: string }[],
   entrada: EntradaLead,
   chaves: Chaves & { cpf: string | null },
 ): Promise<string> {
-  if (chaves.cpfHash) {
-    const donoDoCpf = await tx.lead.findUnique({ where: { cpfHash: chaves.cpfHash } })
+  const [sobrevivente, ...gemeos] = candidatos
 
-    if (donoDoCpf && donoDoCpf.id !== leadId) {
-      await fundir(tx, donoDoCpf.id, leadId)
-      return aplicarDados(tx, donoDoCpf.id, entrada, chaves)
-    }
+  for (const gemeo of gemeos) {
+    await fundir(tx, sobrevivente!.id, gemeo.id)
   }
 
-  return aplicarDados(tx, leadId, entrada, chaves)
+  return aplicarDados(tx, sobrevivente!.id, entrada, chaves)
 }
 
 /**
@@ -845,7 +868,7 @@ async function registrarOrigem(tx: Tx, leadId: string, entrada: EntradaLead): Pr
 - [ ] **Step 4: Rodar e ver passar**
 
 Run: `npx vitest run src/server/lead-service.test.ts`
-Expected: PASS, 9 testes.
+Expected: PASS, 10 testes.
 
 - [ ] **Step 5: Verificar tipos e lint**
 
@@ -880,7 +903,7 @@ Co-Authored-By: claude-flow <ruv@ruv.net>"
 `src/server/lead-ingestao.test.ts`:
 
 ```typescript
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/infra/db/client'
 import { criarCotacaoValida, criarUsuarioComSaldo } from '@/test/factories'
 import { criarEnvio, type EnderecoEnvio } from './shipment-service'
@@ -914,7 +937,6 @@ beforeAll(async () => {
 
 afterEach(async () => {
   await prisma.lead.deleteMany({})
-  vi.restoreAllMocks()
 })
 
 afterAll(async () => {
@@ -1002,15 +1024,29 @@ describe('ingestão de leads', () => {
   })
 
   it('falha ao registrar lead não derruba a emissão da etiqueta', async () => {
-    const leadService = await import('./lead-service')
-    vi.spyOn(leadService, 'registrarLead').mockRejectedValue(new Error('banco caiu'))
+    /*
+      A falha é provocada de VERDADE, não por substituição da função: sem o
+      segredo da impressão digital, `registrarLead` lança ao processar um CPF.
+      Um teste que troca a função por outra prova que o mock foi chamado; este
+      prova que o caminho de erro real não derruba a emissão.
 
-    // A etiqueta é o produto; o lead é subproduto. Uma falha no subproduto
-    // não pode desfazer uma emissão que já aconteceu.
-    const shipmentId = await emitir(compradora)
+      (Mock de módulo ESM também é frágil aqui — o namespace é congelado e o
+      spy falha de forma intermitente conforme o bundler.)
+    */
+    const segredo = process.env.LEAD_FINGERPRINT_KEY
+    delete process.env.LEAD_FINGERPRINT_KEY
 
-    const envio = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })
-    expect(envio.codigoRastreio).not.toBeNull()
+    try {
+      // A etiqueta é o produto; o lead é subproduto. Uma falha no subproduto
+      // não pode desfazer uma emissão que já aconteceu.
+      const shipmentId = await emitir(compradora)
+
+      const envio = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })
+      expect(envio.codigoRastreio).not.toBeNull()
+      expect(await prisma.lead.count()).toBe(0)
+    } finally {
+      process.env.LEAD_FINGERPRINT_KEY = segredo
+    }
   })
 })
 ```
@@ -1938,7 +1974,7 @@ Co-Authored-By: claude-flow <ruv@ruv.net>"
 - Modify: `src/app/(admin)/admin/leads/page.tsx`
 
 **Interfaces:**
-- Consumes: `listarLeads` (Task 6), `exigirAdmin` (guarda).
+- Consumes: `listarLeads`, `TETO_EXPORTACAO` (Task 6); `exigirAdmin` (guarda); `decifrar` de `src/infra/crypto/segredo.ts`.
 - Produces: `GET /api/admin/leads/exportar?...&cpfCompleto=true` devolvendo `text/csv`.
 
 - [ ] **Step 1: Escrever os testes que falham**
@@ -1983,7 +2019,8 @@ Expected: FAIL — `Failed to resolve import "./route"`.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/infra/db/client'
 import { exigirAdmin } from '@/server/admin/guarda'
-import { listarLeads, revelarCpf, TETO_EXPORTACAO } from '@/server/admin/consulta-leads'
+import { decifrar } from '@/infra/crypto/segredo'
+import { listarLeads, TETO_EXPORTACAO } from '@/server/admin/consulta-leads'
 
 /**
  * `GET /api/admin/leads/exportar` — a base filtrada, em CSV.
@@ -2052,9 +2089,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         .join(','),
     ]
 
+    /*
+      Com CPF completo, decifra em LOTE e registra UMA linha de auditoria para
+      a exportação inteira — a que já é gravada logo abaixo.
+
+      Chamar `revelarCpf` por lead gravaria uma linha por pessoa: dez mil
+      registros para uma exportação afogariam justamente o log que existe para
+      ser lido. A linha do lote já responde quem exportou, quantos e com quais
+      filtros, que é a pergunta que se faz depois.
+    */
+    const cpfPorLead = new Map<string, string>()
+
+    if (cpfCompleto) {
+      const cifrados = await prisma.lead.findMany({
+        where: { id: { in: leads.map((l) => l.id) } },
+        select: { id: true, cpfCifrado: true },
+      })
+
+      for (const registro of cifrados) {
+        if (registro.cpfCifrado) cpfPorLead.set(registro.id, decifrar(registro.cpfCifrado))
+      }
+    }
+
     for (const lead of leads) {
       const cpf = cpfCompleto
-        ? ((await revelarCpf(lead.id, guarda.sessao.userId)) ?? '')
+        ? (cpfPorLead.get(lead.id) ?? '')
         : (lead.cpfMascarado ?? '')
 
       linhas.push(
