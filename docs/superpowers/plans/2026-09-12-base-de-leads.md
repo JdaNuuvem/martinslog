@@ -1689,6 +1689,21 @@ describe('listarLeads', () => {
     expect((await listarLeads({ busca: '21999990002' })).leads).toHaveLength(1)
   })
 
+  it('celular de onze dígitos acha pelo telefone, mesmo tendo o tamanho de um CPF', async () => {
+    /*
+      Onze dígitos são ambíguos: CPF e celular com DDD têm o mesmo tamanho.
+      Uma busca que decide pelo primeiro formato que casa trataria o celular
+      como CPF, compararia impressões digitais e voltaria vazia. Digitado com
+      máscara de propósito — é assim que o suporte cola o número.
+    */
+    await semear()
+
+    const { leads } = await listarLeads({ busca: '(21) 99999-0002' })
+
+    expect(leads).toHaveLength(1)
+    expect(leads[0]?.nome).toBe('João Pedro')
+  })
+
   it('filtra por período pelo último contato', async () => {
     await semear()
 
@@ -1789,16 +1804,34 @@ function filtroDeBusca(termo: string): Prisma.LeadWhereInput | null {
   const limpo = termo.trim()
   if (!limpo) return null
 
+  /*
+    Todas as leituras possíveis do termo, combinadas com OU.
+
+    Onze dígitos são AMBÍGUOS: um CPF e um celular com DDD têm exatamente o
+    mesmo tamanho. Parar no primeiro formato que casa — CPF, que é testado
+    antes — faria a busca por celular virar impressão digital de CPF e
+    voltar vazia, para o formato de telefone mais comum do país.
+
+    Cada leitura válida entra na busca. Não há falso positivo por
+    coincidência de formato: as três colunas são exatas e únicas, então só
+    casa o lead cujo valor é de fato aquele.
+  */
+  const leituras: Prisma.LeadWhereInput[] = []
+
   const cpf = normalizarCpf(limpo)
-  if (cpf) return { cpfHash: impressaoDigitalCpf(cpf) }
+  if (cpf) leituras.push({ cpfHash: impressaoDigitalCpf(cpf) })
 
   const telefone = normalizarTelefoneLead(limpo)
-  if (telefone) return { telefoneNormalizado: telefone }
+  if (telefone) leituras.push({ telefoneNormalizado: telefone })
 
   const email = normalizarEmail(limpo)
-  if (email) return { emailNormalizado: email }
+  if (email) leituras.push({ emailNormalizado: email })
 
-  return { nome: { contains: limpo, mode: 'insensitive' } }
+  if (leituras.length === 0) {
+    return { nome: { contains: limpo, mode: 'insensitive' } }
+  }
+
+  return { OR: leituras }
 }
 
 export async function listarLeads(filtro: FiltroLeads = {}): Promise<ResultadoLeads> {
@@ -1952,7 +1985,7 @@ export async function revelarCpf(leadId: string, adminUserId: string): Promise<s
 - [ ] **Step 5: Rodar e ver passar**
 
 Run: `npx vitest run src/server/admin/consulta-leads.test.ts`
-Expected: PASS, 7 testes.
+Expected: PASS, 8 testes.
 
 - [ ] **Step 6: Commit**
 
