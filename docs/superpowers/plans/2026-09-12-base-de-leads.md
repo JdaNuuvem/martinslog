@@ -2482,9 +2482,15 @@ Mostra os dados da pessoa, o CPF mascarado com um botão "ver CPF" (componente
 cliente que chama `POST /api/admin/leads/[id]/cpf`) e a linha do tempo das
 origens, cada uma com link para a tela que já existe:
 
-- `PEDIDO_PAGO` / `PEDIDO_PENDENTE` → `/admin/pedidos`
-- `ENVIO` → `/admin/envios`
-- `CONVERSA` → `/whatsapp/conversas`
+- `PEDIDO_PAGO` / `PEDIDO_PENDENTE` → `/admin/pedidos?busca=<telefone do lead>`. O filtro
+  de pedidos casa por `externalId`, nome e telefone, e NÃO pelo id interno que a origem guarda
+  (`consulta-pedidos.ts:79-81`); o telefone do lead leva aos pedidos daquela pessoa. Lead sem
+  telefone: sem link.
+- `ENVIO` → `/admin/envios?busca=<shipmentId>`. O filtro de envios casa pelo `id` exato
+  (`consulta-envios.ts:91`), então o link cai no envio certo.
+- `CONVERSA` → sem link. Não existe tela de conversa do lado da administração, e
+  `/whatsapp/conversas` é a rota do lojista: o admin veria as próprias conversas, não a do lead.
+  A origem mostra loja, data e o telefone do lead.
 
 - [ ] **Step 8: Conferir tipos, lint e suíte**
 
