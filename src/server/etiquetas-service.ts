@@ -47,6 +47,7 @@ export type FiltroEtiquetas = {
 
 type EnderecoGravado = {
   nome?: string
+  email?: string
   documento?: string
   cidade?: string
   uf?: string
@@ -89,7 +90,12 @@ function cabeNaAba(status: StatusShipment, aba: AbaEtiquetas): boolean {
 }
 
 /**
- * Casa a busca contra código de rastreio e nome do destinatário.
+ * Casa a busca contra código de rastreio, nome e e-mail do destinatário.
+ *
+ * O e-mail entra porque é o que o suporte tem em mãos: o comprador escreve
+ * do endereço dele perguntando do pedido, sem citar código nenhum, e
+ * procurar pelo nome falha em toda grafia divergente — "Ana Paula" contra
+ * "ana paula da silva". O e-mail é único e foi digitado uma vez só.
  *
  * O filtro roda em memória, e não no banco, porque o destinatário é um JSON
  * copiado dentro do envio (`Shipment.destinatario`) — não há índice para
@@ -105,7 +111,8 @@ function casaComBusca(etiqueta: EtiquetaResumo, termo: string): boolean {
   const alvo = termo.toLowerCase()
   return (
     (etiqueta.codigoRastreio ?? '').toLowerCase().includes(alvo) ||
-    etiqueta.destinatarioNome.toLowerCase().includes(alvo)
+    etiqueta.destinatarioNome.toLowerCase().includes(alvo) ||
+    (etiqueta.destinatarioEmail ?? '').toLowerCase().includes(alvo)
   )
 }
 
@@ -157,6 +164,12 @@ export async function listarEtiquetas(
                   string_contains: busca,
                 },
               },
+              {
+                destinatario: {
+                  path: ['email'],
+                  string_contains: busca,
+                },
+              },
             ],
           }
         : {}),
@@ -199,6 +212,7 @@ export async function listarEtiquetas(
       ultimoEvento: ultimo?.titulo ?? null,
       ocorridoEm: ultimo?.ocorridoEm.toISOString() ?? null,
       destinatarioNome: destinatario?.nome ?? 'Destinatário',
+      destinatarioEmail: destinatario?.email ?? null,
       destinoCidade: destinatario?.cidade ?? null,
       destinoUf: destinatario?.uf ?? null,
       servico: envio.service.nome,
@@ -268,6 +282,7 @@ async function contarPorAbaNoBanco(busca: string): Promise<Record<AbaEtiquetas, 
         OR: [
           { codigoRastreio: { contains: busca, mode: 'insensitive' as const } },
           { destinatario: { path: ['nome'], string_contains: busca } },
+          { destinatario: { path: ['email'], string_contains: busca } },
         ],
       }
     : {}
@@ -326,6 +341,7 @@ export async function obterEtiqueta(
     ultimoEvento: ultimo?.titulo ?? null,
     ocorridoEm: ultimo?.ocorridoEm.toISOString() ?? null,
     destinatarioNome: destinatario.nome ?? 'Destinatário',
+    destinatarioEmail: destinatario.email ?? null,
     destinoCidade: destinatario.cidade ?? null,
     destinoUf: destinatario.uf ?? null,
     servico: envio.service.nome,

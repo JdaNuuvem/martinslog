@@ -49,6 +49,14 @@ export type EtiquetaResumo = {
   ultimoEvento: string | null
   ocorridoEm: string | null
   destinatarioNome: string
+  /**
+   * E-mail de quem recebe, quando o envio foi criado com um.
+   *
+   * Está aqui para a busca por e-mail ter o que casar e para a linha mostrar
+   * por que apareceu: procurar por um endereço e receber uma lista que não o
+   * exibe deixa quem procura sem saber se achou o envio certo.
+   */
+  destinatarioEmail: string | null
   destinoCidade: string | null
   destinoUf: string | null
   servico: string

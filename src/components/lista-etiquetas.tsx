@@ -39,6 +39,42 @@ function dataHora(iso: string | null): string {
   return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
+type ResultadoCanal = {
+  canal: 'SMS' | 'WHATSAPP' | 'EMAIL'
+  resultado: 'reenfileirada' | 'enfileirada' | 'enviada' | 'sem-destino' | 'sem-canal'
+}
+
+const NOME_CANAL: Readonly<Record<ResultadoCanal['canal'], string>> = {
+  SMS: 'SMS',
+  WHATSAPP: 'WhatsApp',
+  EMAIL: 'e-mail',
+}
+
+/**
+ * Traduz o resultado do reenvio em uma frase.
+ *
+ * Diz por onde saiu E por onde não saiu, porque "reenviado" sozinho faria o
+ * lojista encerrar o atendimento achando que o comprador foi avisado quando
+ * nenhum canal estava configurado. Os motivos ficam separados: falta de
+ * contato do comprador é problema do cadastro do pedido; falta de canal é
+ * problema da configuração da loja.
+ */
+function resumirReenvio(canais: ResultadoCanal[]): string {
+  const saiu = canais
+    .filter((c) => c.resultado !== 'sem-destino' && c.resultado !== 'sem-canal')
+    .map((c) => NOME_CANAL[c.canal])
+
+  if (saiu.length === 0) {
+    const semDestino = canais.filter((c) => c.resultado === 'sem-destino')
+    if (semDestino.length === canais.length) {
+      return 'Nada foi reenviado: este envio não tem telefone nem e-mail do comprador.'
+    }
+    return 'Nada foi reenviado: nenhum canal de mensagem está conectado nesta loja.'
+  }
+
+  return `Aviso reenviado por ${saiu.join(', ')}.`
+}
+
 function Selo({ status }: { status: string }) {
   return (
     <span
@@ -106,6 +142,8 @@ export function ListaEtiquetas() {
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [cancelandoId, setCancelandoId] = useState<string | null>(null)
   const [avancandoId, setAvancandoId] = useState<string | null>(null)
+  const [reenviandoId, setReenviandoId] = useState<string | null>(null)
+  const [reenvioRecente, setReenvioRecente] = useState<{ id: string; texto: string } | null>(null)
   const [avancoRecente, setAvancoRecente] = useState<{ id: string; titulo: string } | null>(null)
   /*
     A seleção guarda IDS, não índices nem posições. A lista se refaz a cada
@@ -195,6 +233,39 @@ export function ListaEtiquetas() {
       setErro('Não foi possível conectar ao servidor.')
     } finally {
       setAvancandoId(null)
+    }
+  }
+
+  /**
+   * Manda de novo ao comprador o aviso da situação atual.
+   *
+   * Não recarrega a lista depois: o reenvio não muda nada do que a linha
+   * mostra, e um recarregamento faria a tela piscar sugerindo que mudou.
+   */
+  async function reenviarAviso(id: string) {
+    setReenviandoId(id)
+    setErro(null)
+    setReenvioRecente(null)
+
+    try {
+      const resposta = await fetch(`/api/etiquetas/${id}/reenviar`, { method: 'POST' })
+      const corpo = (await resposta.json().catch(() => ({}))) as {
+        mensagem?: string
+        reenvio?: { canais: ResultadoCanal[] }
+      }
+
+      if (!resposta.ok) {
+        setErro(corpo.mensagem ?? 'Não foi possível reenviar o aviso deste envio.')
+        return
+      }
+
+      if (corpo.reenvio) {
+        setReenvioRecente({ id, texto: resumirReenvio(corpo.reenvio.canais) })
+      }
+    } catch {
+      setErro('Não foi possível conectar ao servidor.')
+    } finally {
+      setReenviandoId(null)
     }
   }
 
@@ -314,12 +385,12 @@ export function ListaEtiquetas() {
         </div>
 
         <label className="flex flex-col gap-1 text-dado">
-          <span className="text-texto-secundario">Buscar por código ou destinatário</span>
+          <span className="text-texto-secundario">Buscar por código, nome ou e-mail</span>
           <input
             type="search"
             value={busca}
             onChange={(evento) => setBusca(evento.target.value)}
-            placeholder="FR000000000BR ou nome do destinatário"
+            placeholder="FR000000000BR, nome ou e-mail do destinatário"
             className="w-full max-w-md rounded-campo border border-borda-campo bg-superficie-card px-3 py-2 text-texto-principal focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
           />
         </label>
@@ -452,6 +523,14 @@ export function ListaEtiquetas() {
                     <p className="font-mono text-xs text-texto-secundario">
                       {etiqueta.codigoRastreio ?? 'sem código'}
                     </p>
+                    {/*
+                      O e-mail aparece porque é um dos campos da busca. Quem
+                      procura por um endereço precisa ver na linha que achou o
+                      envio daquela pessoa, e não um homônimo.
+                    */}
+                    {etiqueta.destinatarioEmail ? (
+                      <p className="text-xs text-texto-secundario">{etiqueta.destinatarioEmail}</p>
+                    ) : null}
                     </div>
                   </div>
 
@@ -503,6 +582,30 @@ export function ListaEtiquetas() {
                     >
                       {avancandoId === etiqueta.id ? 'Avançando…' : 'Avançar etapa'}
                     </button>
+                  ) : null}
+
+                  {/*
+                    O reenvio só existe onde há o que reenviar: envio sem
+                    código ou sem nenhuma movimentação não tem aviso nenhum
+                    para repetir, e o botão ali seria um clique que só sabe
+                    recusar.
+                  */}
+                  {etiqueta.codigoRastreio && etiqueta.ultimoEvento ? (
+                    <button
+                      type="button"
+                      onClick={() => void reenviarAviso(etiqueta.id)}
+                      disabled={reenviandoId === etiqueta.id}
+                      title="Manda de novo ao comprador o aviso da situação atual"
+                      className="rounded-lg border border-borda-campo px-4 py-2 text-sm font-medium text-texto-principal focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {reenviandoId === etiqueta.id ? 'Reenviando…' : 'Reenviar aviso'}
+                    </button>
+                  ) : null}
+
+                  {reenvioRecente?.id === etiqueta.id ? (
+                    <p role="status" className="self-center text-sm text-texto-secundario">
+                      {reenvioRecente.texto}
+                    </p>
                   ) : null}
 
                   {avancoRecente?.id === etiqueta.id ? (
