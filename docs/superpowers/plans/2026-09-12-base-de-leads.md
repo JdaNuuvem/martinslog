@@ -1352,45 +1352,311 @@ Co-Authored-By: claude-flow <ruv@ruv.net>"
 
 ### Task 5: Carga inicial do que já existe
 
+> **Reescrita durante a execução.** A versão original validava a carga rodando o
+> script à mão, sem dizer contra qual banco — o `DATABASE_URL` do `.env` aponta
+> para o banco de desenvolvimento — e sem teste automatizado. Se o segredo da
+> impressão digital não estivesse no ambiente, cada aparição com CPF falharia
+> dentro do `try/catch`, seria pulada, e a checagem "rodar duas vezes dá a mesma
+> contagem" passaria assim mesmo, com todos os envios fora da base. O log de
+> falha ainda despejava a entrada inteira, com CPF e telefone em claro.
+>
+> Agora o núcleo mora em `src/server/carga-leads.ts`, com teste de integração, e
+> o script é só a porta de linha de comando.
+
 **Files:**
+- Create: `src/server/carga-leads.ts`
+- Create: `src/server/carga-leads.test.ts`
 - Create: `scripts/carregar-leads.ts`
 
 **Interfaces:**
-- Consumes: `registrarLead` (Task 3).
-- Produces: nada. Script operacional.
-
-- [ ] **Step 1: Escrever o script**
-
-`scripts/carregar-leads.ts`:
+- Consumes: `registrarLead`, `EntradaLead` (Task 3); `impressaoDigitalCpf` (Task 2, só no teste).
+- Produces:
 
 ```typescript
-/**
- * Cria os leads do que já está no banco.
- *
- * A base de leads passa a ser alimentada na escrita, mas tudo que aconteceu
- * antes dela existir ficou de fora — e é a maior parte. Este script percorre
- * pedidos, envios e conversas já gravados e os apresenta ao mesmo
- * `registrarLead` que roda ao vivo.
- *
- * A ORDEM CRONOLÓGICA importa: ela reproduz a mesma sequência de fusões que
- * teria acontecido ao vivo. Processar fora de ordem produz uma base
- * diferente — correta, mas com outros `primeiroContatoEm` e outros nomes
- * vencedores.
- *
- * É idempotente: a trava de duplicata em `LeadOrigem` recusa a origem já
- * registrada, então rodar duas vezes dá o mesmo resultado e o script pode
- * ser interrompido e retomado.
- *
- * Chama a função de produção, não uma cópia: se a regra de identidade
- * mudar, isto muda junto. Copiar a lógica aqui é como se escreve o defeito
- * que só existe na migração.
- *
- * Uso: DATABASE_URL=… LEAD_FINGERPRINT_KEY=… npx tsx scripts/carregar-leads.ts [--aplicar]
- */
-import { prisma } from '../src/infra/db/client'
-import { registrarLead, type EntradaLead } from '../src/server/lead-service'
+export type ResultadoCarga = { processadas: number; semChave: number; falhas: number }
+export async function coletarAparicoes(): Promise<EntradaLead[]>
+export async function carregarLeads(): Promise<ResultadoCarga>
+```
 
-const aplicar = process.argv.includes('--aplicar')
+- [ ] **Step 1: Escrever o teste que falha**
+
+`src/server/carga-leads.test.ts`:
+
+```typescript
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { prisma } from '@/infra/db/client'
+import { impressaoDigitalCpf } from '@/domain/lead/identidade'
+import { criarCotacaoValida, criarUsuarioComSaldo } from '@/test/factories'
+import { carregarLeads } from './carga-leads'
+import { emitirEtiqueta } from './emitir-etiqueta-service'
+import { registrarPedido } from './pedido-service'
+import { criarEnvio, type EnderecoEnvio } from './shipment-service'
+
+/**
+ * A carga inicial reconstrói a base a partir do histórico.
+ *
+ * Os dados são semeados pelos fluxos normais — que, depois da Task 4, já
+ * alimentam a base ao vivo — e a base é apagada em seguida. Isso reproduz o
+ * cenário real: pedidos, envios e conversas que existiam antes de a base de
+ * leads existir.
+ *
+ * As asserções procuram o lead pelo telefone único de cada teste, e não pela
+ * contagem total da tabela: a carga varre o banco inteiro, e outros arquivos da
+ * suíte podem ter deixado pedidos ou envios para trás.
+ */
+
+const usuariosCriados: string[] = []
+let userId = ''
+let perfilId = ''
+let sequencia = 0
+
+const remetente: EnderecoEnvio = {
+  nome: 'Remetente Teste',
+  documento: '52998224725',
+  cep: '01310-100',
+  logradouro: 'Av. Paulista',
+  numero: '1000',
+  bairro: 'Bela Vista',
+  cidade: 'São Paulo',
+  uf: 'SP',
+}
+
+/**
+ * CPF com dígitos verificadores válidos a partir de nove dígitos de base.
+ *
+ * Cada teste precisa de um CPF que nenhum outro arquivo use: com um CPF fixo, um
+ * envio deixado para trás por outro teste seria fundido no mesmo lead e os
+ * totais afirmados aqui deixariam de ser verdade.
+ */
+function cpfValido(base9: string): string {
+  const digito = (lista: number[]): number => {
+    const soma = lista.reduce((acc, d, i) => acc + d * (lista.length + 1 - i), 0)
+    const resto = (soma * 10) % 11
+    return resto === 10 ? 0 : resto
+  }
+  const base = base9.split('').map(Number)
+  const d1 = digito(base)
+  const d2 = digito([...base, d1])
+  return `${base9}${d1}${d2}`
+}
+
+function pessoaUnica(): { telefone: string; cpf: string } {
+  sequencia += 1
+  const sufixo = String(Date.now() + sequencia).slice(-8)
+  return { telefone: `219${sufixo}`, cpf: cpfValido(`3${sufixo}`) }
+}
+
+beforeAll(async () => {
+  const user = await criarUsuarioComSaldo(500_000)
+  userId = user.id
+  usuariosCriados.push(userId)
+  const perfil = await prisma.perfil.create({ data: { userId, nome: 'Loja do teste de carga' } })
+  perfilId = perfil.id
+})
+
+beforeEach(async () => {
+  await prisma.lead.deleteMany({})
+})
+
+afterAll(async () => {
+  const envios = await prisma.shipment.findMany({
+    where: { userId: { in: usuariosCriados } },
+    select: { id: true },
+  })
+  const ids = envios.map((e) => e.id)
+  const carteiras = await prisma.wallet.findMany({ where: { userId: { in: usuariosCriados } } })
+
+  await prisma.lead.deleteMany({})
+  await prisma.conversa.deleteMany({ where: { perfilId } })
+  await prisma.trackingEvent.deleteMany({ where: { shipmentId: { in: ids } } })
+  await prisma.shipment.deleteMany({ where: { userId: { in: usuariosCriados } } })
+  await prisma.mensagemEnvio.deleteMany({ where: { perfilId } })
+  await prisma.mensagemTemplate.deleteMany({ where: { perfilId } })
+  await prisma.pedido.deleteMany({ where: { perfilId } })
+  await prisma.perfil.deleteMany({ where: { id: perfilId } })
+  await prisma.quote.deleteMany({ where: { userId: { in: usuariosCriados } } })
+  await prisma.ledgerEntry.deleteMany({ where: { walletId: { in: carteiras.map((c) => c.id) } } })
+  await prisma.wallet.deleteMany({ where: { userId: { in: usuariosCriados } } })
+  await prisma.user.deleteMany({ where: { id: { in: usuariosCriados } } })
+})
+
+async function emitirPara(pessoa: { telefone: string; cpf: string }, sandbox = false): Promise<string> {
+  const cotacao = await criarCotacaoValida(userId, { precoCentavos: 1416 })
+  const envio = await criarEnvio(userId, {
+    quoteId: cotacao.id,
+    servicoId: 'eco',
+    perfilId,
+    remetente,
+    destinatario: {
+      nome: 'Pessoa da Carga',
+      documento: pessoa.cpf,
+      telefone: pessoa.telefone,
+      cep: '20040-020',
+      logradouro: 'Av. Rio Branco',
+      numero: '100',
+      bairro: 'Centro',
+      cidade: 'Rio de Janeiro',
+      uf: 'RJ',
+    },
+    produtos: [{ nome: 'Camiseta', quantidade: 1, valorUnitarioCentavos: 5000 }],
+  })
+  await prisma.shipment.update({
+    where: { id: envio.id },
+    data: { status: 'RELEASED', pagoEm: new Date(), sandbox },
+  })
+  await emitirEtiqueta(envio.id)
+  return envio.id
+}
+
+describe('carregarLeads', () => {
+  it(
+    'reconstrói um lead só a partir de pedido, envio e conversa da mesma pessoa',
+    async () => {
+      const pessoa = pessoaUnica()
+      await registrarPedido(perfilId, {
+        externalId: `carga-${pessoa.telefone}`,
+        status: 'PAGO',
+        clienteNome: 'Pessoa da Carga',
+        clienteFone: pessoa.telefone,
+        valorCentavos: 9990,
+      })
+      await emitirPara(pessoa)
+      await prisma.conversa.create({
+        data: { perfilId, contato: pessoa.telefone, nomeContato: 'pessoa' },
+      })
+
+      // O fluxo ao vivo já alimentou a base; apagá-la simula o histórico que
+      // existia antes de ela existir.
+      await prisma.lead.deleteMany({})
+
+      const resultado = await carregarLeads()
+
+      expect(resultado.falhas).toBe(0)
+      const leads = await prisma.lead.findMany({ where: { telefoneNormalizado: pessoa.telefone } })
+      expect(leads).toHaveLength(1)
+      const lead = leads[0]!
+      expect(lead.cpfHash).toBe(impressaoDigitalCpf(pessoa.cpf))
+      expect(lead.totalPedidos).toBe(1)
+      expect(lead.totalEnvios).toBe(1)
+      expect(lead.valorTotalCentavos).toBe(9990)
+      expect(await prisma.leadOrigem.count({ where: { leadId: lead.id } })).toBe(3)
+    },
+    30_000,
+  )
+
+  it(
+    'rodar a carga duas vezes produz exatamente o mesmo estado',
+    async () => {
+      const pessoa = pessoaUnica()
+      await registrarPedido(perfilId, {
+        externalId: `carga-dupla-${pessoa.telefone}`,
+        status: 'PAGO',
+        clienteNome: 'Pessoa Dupla',
+        clienteFone: pessoa.telefone,
+        valorCentavos: 5000,
+      })
+      await emitirPara(pessoa)
+      await prisma.lead.deleteMany({})
+
+      await carregarLeads()
+      const leadsAntes = await prisma.lead.count()
+      const origensAntes = await prisma.leadOrigem.count()
+      const antes = await prisma.lead.findFirstOrThrow({
+        where: { telefoneNormalizado: pessoa.telefone },
+      })
+
+      const segunda = await carregarLeads()
+
+      // A trava de duplicata em LeadOrigem recusa a aparição já registrada:
+      // nenhuma linha nova, nenhum total somado de novo.
+      expect(segunda.falhas).toBe(0)
+      expect(await prisma.lead.count()).toBe(leadsAntes)
+      expect(await prisma.leadOrigem.count()).toBe(origensAntes)
+      const depois = await prisma.lead.findFirstOrThrow({
+        where: { telefoneNormalizado: pessoa.telefone },
+      })
+      expect(depois.id).toBe(antes.id)
+      expect(depois.totalPedidos).toBe(antes.totalPedidos)
+      expect(depois.totalEnvios).toBe(antes.totalEnvios)
+      expect(depois.valorTotalCentavos).toBe(antes.valorTotalCentavos)
+    },
+    30_000,
+  )
+
+  it(
+    'não cria lead a partir de envio sandbox',
+    async () => {
+      const pessoa = pessoaUnica()
+      await emitirPara(pessoa, true)
+      await prisma.lead.deleteMany({})
+
+      await carregarLeads()
+
+      expect(await prisma.lead.count({ where: { telefoneNormalizado: pessoa.telefone } })).toBe(0)
+    },
+    30_000,
+  )
+
+  it(
+    'conta as falhas em vez de engoli-las quando falta o segredo da impressão digital',
+    async () => {
+      /*
+        O defeito que motivou reescrever esta tarefa: sem o segredo, cada
+        aparição com CPF falhava e era pulada, e a carga terminava parecendo
+        completa. Quem opera precisa saber que ela ficou incompleta.
+      */
+      const pessoa = pessoaUnica()
+      await emitirPara(pessoa)
+      await prisma.lead.deleteMany({})
+
+      const segredo = process.env.LEAD_FINGERPRINT_KEY
+      delete process.env.LEAD_FINGERPRINT_KEY
+
+      try {
+        const resultado = await carregarLeads()
+        expect(resultado.falhas).toBeGreaterThan(0)
+      } finally {
+        if (segredo === undefined) delete process.env.LEAD_FINGERPRINT_KEY
+        else process.env.LEAD_FINGERPRINT_KEY = segredo
+      }
+    },
+    30_000,
+  )
+})
+```
+
+- [ ] **Step 2: Rodar e ver falhar**
+
+Run:
+```
+DATABASE_URL_TEST='postgresql://frete:frete@localhost:5433/frete_test_validacao_leads' npx vitest run src/server/carga-leads.test.ts
+```
+Expected: FAIL — `Failed to resolve import "./carga-leads"`.
+
+- [ ] **Step 3: Escrever a implementação**
+
+`src/server/carga-leads.ts`:
+
+```typescript
+import { prisma } from '@/infra/db/client'
+import { registrarLead, type EntradaLead } from './lead-service'
+
+/**
+ * Carga inicial da base de leads a partir do que já está no banco.
+ *
+ * A base passa a ser alimentada na escrita, mas tudo que aconteceu antes de ela
+ * existir ficou de fora — e é a maior parte. Esta carga percorre pedidos, envios
+ * e conversas já gravados e os apresenta ao mesmo `registrarLead` que roda ao
+ * vivo. Chama a função de produção, não uma cópia: se a regra de identidade
+ * mudar, a carga muda junto.
+ *
+ * A ORDEM CRONOLÓGICA importa: reproduz a mesma sequência de fusões que teria
+ * acontecido ao vivo.
+ *
+ * É idempotente: a trava de duplicata em `LeadOrigem` recusa a aparição já
+ * registrada, então rodar de novo não duplica linha nem soma total — e uma carga
+ * interrompida pode ser retomada do começo.
+ */
 
 type Destinatario = {
   nome?: string
@@ -1399,7 +1665,33 @@ type Destinatario = {
   documento?: string
 }
 
-async function coletar(): Promise<EntradaLead[]> {
+export type ResultadoCarga = {
+  processadas: number
+  semChave: number
+  falhas: number
+}
+
+/** Ordem de tipo para desempatar aparições com o mesmo instante. */
+const ORDEM_TIPO: Readonly<Record<EntradaLead['tipo'], number>> = {
+  PEDIDO_PENDENTE: 0,
+  PEDIDO_PAGO: 1,
+  ENVIO: 2,
+  CONVERSA: 3,
+}
+
+function idDaOrigem(entrada: EntradaLead): string {
+  return entrada.pedidoId ?? entrada.shipmentId ?? entrada.conversaId ?? ''
+}
+
+/**
+ * Todas as aparições do histórico, em ordem cronológica estável.
+ *
+ * O desempate por tipo e por id existe porque a carga inicial costuma ter
+ * muitas linhas com o mesmo instante. Sem ele, duas execuções processariam o
+ * empate em ordens diferentes e poderiam escolher sobreviventes diferentes na
+ * fusão.
+ */
+export async function coletarAparicoes(): Promise<EntradaLead[]> {
   const pedidos = await prisma.pedido.findMany({
     select: {
       id: true,
@@ -1415,13 +1707,7 @@ async function coletar(): Promise<EntradaLead[]> {
 
   const envios = await prisma.shipment.findMany({
     where: { sandbox: false, codigoRastreio: { not: null } },
-    select: {
-      id: true,
-      perfilId: true,
-      destinatario: true,
-      geradoEm: true,
-      criadoEm: true,
-    },
+    select: { id: true, perfilId: true, destinatario: true, geradoEm: true, criadoEm: true },
   })
 
   const conversas = await prisma.conversa.findMany({
@@ -1462,40 +1748,110 @@ async function coletar(): Promise<EntradaLead[]> {
     })),
   ]
 
-  return entradas.sort((a, b) => a.ocorridoEm.getTime() - b.ocorridoEm.getTime())
+  return entradas.sort(
+    (a, b) =>
+      a.ocorridoEm.getTime() - b.ocorridoEm.getTime() ||
+      ORDEM_TIPO[a.tipo] - ORDEM_TIPO[b.tipo] ||
+      idDaOrigem(a).localeCompare(idDaOrigem(b)),
+  )
 }
 
-async function principal(): Promise<void> {
-  const entradas = await coletar()
-  console.log(`${entradas.length} aparições a processar, em ordem cronológica.`)
-
-  if (!aplicar) {
-    console.log('Simulação. Rode com --aplicar para gravar.')
-    return
-  }
+/**
+ * Processa todo o histórico e devolve quantas aparições entraram, quantas não
+ * tinham chave utilizável e quantas FALHARAM.
+ *
+ * Uma aparição que falha não leva as seguintes junto — a próxima execução a
+ * reencontra. Mas a falha é CONTADA e devolvida: uma carga que pula em silêncio
+ * termina parecendo completa, e sem o segredo da impressão digital ela pularia
+ * todo envio com CPF, que é a origem mais importante.
+ *
+ * O log registra só o tipo e os ids da origem, nunca a entrada inteira: ela
+ * carrega CPF, telefone e e-mail em claro, e log não é lugar de dado pessoal.
+ */
+export async function carregarLeads(): Promise<ResultadoCarga> {
+  const entradas = await coletarAparicoes()
 
   let processadas = 0
   let semChave = 0
+  let falhas = 0
 
   for (const entrada of entradas) {
     try {
       const id = await registrarLead(entrada)
       if (id === null) semChave += 1
     } catch (error) {
-      // Uma aparição que falha não pode levar as seguintes junto: a próxima
-      // execução a reencontra, e as que passaram não são refeitas.
-      console.error('Falha ao processar aparição', { entrada, cause: error })
+      falhas += 1
+      console.error('Falha ao processar aparição na carga de leads', {
+        tipo: entrada.tipo,
+        pedidoId: entrada.pedidoId ?? null,
+        shipmentId: entrada.shipmentId ?? null,
+        conversaId: entrada.conversaId ?? null,
+        cause: error,
+      })
     }
-
     processadas += 1
-    if (processadas % 500 === 0) {
-      console.log(`  ${processadas}/${entradas.length}`)
-    }
   }
 
+  return { processadas, semChave, falhas }
+}
+```
+
+- [ ] **Step 4: Rodar e ver passar**
+
+Run:
+```
+DATABASE_URL_TEST='postgresql://frete:frete@localhost:5433/frete_test_validacao_leads' npx vitest run src/server/carga-leads.test.ts
+```
+Expected: PASS, 4 testes.
+
+- [ ] **Step 5: Escrever o script de linha de comando**
+
+`scripts/carregar-leads.ts`:
+
+```typescript
+/**
+ * Porta de linha de comando da carga inicial da base de leads.
+ *
+ * A lógica mora em `src/server/carga-leads.ts`, com teste; este arquivo só lê a
+ * flag, chama e relata.
+ *
+ * Variáveis OBRIGATÓRIAS no ambiente, e o `tsx` não lê `.env` sozinho:
+ * - `DATABASE_URL` — o banco que vai receber os leads. Confira antes: rodar com
+ *   `--aplicar` contra o banco errado grava leads nele.
+ * - `LEAD_FINGERPRINT_KEY` — sem ela, toda aparição com CPF falha.
+ * - `SECRET_ENCRYPTION_KEY` — sem ela, o CPF não pode ser cifrado.
+ *
+ * Sem `--aplicar`, só conta as aparições. Sai com código 1 se alguma falhar,
+ * para que a carga incompleta não passe por completa num agendador ou num CI.
+ *
+ * Uso:
+ *   DATABASE_URL=… LEAD_FINGERPRINT_KEY=… SECRET_ENCRYPTION_KEY=… npx tsx scripts/carregar-leads.ts [--aplicar]
+ */
+import { prisma } from '../src/infra/db/client'
+import { carregarLeads, coletarAparicoes } from '../src/server/carga-leads'
+
+const aplicar = process.argv.includes('--aplicar')
+
+async function principal(): Promise<void> {
+  if (!aplicar) {
+    const entradas = await coletarAparicoes()
+    console.log(`${entradas.length} aparições encontradas. Simulação: rode com --aplicar para gravar.`)
+    return
+  }
+
+  const { processadas, semChave, falhas } = await carregarLeads()
   const total = await prisma.lead.count()
-  console.log(`Pronto. ${processadas} processadas, ${semChave} sem chave utilizável.`)
+
+  console.log(`Processadas: ${processadas}. Sem chave utilizável: ${semChave}. Falhas: ${falhas}.`)
   console.log(`Base com ${total} leads.`)
+
+  if (falhas > 0) {
+    console.error(
+      'A carga ficou INCOMPLETA. Confira LEAD_FINGERPRINT_KEY e SECRET_ENCRYPTION_KEY ' +
+        'e rode de novo — a carga é idempotente.',
+    )
+    process.exitCode = 1
+  }
 }
 
 principal()
@@ -1506,25 +1862,21 @@ principal()
   .finally(() => prisma.$disconnect())
 ```
 
-- [ ] **Step 2: Rodar em simulação contra o banco de teste**
+- [ ] **Step 6: Verificar**
 
-Run: `npx tsx scripts/carregar-leads.ts`
-Expected: imprime a contagem e avisa que é simulação, sem gravar nada.
+Run: `npm run typecheck && npx eslint src/server/carga-leads.ts src/server/carga-leads.test.ts scripts/carregar-leads.ts`
+Expected: só o erro pré-existente de `pode-enviar.test.ts`.
 
-- [ ] **Step 3: Verificar a idempotência**
+Smoke test do script SEM `--aplicar`, contra o banco isolado de teste — nunca contra o de desenvolvimento:
+```
+DATABASE_URL='postgresql://frete:frete@localhost:5433/frete_test_validacao_leads' npx tsx scripts/carregar-leads.ts
+```
+Expected: imprime a contagem de aparições e a mensagem de simulação, sem gravar nada.
 
-Run: `npx tsx scripts/carregar-leads.ts --aplicar` duas vezes seguidas.
-Expected: a segunda execução termina com exatamente a mesma contagem de leads da primeira.
-
-- [ ] **Step 4: Verificar tipos e lint**
-
-Run: `npm run typecheck && npx eslint scripts/carregar-leads.ts`
-Expected: sem erro.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add scripts/carregar-leads.ts
+git add src/server/carga-leads.ts src/server/carga-leads.test.ts scripts/carregar-leads.ts
 git commit -m "feat: carga inicial da base de leads a partir do histórico
 
 Co-Authored-By: claude-flow <ruv@ruv.net>"
