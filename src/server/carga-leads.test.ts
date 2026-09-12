@@ -199,6 +199,38 @@ describe('carregarLeads', () => {
   )
 
   it(
+    'pedido pago e depois cancelado: carga e fluxo ao vivo chegam ao mesmo lead',
+    async () => {
+      const pessoa = pessoaUnica()
+      const externalId = `carga-cancelado-${pessoa.telefone}`
+      const pedido = {
+        externalId,
+        clienteNome: 'Pessoa Cancelada',
+        clienteFone: pessoa.telefone,
+        valorCentavos: 7700,
+      }
+      await registrarPedido(perfilId, { ...pedido, status: 'PAGO' })
+      await registrarPedido(perfilId, { ...pedido, status: 'CANCELADO' })
+
+      const aoVivo = await prisma.lead.findFirstOrThrow({
+        where: { telefoneNormalizado: pessoa.telefone },
+      })
+
+      await prisma.lead.deleteMany({})
+      const resultado = await carregarLeads()
+      expect(resultado.falhas).toBe(0)
+
+      const carga = await prisma.lead.findFirstOrThrow({
+        where: { telefoneNormalizado: pessoa.telefone },
+      })
+      expect(carga.valorTotalCentavos).toBe(aoVivo.valorTotalCentavos)
+      expect(carga.totalPedidos).toBe(aoVivo.totalPedidos)
+      expect(carga.ultimoContatoEm.toISOString()).toBe(aoVivo.ultimoContatoEm.toISOString())
+    },
+    30_000,
+  )
+
+  it(
     'não cria lead a partir de envio sandbox',
     async () => {
       const pessoa = pessoaUnica()

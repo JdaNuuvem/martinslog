@@ -158,7 +158,9 @@ export async function registrarPedido(
       tipo: status === 'PAGO' ? 'PEDIDO_PAGO' : 'PEDIDO_PENDENTE',
       perfilId,
       pedidoId: pedido.id,
-      ocorridoEm: agora,
+      // A data de nascimento do pedido, a mesma que a carga inicial usa: a
+      // ressincronização não empurra o último contato para "agora".
+      ocorridoEm: pedido.criadoEm,
       nome: entrada.clienteNome,
       email: entrada.clienteEmail,
       telefone: fone,

@@ -62,6 +62,7 @@ export async function coletarAparicoes(): Promise<EntradaLead[]> {
       clienteEmail: true,
       valorCentavos: true,
       criadoEm: true,
+      pagoEm: true,
     },
   })
 
@@ -75,15 +76,20 @@ export async function coletarAparicoes(): Promise<EntradaLead[]> {
   })
 
   const entradas: EntradaLead[] = [
+    /*
+      `pagoEm`, e não o status atual: ele só é gravado, nunca apagado. Um
+      pedido pago e depois cancelado foi registrado como PAGO pelo fluxo ao
+      vivo; olhar só o status faria a carga perder esse valor.
+    */
     ...pedidos.map((p): EntradaLead => ({
-      tipo: p.status === 'PAGO' ? 'PEDIDO_PAGO' : 'PEDIDO_PENDENTE',
+      tipo: p.pagoEm ? 'PEDIDO_PAGO' : 'PEDIDO_PENDENTE',
       perfilId: p.perfilId,
       pedidoId: p.id,
       ocorridoEm: p.criadoEm,
       nome: p.clienteNome,
       email: p.clienteEmail,
       telefone: p.clienteFone,
-      valorCentavos: p.status === 'PAGO' ? p.valorCentavos : 0,
+      valorCentavos: p.pagoEm ? p.valorCentavos : 0,
     })),
     ...envios.map((e): EntradaLead => {
       const destinatario = (e.destinatario as Destinatario | null) ?? {}
