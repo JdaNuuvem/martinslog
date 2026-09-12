@@ -179,7 +179,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       },
     })
 
-    return new NextResponse(linhas.join('\n'), {
+    /*
+      BOM UTF-8 à frente: quem baixa abre no Excel do Windows, que sem ele lê
+      o arquivo como ANSI e mostra "JoÃ£o" no lugar de "João".
+    */
+    return new NextResponse('﻿' + linhas.join('\n'), {
       headers: {
         'content-type': 'text/csv; charset=utf-8',
         'content-disposition': `attachment; filename="leads-${new Date().toISOString().slice(0, 10)}.csv"`,

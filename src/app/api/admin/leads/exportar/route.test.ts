@@ -90,6 +90,17 @@ describe('GET /api/admin/leads/exportar', () => {
     expect(corpo).toContain('***.')
   })
 
+  it('o corpo começa com BOM UTF-8, para o Excel ler os acentos', async () => {
+    const resposta = await requisitar(sessaoAdmin, '')
+    expect(resposta.status).toBe(200)
+
+    // `text()` descarta o BOM ao decodificar; os bytes crus o preservam.
+    const bytes = new Uint8Array(await resposta.arrayBuffer())
+    expect(Array.from(bytes.slice(0, 3))).toEqual([0xef, 0xbb, 0xbf])
+    const corpo = new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes)
+    expect(corpo.startsWith('﻿"Nome"')).toBe(true)
+  })
+
   it('exportação com cpfCompleto=true grava AuditLog com ação LEADS_EXPORTADOS', async () => {
     const cpf = '52998224725'
     await registrarLead({
