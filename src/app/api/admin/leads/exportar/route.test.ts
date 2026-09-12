@@ -116,7 +116,7 @@ describe('GET /api/admin/leads/exportar', () => {
     expect(resposta.status).toBe(200)
 
     const corpo = await resposta.text()
-    expect(corpo).toContain(cpf)
+    expect(corpo).toContain('529.982.247-25')
 
     const registro = await prisma.auditLog.findFirst({
       where: { actorUserId: adminId, acao: 'LEADS_EXPORTADOS' },
@@ -124,6 +124,25 @@ describe('GET /api/admin/leads/exportar', () => {
     })
     expect(registro).not.toBeNull()
     expect(registro?.entidade).toBe('Lead')
+  })
+
+  it('CPF completo sai formatado, preservando o zero à esquerda no Excel', async () => {
+    // CPF válido que começa com 0: base 012345678, verificadores 9 e 0.
+    const cpf = '01234567890'
+    await registrarLead({
+      tipo: 'PEDIDO_PAGO',
+      ocorridoEm: new Date(),
+      nome: 'Comprador CPF com Zero',
+      telefone: telefoneDistinto(5002),
+      cpf,
+    })
+
+    const resposta = await requisitar(sessaoAdmin, '?cpfCompleto=true')
+    expect(resposta.status).toBe(200)
+
+    const corpo = await resposta.text()
+    expect(corpo).toContain('"012.345.678-90"')
+    expect(corpo).not.toContain(cpf)
   })
 
   it('CPF cifrado ilegível vira célula "ilegível" e é contado na auditoria', async () => {

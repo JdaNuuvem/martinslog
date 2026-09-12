@@ -18,6 +18,15 @@ import { ORIGENS, buscaLeadsSchema } from '@/lib/leads-schema'
  * dados e quando.
  */
 
+/**
+ * CPF com pontos e hífen. Os onze dígitos crus o Excel lê como NÚMERO e come
+ * o zero à esquerda; formatado, vira texto e sai inteiro. Começa sempre por
+ * dígito, então não aciona o neutralizador de fórmula.
+ */
+function formatarCpf(cpf: string): string {
+  return `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9, 11)}`
+}
+
 /** Escapa um campo para CSV, protegendo contra injeção de fórmula. */
 function celula(valor: string | number | null): string {
   const texto = String(valor ?? '')
@@ -114,7 +123,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       for (const registro of cifrados) {
         if (!registro.cpfCifrado) continue
         try {
-          cpfPorLead.set(registro.id, decifrarCampo(registro.cpfCifrado))
+          cpfPorLead.set(registro.id, formatarCpf(decifrarCampo(registro.cpfCifrado)))
         } catch {
           cpfsIlegiveis += 1
           console.error('CPF de lead ilegível na exportação', { leadId: registro.id })
