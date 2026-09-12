@@ -562,6 +562,39 @@ describe('registrarLead', () => {
     expect(lead.totalPedidos).toBe(1)
   })
 
+  it('duas aparições simultâneas da mesma pessoa nova viram um lead só', async () => {
+    /*
+      A corrida real: pedido pago e envio pago da mesma compradora chegam com
+      segundos de diferença. Disparadas juntas, as duas procuram, ninguém é
+      encontrado, e as duas tentam criar. Sem a nova tentativa, uma delas se
+      perde da base.
+    */
+    const [a, b] = await Promise.all([
+      registrarLead(base({ cpf: CPF, pedidoId: 'corrida-p' })),
+      registrarLead(base({ tipo: 'ENVIO', cpf: CPF, shipmentId: 'corrida-s' })),
+    ])
+
+    expect(a).toBe(b)
+    expect(await prisma.lead.count()).toBe(1)
+    expect(await prisma.leadOrigem.count()).toBe(2)
+  })
+
+  it('reprocessar uma origem não desfaz a atualização do lead na mesma chamada', async () => {
+    /*
+      O defeito que `skipDuplicates` evita. Com `create` + `try/catch`, a
+      origem repetida abortava a transação no Postgres e o COMMIT virava
+      ROLLBACK — levando junto o nome novo gravado segundos antes.
+    */
+    await registrarLead(base({ telefone: '21999990077', pedidoId: 'p77' }))
+
+    await registrarLead(
+      base({ telefone: '21999990077', pedidoId: 'p77', nome: 'Nome Que Chegou Depois' }),
+    )
+
+    const lead = await prisma.lead.findFirstOrThrow()
+    expect(lead.nome).toBe('Nome Que Chegou Depois')
+  })
+
   it('o nome do envio vence o nome vindo da conversa', async () => {
     await registrarLead(
       base({ tipo: 'CONVERSA', telefone: '21999990003', nome: 'zezinho❤️', conversaId: 'c1' }),
@@ -636,6 +669,36 @@ export async function registrarLead(entrada: EntradaLead): Promise<string | null
   if (!cpf && !telefone && !email) return null
 
   const cpfHash = cpf ? impressaoDigitalCpf(cpf) : null
+
+  /*
+    UMA nova tentativa quando duas aparições da mesma pessoa nova correm juntas.
+
+    Não é hipótese: o aviso de pagamento já documenta, em `sms-service`, que o
+    pedido marcado PAGO e o envio pago chegam com segundos de diferença. As
+    duas transações procuram, não acham ninguém e tentam criar o mesmo lead —
+    a segunda bate na chave única, e a transação dela aborta. Sem a nova
+    tentativa, o chamador registra o erro no log e aquela aparição some da
+    base. Na segunda tentativa a procura já encontra o lead que a primeira
+    criou, e a aparição é somada a ele.
+
+    Uma tentativa só: se falhar de novo, o problema não é corrida, e insistir
+    esconderia o defeito real.
+  */
+  try {
+    return await registrarNaTransacao(entrada, { cpf, cpfHash, telefone, email })
+  } catch (erro) {
+    if (erro && typeof erro === 'object' && 'code' in erro && erro.code === 'P2002') {
+      return registrarNaTransacao(entrada, { cpf, cpfHash, telefone, email })
+    }
+    throw erro
+  }
+}
+
+async function registrarNaTransacao(
+  entrada: EntradaLead,
+  chaves: Chaves & { cpf: string | null },
+): Promise<string> {
+  const { cpf, cpfHash, telefone, email } = chaves
 
   return prisma.$transaction(async (tx) => {
     /*
@@ -826,15 +889,24 @@ async function aplicarDados(
 /**
  * Grava a aparição e soma os totais.
  *
- * Os totais só sobem quando a origem é NOVA. A trava de duplicata do banco
- * recusa a segunda gravação da mesma origem, e é dentro desse mesmo caminho
- * que a soma acontece — assim reprocessar um pedido não conta a compra duas
- * vezes.
+ * Os totais só sobem quando a origem é NOVA — assim reprocessar um pedido não
+ * conta a compra duas vezes.
+ *
+ * **`createMany` com `skipDuplicates`, e não `create` com `try/catch`.** É a
+ * diferença entre funcionar e perder dado em silêncio. No Postgres, um comando
+ * que falha dentro de uma transação ABORTA a transação inteira: capturar o
+ * `P2002` e seguir em frente não desfaz o erro, e o `COMMIT` que o Prisma
+ * emite no fim vira `ROLLBACK` sem avisar ninguém. A atualização do lead feita
+ * segundos antes, na mesma transação, iria junto.
+ *
+ * `skipDuplicates` emite `ON CONFLICT DO NOTHING`: a linha repetida é
+ * ignorada sem erro, a transação continua viva, e `count` diz se a origem era
+ * nova. A cláusula respeita o índice `NULLS NOT DISTINCT` (Postgres 15+).
  */
 async function registrarOrigem(tx: Tx, leadId: string, entrada: EntradaLead): Promise<void> {
-  try {
-    await tx.leadOrigem.create({
-      data: {
+  const { count } = await tx.leadOrigem.createMany({
+    data: [
+      {
         leadId,
         tipo: entrada.tipo,
         perfilId: entrada.perfilId ?? null,
@@ -843,13 +915,13 @@ async function registrarOrigem(tx: Tx, leadId: string, entrada: EntradaLead): Pr
         conversaId: entrada.conversaId ?? null,
         ocorridoEm: entrada.ocorridoEm,
       },
-    })
-  } catch (erro) {
-    // Violação da chave única: esta origem já estava registrada. É o caminho
-    // normal da carga inicial ao ser retomada, e nada mais deve acontecer.
-    if (erro && typeof erro === 'object' && 'code' in erro && erro.code === 'P2002') return
-    throw erro
-  }
+    ],
+    skipDuplicates: true,
+  })
+
+  // Origem já registrada: é o caminho normal da carga inicial ao ser
+  // retomada, e nada mais deve acontecer — nem os totais podem subir.
+  if (count === 0) return
 
   await tx.lead.update({
     where: { id: leadId },
@@ -868,7 +940,7 @@ async function registrarOrigem(tx: Tx, leadId: string, entrada: EntradaLead): Pr
 - [ ] **Step 4: Rodar e ver passar**
 
 Run: `npx vitest run src/server/lead-service.test.ts`
-Expected: PASS, 10 testes.
+Expected: PASS, 12 testes.
 
 - [ ] **Step 5: Verificar tipos e lint**
 
