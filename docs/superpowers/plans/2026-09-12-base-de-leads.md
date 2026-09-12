@@ -1103,6 +1103,28 @@ describe('ingestão de leads', () => {
     expect(lead.valorTotalCentavos).toBe(9990)
   })
 
+  it('pedido pendente também vira lead', async () => {
+    /*
+      O caso que um `registrarLead` posto no fim de `registrarPedido` perderia:
+      a função sai cedo para todo pedido que não é PAGO. Pedido não finalizado
+      é o lead no sentido literal — quem se interessou e não fechou —, e é uma
+      das origens que o spec exige.
+    */
+    await registrarPedido(perfilId, {
+      externalId: `pend-${Date.now()}`,
+      status: 'PENDENTE',
+      clienteNome: 'Carla Pendente',
+      clienteFone: '21999990066',
+      valorCentavos: 4500,
+    })
+
+    const lead = await prisma.lead.findFirstOrThrow()
+    expect(lead.telefoneNormalizado).toBe('21999990066')
+    expect(lead.totalPedidos).toBe(1)
+    // Pedido não pago não soma valor: o dinheiro não entrou.
+    expect(lead.valorTotalCentavos).toBe(0)
+  })
+
   it('etiqueta emitida vira lead e traz o CPF', async () => {
     await emitir(compradora)
 
@@ -1162,11 +1184,23 @@ Em `src/server/pedido-service.ts`, acrescente o import:
 import { registrarLead } from './lead-service'
 ```
 
-Ao final de `registrarPedido`, logo antes do `return` do pedido salvo:
+Em `registrarPedido`, logo DEPOIS do upsert que define `const pedido = anterior ? ... : ...` e ANTES de `const mudouStatus`:
+
+**A posição importa, e o final da função é o lugar errado.** `registrarPedido`
+tem quatro `return`s: um quando o status não mudou, um para todo pedido que não
+é `PAGO`, um quando `notificarCliente` é falso, e o final. Chamar
+`registrarLead` só antes do último faria o `return` antecipado de pedido não
+pago pular o registro — e nenhum pedido pendente entraria na base, embora
+"pedidos não finalizados" seja uma das origens exigidas pelo spec.
 
 ```typescript
   /*
-    O comprador entra na base de leads.
+    O comprador entra na base de leads — AQUI, antes de qualquer `return`.
+
+    A função tem quatro saídas, e três delas saem cedo: status que não mudou,
+    pedido que não é PAGO e aviso desligado. Registrar só no final pularia
+    todo pedido pendente, que é justamente o lead no sentido literal — quem se
+    interessou e não fechou.
 
     Nunca derruba o registro do pedido: o lead é subproduto, e a loja que
     integrou tem direito ao seu 201 mesmo que a nossa base falhe. Mesma
@@ -1176,7 +1210,7 @@ Ao final de `registrarPedido`, logo antes do `return` do pedido salvo:
     await registrarLead({
       tipo: status === 'PAGO' ? 'PEDIDO_PAGO' : 'PEDIDO_PENDENTE',
       perfilId,
-      pedidoId: salvo.id,
+      pedidoId: pedido.id,
       ocorridoEm: agora,
       nome: entrada.clienteNome,
       email: entrada.clienteEmail,
@@ -1188,7 +1222,8 @@ Ao final de `registrarPedido`, logo antes do `return` do pedido salvo:
   }
 ```
 
-Ajuste `salvo.id` para o nome real da variável que carrega o pedido gravado.
+A variável do pedido gravado se chama `pedido` (definida no upsert por volta da
+linha 130), e `fone` é o telefone já normalizado no início da função.
 
 - [ ] **Step 4: Ligar o fluxo de envio**
 
@@ -1292,7 +1327,7 @@ Em `registrarEntrada`, depois da transação que grava a mensagem e antes do `re
 - [ ] **Step 6: Rodar e ver passar**
 
 Run: `npx vitest run src/server/lead-ingestao.test.ts`
-Expected: PASS, 4 testes.
+Expected: PASS, 5 testes.
 
 - [ ] **Step 7: Rodar a suíte inteira**
 
