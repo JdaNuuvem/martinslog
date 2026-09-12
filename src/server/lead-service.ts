@@ -1,6 +1,6 @@
 import type { OrigemLead, Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
-import { cifrar } from '@/infra/crypto/segredo'
+import { cifrarCampo } from '@/infra/crypto/campo'
 import {
   impressaoDigitalCpf,
   normalizarCpf,
@@ -154,7 +154,7 @@ async function criarLead(tx: Tx, entrada: EntradaLead, chaves: Chaves & { cpf: s
       telefone: entrada.telefone?.trim() || null,
       telefoneNormalizado: chaves.telefone,
       cpfHash: chaves.cpfHash,
-      cpfCifrado: chaves.cpf ? cifrar(chaves.cpf) : null,
+      cpfCifrado: chaves.cpf ? cifrarCampo(chaves.cpf) : null,
       primeiroContatoEm: entrada.ocorridoEm,
       ultimoContatoEm: entrada.ocorridoEm,
     },
@@ -265,7 +265,7 @@ async function criarLeadParaCpfSemCandidatoCompativel(
       telefone: telefoneLivre ? entrada.telefone?.trim() || null : null,
       telefoneNormalizado: telefoneLivre ? chaves.telefone : null,
       cpfHash: chaves.cpfHash,
-      cpfCifrado: chaves.cpf ? cifrar(chaves.cpf) : null,
+      cpfCifrado: chaves.cpf ? cifrarCampo(chaves.cpf) : null,
       primeiroContatoEm: entrada.ocorridoEm,
       ultimoContatoEm: entrada.ocorridoEm,
     },
@@ -418,7 +418,7 @@ async function aplicarDados(
       telefone: telefoneLivre ? entrada.telefone?.trim() || null : atual.telefone,
       telefoneNormalizado: telefoneLivre ? chaves.telefone : atual.telefoneNormalizado,
       cpfHash: cpfHashLivre ? chaves.cpfHash : atual.cpfHash,
-      cpfCifrado: cpfHashLivre && chaves.cpf ? cifrar(chaves.cpf) : atual.cpfCifrado,
+      cpfCifrado: cpfHashLivre && chaves.cpf ? cifrarCampo(chaves.cpf) : atual.cpfCifrado,
       primeiroContatoEm:
         entrada.ocorridoEm < atual.primeiroContatoEm ? entrada.ocorridoEm : atual.primeiroContatoEm,
       ultimoContatoEm:
