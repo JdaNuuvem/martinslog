@@ -22,6 +22,7 @@ const ITENS = [
   { rotulo: 'Webhooks', href: '/admin/webhooks' },
   { rotulo: 'Cotações', href: '/admin/cotacoes' },
   { rotulo: 'Usuários', href: '/admin/usuarios' },
+  { rotulo: 'Leads', href: '/admin/leads' },
   { rotulo: 'Tabelas', href: '/admin/tabelas' },
   { rotulo: 'Serviços', href: '/admin/servicos' },
   { rotulo: 'Status de rastreio', href: '/admin/status-rastreio' },
