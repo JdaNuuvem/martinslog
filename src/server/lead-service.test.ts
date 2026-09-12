@@ -189,18 +189,31 @@ describe('registrarLead', () => {
       esses dois leads apagaria o CPF de um deles — o oposto do que a fusão
       existe para proteger.
     */
-    await registrarLead(base({ cpf: CPF, telefone: '21999990021', pedidoId: 'p21' }))
-    await registrarLead(base({ cpf: OUTRO_CPF, email: 'b@exemplo.com', pedidoId: 'p22' }))
+    const comTelefone = await registrarLead(
+      base({ cpf: CPF, telefone: '21999990021', pedidoId: 'p21' }),
+    )
+    const comEmail = await registrarLead(
+      base({ cpf: OUTRO_CPF, email: 'b@exemplo.com', pedidoId: 'p22' }),
+    )
     expect(await prisma.lead.count()).toBe(2)
 
-    await expect(
-      registrarLead(
-        base({ tipo: 'CONVERSA', telefone: '21999990021', email: 'b@exemplo.com', conversaId: 'c22' }),
-      ),
-    ).resolves.not.toThrow()
+    await registrarLead(
+      base({ tipo: 'CONVERSA', telefone: '21999990021', email: 'b@exemplo.com', conversaId: 'c22' }),
+    )
 
     expect(await prisma.lead.count()).toBe(2)
-    expect(await prisma.leadOrigem.count({ where: { conversaId: 'c22' } })).toBe(1)
+
+    const leadComTelefone = await prisma.lead.findUniqueOrThrow({ where: { id: comTelefone! } })
+    const leadComEmail = await prisma.lead.findUniqueOrThrow({ where: { id: comEmail! } })
+    expect(leadComTelefone.cpfHash).not.toBeNull()
+    expect(leadComEmail.cpfHash).not.toBeNull()
+    expect(leadComTelefone.cpfHash).not.toBe(leadComEmail.cpfHash)
+
+    // A origem da conversa foi para quem casou pelo telefone — o alvo da
+    // cascata, já que a entrada não trouxe CPF nenhum — e não para quem só
+    // dividia o e-mail por coincidência.
+    const origemNova = await prisma.leadOrigem.findFirstOrThrow({ where: { conversaId: 'c22' } })
+    expect(origemNova.leadId).toBe(comTelefone)
   })
 
   it('entrada com CPF vai para o dono do CPF mesmo quando um lead mais antigo de outro CPF divide o telefone', async () => {
@@ -231,6 +244,81 @@ describe('registrarLead', () => {
     expect(origemNova.leadId).toBe(y)
     const leadX = await prisma.lead.findUniqueOrThrow({ where: { id: x! } })
     expect(leadX.cpfHash).not.toBeNull()
+  })
+
+  it('entrada com CPF sem candidato compatível cria lead novo em vez de cair em outra pessoa', async () => {
+    /*
+      X tem CPF diferente do da entrada e o mesmo telefone dela. Não existe
+      candidato compatível com o CPF da entrada — cair em X (o único
+      candidato encontrado) juntaria o pedido e o valor à pessoa errada, e o
+      dono do CPF novo nunca ganharia lead próprio.
+    */
+    const x = await registrarLead(
+      base({ cpf: OUTRO_CPF, telefone: '21999990040', pedidoId: 'p40' }),
+    )
+
+    const novoId = await registrarLead(
+      base({ cpf: CPF, telefone: '21999990040', pedidoId: 'p41', valorCentavos: 6000 }),
+    )
+
+    expect(await prisma.lead.count()).toBe(2)
+    expect(novoId).not.toBe(x)
+
+    const origemNova = await prisma.leadOrigem.findFirstOrThrow({ where: { pedidoId: 'p41' } })
+    expect(origemNova.leadId).toBe(novoId)
+
+    const novoLead = await prisma.lead.findUniqueOrThrow({ where: { id: novoId! } })
+    expect(novoLead.cpfHash).not.toBeNull()
+    expect(novoLead.valorTotalCentavos).toBe(6000)
+
+    // X continua intacto — nada da entrada foi gravado nele.
+    const leadX = await prisma.lead.findUniqueOrThrow({ where: { id: x! } })
+    expect(leadX.cpfHash).not.toBeNull()
+    expect(leadX.cpfHash).not.toBe(novoLead.cpfHash)
+    expect(leadX.telefoneNormalizado).toBe('21999990040')
+  })
+
+  it('fusão não absorve lead de CPF diferente do da entrada antes de chegar ao dono do CPF', async () => {
+    /*
+      A (só telefone) é o mais antigo e compatível — vira o alvo. B tem CPF
+      diferente do CPF da entrada e só compartilha e-mail com ela; C é o
+      dono do CPF da entrada. Checar só o CPF acumulado no alvo deixaria B
+      entrar antes de C (o alvo ainda não tinha CPF quando chega a vez de B)
+      — a fusão precisa também checar o CPF da entrada diretamente.
+    */
+    const a = await registrarLead(
+      base({ tipo: 'CONVERSA', telefone: '21999990042', conversaId: 'ca42' }),
+    )
+    const b = await registrarLead(
+      base({ cpf: OUTRO_CPF, email: 'd@exemplo.com', pedidoId: 'pb42' }),
+    )
+    const c = await registrarLead(base({ cpf: CPF, pedidoId: 'pc42' }))
+    expect(await prisma.lead.count()).toBe(3)
+
+    await registrarLead(
+      base({
+        tipo: 'ENVIO',
+        cpf: CPF,
+        telefone: '21999990042',
+        email: 'd@exemplo.com',
+        shipmentId: 'sb42',
+      }),
+    )
+
+    // A e C se fundiram; B ficou de fora.
+    expect(await prisma.lead.count()).toBe(2)
+
+    const origemNova = await prisma.leadOrigem.findFirstOrThrow({ where: { shipmentId: 'sb42' } })
+    expect(origemNova.leadId).toBe(a)
+
+    const sobrevivente = await prisma.lead.findUniqueOrThrow({ where: { id: a! } })
+    expect(sobrevivente.cpfHash).not.toBeNull()
+
+    const leadB = await prisma.lead.findUniqueOrThrow({ where: { id: b! } })
+    expect(leadB.cpfHash).not.toBeNull()
+    expect(leadB.cpfHash).not.toBe(sobrevivente.cpfHash)
+
+    await expect(prisma.lead.findUnique({ where: { id: c! } })).resolves.toBeNull()
   })
 
   it('pedido pendente num lead e pago noutro conta uma vez após a fusão', async () => {

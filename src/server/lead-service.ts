@@ -179,11 +179,20 @@ async function criarLead(tx: Tx, entrada: EntradaLead, chaves: Chaves & { cpf: s
  * há conflito nenhum, quebrando a regra de que o de contato mais antigo
  * sobrevive.
  *
- * Nem todo candidato é fundido no alvo. Dois leads com `cpfHash` PREENCHIDOS
- * e DIFERENTES são pessoas distintas por definição — um casal ou uma loja
- * dividindo o mesmo telefone, por exemplo — e fundi-los apagaria o CPF de um
- * deles. Esses candidatos ficam de fora da fusão; a aparição só atualiza o
- * alvo.
+ * Quando a entrada tem CPF e NENHUM candidato é compatível — todos têm CPF
+ * preenchido e diferente do da entrada — não há alvo possível: cair em
+ * `candidatos[0]` jogaria a origem (e o valor do pedido) na pessoa errada só
+ * porque ela compartilha telefone ou e-mail com o dono do CPF novo. Nesse
+ * caso a função cria um lead novo para o CPF, e não funde nada.
+ *
+ * Nem todo candidato é fundido no alvo. Um candidato entra em duas checagens
+ * de "pessoa distinta": contra o CPF da PRÓPRIA ENTRADA, e contra o CPF já
+ * acumulado no alvo. As duas são necessárias — só a segunda deixaria uma
+ * fusão transitiva desviar a aparição: um candidato com CPF diferente do da
+ * entrada, mas que casa por telefone/e-mail e chega antes do dono do CPF na
+ * lista, seria fundido no alvo (que ainda não tinha CPF) antes de a fusão
+ * seguinte descobrir o conflito — e o CPF que "vence" no alvo acaba sendo o
+ * do candidato errado, não o da entrada.
  *
  * O alvo é relido após cada fusão, porque ele pode ter ganhado um `cpfHash`
  * do absorvido — e esse CPF novo pode entrar em conflito com o próximo
@@ -198,7 +207,13 @@ async function consolidar(
   const compativelComEntrada = (c: Candidato) =>
     chaves.cpfHash === null || c.cpfHash === null || c.cpfHash === chaves.cpfHash
 
-  const alvo = candidatos.find(compativelComEntrada) ?? candidatos[0]!
+  const alvoCompativel = candidatos.find(compativelComEntrada)
+
+  if (chaves.cpfHash !== null && !alvoCompativel) {
+    return criarLeadParaCpfSemCandidatoCompativel(tx, entrada, chaves)
+  }
+
+  const alvo = alvoCompativel ?? candidatos[0]!
   const alvoId = alvo.id
   let alvoCpfHash = alvo.cpfHash
 
@@ -206,7 +221,10 @@ async function consolidar(
     if (candidato.id === alvoId) continue
 
     const pessoasDistintas =
-      alvoCpfHash !== null && candidato.cpfHash !== null && alvoCpfHash !== candidato.cpfHash
+      (chaves.cpfHash !== null &&
+        candidato.cpfHash !== null &&
+        candidato.cpfHash !== chaves.cpfHash) ||
+      (alvoCpfHash !== null && candidato.cpfHash !== null && alvoCpfHash !== candidato.cpfHash)
     if (pessoasDistintas) continue
 
     await fundir(tx, alvoId, candidato.id)
@@ -219,6 +237,41 @@ async function consolidar(
   }
 
   return aplicarDados(tx, alvoId, entrada, chaves)
+}
+
+/**
+ * Cria um lead novo para o dono de um CPF sem candidato compatível.
+ *
+ * Telefone e e-mail só entram no lead novo se nenhum OUTRO lead já os
+ * segurar — é exatamente esse compartilhamento que fez a busca encontrar
+ * candidatos incompatíveis em primeiro lugar, e gravar por cima bateria na
+ * chave única deles.
+ */
+async function criarLeadParaCpfSemCandidatoCompativel(
+  tx: Tx,
+  entrada: EntradaLead,
+  chaves: Chaves & { cpf: string | null },
+): Promise<string> {
+  const emailLivre = chaves.email ? await valorLivre(tx, 'emailNormalizado', chaves.email) : false
+  const telefoneLivre = chaves.telefone
+    ? await valorLivre(tx, 'telefoneNormalizado', chaves.telefone)
+    : false
+
+  const lead = await tx.lead.create({
+    data: {
+      nome: entrada.nome?.trim() || null,
+      email: emailLivre ? entrada.email?.trim() || null : null,
+      emailNormalizado: emailLivre ? chaves.email : null,
+      telefone: telefoneLivre ? entrada.telefone?.trim() || null : null,
+      telefoneNormalizado: telefoneLivre ? chaves.telefone : null,
+      cpfHash: chaves.cpfHash,
+      cpfCifrado: chaves.cpf ? cifrar(chaves.cpf) : null,
+      primeiroContatoEm: entrada.ocorridoEm,
+      ultimoContatoEm: entrada.ocorridoEm,
+    },
+  })
+
+  return lead.id
 }
 
 /**
@@ -291,20 +344,25 @@ async function fundir(tx: Tx, sobreviventeId: string, absorvidoId: string): Prom
 }
 
 /**
- * Verdadeiro quando nenhum OUTRO lead já segura este valor normalizado.
+ * Verdadeiro quando nenhum lead já segura este valor normalizado — ou nenhum
+ * OUTRO lead, quando `excetoLeadId` é passado.
  *
- * Existe porque um candidato pulado por `consolidar` — pessoa distinta, CPF
- * diferente — pode mesmo assim compartilhar telefone ou e-mail com o alvo
- * que está sendo atualizado agora. Gravar por cima sem checar bateria na
- * restrição única daquele outro lead e abortaria a transação inteira.
+ * Usada em dois lugares: ao criar um lead novo (sem `excetoLeadId`, porque
+ * o lead ainda não existe) e ao preencher um campo vazio de um lead que já
+ * existe, onde um candidato pulado por `consolidar` — pessoa distinta, CPF
+ * diferente — pode mesmo assim compartilhar telefone ou e-mail com ele.
+ * Gravar por cima sem checar bateria na restrição única daquele outro lead e
+ * abortaria a transação inteira.
  */
-async function semConflito(
+async function valorLivre(
   tx: Tx,
-  leadId: string,
   campo: 'emailNormalizado' | 'telefoneNormalizado' | 'cpfHash',
   valor: string,
+  excetoLeadId?: string,
 ): Promise<boolean> {
-  const outro = await tx.lead.findFirst({ where: { [campo]: valor, NOT: { id: leadId } } })
+  const outro = await tx.lead.findFirst({
+    where: excetoLeadId ? { [campo]: valor, NOT: { id: excetoLeadId } } : { [campo]: valor },
+  })
   return outro === null
 }
 
@@ -334,21 +392,21 @@ async function aplicarDados(
     nomeNovo !== null && (atual.nome === null || ORIGENS_COM_NOME_CONFIAVEL.includes(entrada.tipo))
 
   // Só preenche um campo vazio se nenhum outro lead já segurar aquele valor
-  // (ver `semConflito`). Campo já preenchido nunca é reavaliado aqui.
+  // (ver `valorLivre`). Campo já preenchido nunca é reavaliado aqui.
   const emailLivre =
     !atual.emailNormalizado && chaves.email
-      ? await semConflito(tx, leadId, 'emailNormalizado', chaves.email)
+      ? await valorLivre(tx, 'emailNormalizado', chaves.email, leadId)
       : false
   const telefoneLivre =
     !atual.telefoneNormalizado && chaves.telefone
-      ? await semConflito(tx, leadId, 'telefoneNormalizado', chaves.telefone)
+      ? await valorLivre(tx, 'telefoneNormalizado', chaves.telefone, leadId)
       : false
   // O CPF, uma vez conhecido, nunca é trocado: ele é a chave de identidade,
   // e trocá-lo transformaria o lead em outra pessoa. Só entra quando o atual
   // está vazio.
   const cpfHashLivre =
     !atual.cpfHash && chaves.cpfHash
-      ? await semConflito(tx, leadId, 'cpfHash', chaves.cpfHash)
+      ? await valorLivre(tx, 'cpfHash', chaves.cpfHash, leadId)
       : false
 
   await tx.lead.update({
