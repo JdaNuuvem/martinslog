@@ -49,6 +49,9 @@ function mascarar(cpf: string): string {
   return `***.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-**`
 }
 
+/** Um único aviso por processo quando falta a chave da impressão digital. */
+let avisouChaveAusente = false
+
 /**
  * Monta o `where` da busca livre.
  *
@@ -76,7 +79,23 @@ function filtroDeBusca(termo: string): Prisma.LeadWhereInput | null {
   const leituras: Prisma.LeadWhereInput[] = []
 
   const cpf = normalizarCpf(limpo)
-  if (cpf) leituras.push({ cpfHash: impressaoDigitalCpf(cpf) })
+  if (cpf) {
+    /*
+      Sem `LEAD_FINGERPRINT_KEY` a impressão digital lança. A leitura de CPF
+      DEGRADA em vez de a chave ser exigida na subida: exigir derrubaria o
+      site inteiro num deploy onde ela ainda não foi configurada. E onze
+      dígitos também são um celular — telefone e e-mail precisam continuar
+      funcionando. O aviso sai uma vez por processo, para não inundar o log.
+    */
+    try {
+      leituras.push({ cpfHash: impressaoDigitalCpf(cpf) })
+    } catch {
+      if (!avisouChaveAusente) {
+        avisouChaveAusente = true
+        console.warn('LEAD_FINGERPRINT_KEY ausente: a busca de leads por CPF está desligada.')
+      }
+    }
+  }
 
   const telefone = normalizarTelefoneLead(limpo)
   if (telefone) leituras.push({ telefoneNormalizado: telefone })

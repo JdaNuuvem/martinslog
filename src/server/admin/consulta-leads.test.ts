@@ -93,6 +93,24 @@ describe('listarLeads', () => {
     expect(leads[0]?.nome).toBe('João Pedro')
   })
 
+  it('sem LEAD_FINGERPRINT_KEY, onze dígitos acham pelo telefone em vez de lançar', async () => {
+    // Semeia ANTES de apagar a chave: o lead com CPF precisa dela para entrar.
+    await semear()
+
+    const segredo = process.env.LEAD_FINGERPRINT_KEY
+    delete process.env.LEAD_FINGERPRINT_KEY
+
+    try {
+      const { leads } = await listarLeads({ busca: '21999990002' })
+
+      expect(leads).toHaveLength(1)
+      expect(leads[0]?.nome).toBe('João Pedro')
+    } finally {
+      if (segredo === undefined) delete process.env.LEAD_FINGERPRINT_KEY
+      else process.env.LEAD_FINGERPRINT_KEY = segredo
+    }
+  })
+
   it('filtra por período pelo último contato', async () => {
     await semear()
 
