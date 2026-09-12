@@ -1,11 +1,24 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '@/infra/db/client'
 import { registrarLead } from './lead-service'
 
 const CPF = '52998224725'
 const OUTRO_CPF = '11144477735'
 
-afterEach(async () => {
+/*
+  Limpa ANTES de cada teste, e não depois.
+
+  Outros arquivos da suíte criam leads como efeito colateral — todo teste que
+  registra pedido ou emite etiqueta passa a alimentar a base — e nenhum deles
+  os apaga, porque `LeadOrigem` não tem chave estrangeira para usuário, envio
+  ou pedido e a limpeza deles não cascateia até aqui. Limpando só no fim, o
+  primeiro teste deste arquivo herdaria os leads do arquivo que rodou antes, e
+  a contagem exata que ele afirma dependeria da ordem da suíte.
+
+  Apagar sem filtro é seguro porque `vitest.config.ts` roda um arquivo por vez
+  (`fileParallelism: false`).
+*/
+beforeEach(async () => {
   await prisma.lead.deleteMany({})
 })
 
