@@ -16,4 +16,14 @@ describe('dataDoParametro', () => {
     expect(dataDoParametro('30/09/2026')).toBeUndefined()
     expect(dataDoParametro('2026-13-45')).toBeUndefined()
   })
+
+  it('recusa dia que não existe no mês, em vez de rolar para o mês seguinte', () => {
+    expect(dataDoParametro('2026-02-30')).toBeUndefined()
+    expect(dataDoParametro('2026-04-31')).toBeUndefined()
+    expect(dataDoParametro('2026-02-29')).toBeUndefined()
+  })
+
+  it('aceita 29 de fevereiro em ano bissexto', () => {
+    expect(dataDoParametro('2028-02-29')?.toISOString()).toBe('2028-02-29T03:00:00.000Z')
+  })
 })
