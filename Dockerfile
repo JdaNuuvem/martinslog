@@ -42,6 +42,10 @@ RUN addgroup -g 1001 -S nodejs && adduser -u 1001 -S nextjs -G nodejs
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# `public/` não vem no standalone: o Next espera que a imagem a copie à parte.
+# Sem esta linha todo arquivo estático servido da raiz responde 404, e o
+# sintoma é uma imagem quebrada sem nenhum erro no log.
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 # CLI do Prisma para aplicar as migrations na subida.
 COPY --from=prisma-cli /opt/prisma /opt/prisma

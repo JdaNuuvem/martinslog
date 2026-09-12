@@ -20,7 +20,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const filtro = filtroEnviosSchema.parse(request.nextUrl.searchParams.get('filtro') ?? 'todos')
 
   try {
-    const resultado = await listarMeusEnvios(sessao.userId, filtro)
+    // O papel vem da SESSÃO, nunca da URL: ver o comentário gêmeo em
+    // `/api/etiquetas`.
+    const resultado = await listarMeusEnvios(
+      sessao.userId,
+      filtro,
+      new Date(),
+      sessao.papel === 'ADMIN',
+    )
     return NextResponse.json(resultado)
   } catch (error) {
     console.error('Erro inesperado ao listar envios', { cause: error })

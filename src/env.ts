@@ -26,6 +26,102 @@ const schema = z.object({
    * (`openssl rand -hex 32`) e trate como senha.
    */
   WEBHOOK_CRON_TOKEN: z.string().min(32).optional(),
+
+  /**
+   * Segredo que transforma o CPF em impressão digital na base de leads.
+   *
+   * Separado de `SECRET_ENCRYPTION_KEY` de propósito: as duas protegem
+   * coisas diferentes, e rotacionar uma não deve invalidar a outra.
+   *
+   * CUIDADO AO TROCAR: as impressões digitais deixam de bater e TODO lead
+   * antigo vira inencontrável — a mesma pessoa passa a ser criada de novo,
+   * do zero. É consequência inevitável de qualquer chave derivada de
+   * segredo, e não há migração que conserte, porque o CPF de origem não
+   * está guardado em claro em lugar nenhum.
+   */
+  LEAD_FINGERPRINT_KEY: z.string().min(32).optional(),
+
+  /**
+   * Endereço público da aplicação, usado para montar o link de rastreio que
+   * vai no SMS e no WhatsApp do comprador.
+   *
+   * Precisa ser validado aqui, e não lido solto de `process.env`, porque o
+   * erro dele é silencioso e caro: com a variável ausente ou apontando para
+   * um domínio que não é o desta instalação, nada quebra no servidor — a
+   * mensagem sai, o comprador recebe e clica em um link que abre uma página
+   * que não existe. Quem descobre é o suporte, dias depois, pela reclamação.
+   *
+   * A barra final é removida para que `${APP_URL}/r/CODIGO` nunca vire uma
+   * URL com duas barras, que alguns aplicativos de mensagem cortam ao
+   * transformar o texto em link.
+   */
+  APP_URL: z
+    .string()
+    .url()
+    .default('https://app.martinslog.net')
+    .transform((v) => v.replace(/\/+$/, '')),
+
+  /**
+   * Se qualquer pessoa pode criar conta pela tela pública.
+   *
+   * Padrão FECHADO, e o padrão é a parte importante: esquecer de definir a
+   * variável mantém a porta trancada. O contrário — aberto por omissão — faria
+   * um ambiente novo, ou uma variável perdida numa migração de servidor, abrir
+   * o cadastro sem ninguém notar.
+   *
+   * Fechado, a conta nasce só pelo painel de administração. A tela pública
+   * continua respondendo, para não dar erro de rota a quem tiver o link
+   * antigo, mas explica que o acesso é concedido pela equipe.
+   */
+  CADASTRO_PUBLICO: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
+  /**
+   * Conta de SMS da própria plataforma, usada quando o perfil não trouxe a
+   * dele.
+   *
+   * Existe porque a Martins Log decidiu custear o envio: com uma conta só,
+   * uma loja passa a avisar o comprador sem contratar nada nem colar chave
+   * nenhuma. O `SmsConfig` por perfil continua valendo e tem precedência —
+   * é para a loja que quiser pagar o próprio envio e aparecer com o próprio
+   * remetente.
+   *
+   * No SMS brasileiro a diferença entre um e outro é pequena de propósito: o
+   * remetente é um número curto, não o nome da loja, então o comprador não
+   * distingue quem pagou. Quem precisa aparecer é o nome escrito DENTRO da
+   * mensagem.
+   */
+  SMS_PROVEDOR: z.string().min(1).optional(),
+  SMS_CHAVE: z.string().min(1).optional(),
+  SMS_IDENTIFICADOR: z.string().optional(),
+  SMS_REMETENTE: z.string().optional(),
+
+  /**
+   * Evolution API: onde ela responde e a chave que abre tudo nela.
+   *
+   * Do SERVIDOR, não da loja. A mesma instalação atende todas as lojas, cada
+   * uma com a sua instância — por isso a chave não fica em `EvolutionConfig`.
+   *
+   * A URL é interna (`http://evolution:8080`) de propósito: a Evolution não
+   * tem porta pública. Quem alcança uma Evolution exposta com a apikey em mãos
+   * manda mensagem pelo WhatsApp de qualquer loja.
+   *
+   * Ambas opcionais: sem elas o canal EVOLUTION simplesmente não fica
+   * disponível, e a tela avisa. Derrubar a aplicação inteira por causa de um
+   * canal não configurado seria trocar um recurso a menos por um site fora.
+   */
+  EVOLUTION_API_URL: z.string().url().optional(),
+  EVOLUTION_API_KEY: z.string().min(1).optional(),
+  /**
+   * Segredo que a Evolution devolve nos webhooks para provar que é ela.
+   *
+   * A rota de entrada é pública — precisa ser, o webhook chega de fora da
+   * sessão. Sem este segredo, qualquer um que descubra a URL escreve mensagem
+   * falsa na caixa de entrada da loja.
+   */
+  EVOLUTION_WEBHOOK_TOKEN: z.string().min(16).optional(),
 })
 
 export type Env = z.infer<typeof schema>

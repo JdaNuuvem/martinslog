@@ -4,7 +4,9 @@ import { NextRequest } from 'next/server'
 import { notFound, redirect } from 'next/navigation'
 import { EnvioNaoEncontradoError } from '@/domain/errors'
 import { lerSessao } from '@/server/auth/sessao'
+import { donoEfetivo } from '@/server/dono-efetivo'
 import { obterEtiqueta } from '@/server/etiquetas-service'
+import { exigirSessaoNaPagina } from '@/server/auth/sessao-servidor'
 
 const ROTULO_STATUS: Readonly<Record<string, string>> = {
   PENDING: 'Aguardando pagamento',
@@ -32,17 +34,16 @@ function dataHora(iso: string): string {
  * existe porque lá qualquer pessoa com o código entra.
  */
 export default async function PaginaEtiqueta({ params }: { params: Promise<{ id: string }> }) {
+  // A guarda vem antes de `params` e já devolve a sessão: ler o cookie duas
+  // vezes seriam duas idas ao banco para responder a mesma pergunta.
+  const sessao = await exigirSessaoNaPagina()
   const { id } = await params
-  const cabecalhos = await headers()
-  const sessao = await lerSessao(new NextRequest('http://localhost/etiquetas', { headers: cabecalhos }))
-
-  if (!sessao) {
-    redirect('/login')
-  }
 
   let etiqueta
   try {
-    etiqueta = await obterEtiqueta(sessao.userId, id)
+    // O administrador abre a etiqueta de qualquer loja — a lista já mostra
+    // todas, e um "Detalhes" que cai em 404 promete e nega depois do clique.
+    etiqueta = await obterEtiqueta(await donoEfetivo(sessao, id), id)
   } catch (error) {
     if (error instanceof EnvioNaoEncontradoError) {
       notFound()

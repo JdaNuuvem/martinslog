@@ -6,6 +6,7 @@ import {
   type FiltroEnviosAdmin,
 } from '@/server/admin/consulta-envios'
 import { AcoesEtiqueta } from '@/components/admin/acoes-etiqueta'
+import { exigirAdminNaPagina } from '@/server/admin/guarda'
 
 const STATUS: { valor: StatusShipment; rotulo: string }[] = [
   { valor: 'PENDING', rotulo: 'Pendentes' },
@@ -77,6 +78,7 @@ export default async function PaginaEnviosAdmin({
 }: {
   searchParams: Promise<Busca>
 }) {
+  await exigirAdminNaPagina()
   const parametros = await searchParams
 
   const filtro: FiltroEnviosAdmin = {

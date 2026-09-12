@@ -2,6 +2,7 @@ import { codigosPadraoDoMotor } from '@/domain/simulacao/roteiro'
 import { listarCatalogoPadrao } from '@/server/admin/status-rastreio'
 import { obterConfigSimulacao } from '@/server/simulacao-config'
 import { CatalogoStatus } from '@/components/admin/catalogo-status'
+import { exigirAdminNaPagina } from '@/server/admin/guarda'
 
 /**
  * Catálogo padrão de status de rastreio da plataforma.
@@ -11,6 +12,7 @@ import { CatalogoStatus } from '@/components/admin/catalogo-status'
  * não o sobrescreve.
  */
 export default async function PaginaStatusRastreio() {
+  await exigirAdminNaPagina()
   const [linhas, config] = await Promise.all([listarCatalogoPadrao(), obterConfigSimulacao()])
 
   return (

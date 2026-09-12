@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { prisma } from '@/infra/db/client'
 import { FatorVelocidadeForm } from '@/components/admin/fator-velocidade-form'
 import { obterConfigSimulacao } from '@/server/simulacao-config'
+import { exigirAdminNaPagina } from '@/server/admin/guarda'
 
 const LIMITE_ENVIOS = 30
 
@@ -17,6 +18,7 @@ function dataHora(valor: Date): string {
  * não existe linha do tempo para operar.
  */
 export default async function PaginaSimulacao() {
+  await exigirAdminNaPagina()
   const [config, envios] = await Promise.all([
     obterConfigSimulacao(),
     prisma.shipment.findMany({

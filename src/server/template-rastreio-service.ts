@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { ValorInvalidoError } from '@/domain/errors'
 import {
+  normalizarDias,
   ordenarPorConexoes,
   statusPorCodigoDoTemplate,
   validarTemplate,
@@ -42,7 +43,14 @@ export async function obterTemplate(
   // A ordem entregue já é a do percurso: quem consome não precisa saber que
   // existe um grafo por trás, e a ordem do array deixa de ser fonte de
   // verdade concorrente com as setas.
-  return { passos: ordenarPorConexoes(passos, conexoes), conexoes, ativo: registro.ativo }
+  //
+  // A conversão dos dias vem depois de ordenar, e não antes: o intervalo de
+  // um passo só quer dizer alguma coisa depois de saber quem vem antes dele.
+  return {
+    passos: normalizarDias(ordenarPorConexoes(passos, conexoes)),
+    conexoes,
+    ativo: registro.ativo,
+  }
 }
 
 /**
@@ -60,11 +68,13 @@ export async function salvarTemplate(
   // Valida a ordem que vai valer de fato — a das conexões —, e não a ordem
   // em que os nós foram criados. Validar a outra deixaria passar um percurso
   // que só quebra depois, na emissão.
-  const ordenados = ordenarPorConexoes(passos, conexoes)
+  const ordenados = normalizarDias(ordenarPorConexoes(passos, conexoes))
   validarTemplate(ordenados)
 
   const dados = {
-    passos: passos as unknown as Prisma.InputJsonValue,
+    // Grava no formato de hoje (intervalo entre etapas), mantendo a ordem em
+    // que os nós foram criados — quem manda na sequência são as conexões.
+    passos: normalizarDias(passos) as unknown as Prisma.InputJsonValue,
     conexoes: conexoes as unknown as Prisma.InputJsonValue,
     ativo: true,
   }

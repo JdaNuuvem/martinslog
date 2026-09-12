@@ -27,7 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <AppShell nomeUsuario={sessao.nome} autenticado>
+    <AppShell nomeUsuario={sessao.nome} autenticado ehAdmin={sessao.papel === 'ADMIN'}>
       {children}
     </AppShell>
   )

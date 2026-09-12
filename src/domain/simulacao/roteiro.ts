@@ -14,6 +14,7 @@ import {
   unidadeDistribuicao,
   unidadeTratamento,
 } from './unidades'
+import { escalasDaRota, escalasSugeridas } from './corredor'
 
 const MINUTOS_POR_DIA = 1440
 
@@ -200,7 +201,7 @@ function espinha(entrada: EntradaRoteiro): Etapa[] {
       local: origem,
     },
     {
-      fracao: 0.25,
+      fracao: 0.14,
       codigo: 'TRANSFERENCIA',
       unidadeOrigem: agenciaOrigem,
       unidadeDestino: unidadeTratamento(origem),
@@ -212,15 +213,51 @@ function espinha(entrada: EntradaRoteiro): Etapa[] {
     return inicio
   }
 
+  /*
+    Entre a origem e o destino existe o país inteiro. Uma transferência única
+    de Fortaleza para Porto Alegre descreve um teletransporte; as escalas
+    fazem a encomenda percorrer o caminho, parando em cidades que ficam
+    mesmo entre as duas pontas.
+
+    Quantas paradas depende da DISTÂNCIA, não de um número fixo. Com duas
+    escalas para qualquer trecho, o caminho longo ficava com intervalos de
+    dias entre uma cidade e outra — e um rastreio parado é indistinguível de
+    um pacote parado. Trecho curto continua sem escala nenhuma, e aí este
+    bloco devolve a transferência única de antes.
+  */
+  const escalas = escalasDaRota(origem, destino, escalasSugeridas(origem, destino))
+  const paradas = [...escalas, destino]
+
+  /*
+    As transferências dividem igualmente a janela entre PRIMEIRA e ULTIMA.
+
+    PRIMEIRA começa cedo de propósito. Com ela em 0.4 a encomenda ficava
+    parada na cidade de origem quase metade do prazo — em um serviço de 8
+    dias, mais de três dias sem sair do lugar —, e quem acompanhava o
+    rastreio ligava para a loja achando que o pedido nem tinha andado. A
+    primeira mudança de cidade é o evento que acalma o comprador, então ela
+    vem logo depois do tratamento na origem, e não no meio do caminho.
+
+    ULTIMA vai até 0.78 porque a janela precisa acomodar mais paradas sem
+    colar uma na outra: com cinco escalas espremidas até 0.7, duas cidades
+    diferentes apareciam no rastreio com poucas horas de diferença, o que
+    descreve um caminhão que não existe. O limite continua antes de
+    SAIU_PARA_ENTREGA, em 0.85 — a última transferência tem que chegar antes
+    de a encomenda sair para o endereço.
+  */
+  const PRIMEIRA = 0.22
+  const ULTIMA = 0.78
+  const passo = paradas.length > 1 ? (ULTIMA - PRIMEIRA) / (paradas.length - 1) : 0
+
   return [
     ...inicio,
-    {
-      fracao: 0.55,
+    ...paradas.map((parada, indice): Etapa => ({
+      fracao: paradas.length > 1 ? PRIMEIRA + indice * passo : 0.35,
       codigo: 'TRANSFERENCIA',
-      unidadeOrigem: unidadeTratamento(origem),
-      unidadeDestino: unidadeTratamento(destino),
-      local: destino,
-    },
+      unidadeOrigem: unidadeTratamento(indice === 0 ? origem : paradas[indice - 1]!),
+      unidadeDestino: unidadeTratamento(parada),
+      local: parada,
+    })),
   ]
 }
 

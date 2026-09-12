@@ -5,17 +5,69 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        /**
+         * Azul-marinho da identidade da Martins Log (martinslog.net), onde ele
+         * é a cor que estrutura — cabeçalho, rodapé, faixas — e o vermelho é a
+         * cor que age.
+         *
+         * Aqui a relação se inverte de propósito: `erro` já é vermelho
+         * (#B91C1C), e num sistema cheio de formulários pintar os 56
+         * preenchimentos de botão de vermelho apagaria a diferença entre
+         * "ação principal" e "algo deu errado". O vermelho da marca fica
+         * reservado ao logotipo e a destaques pontuais.
+         *
+         * Todas as razões abaixo superam as da paleta anterior.
+         */
         brand: {
-          // Preenchimento de botão (texto branco em cima) — 6,28:1 sobre branco.
-          DEFAULT: '#0A6E4A',
-          // Hover do preenchimento — 5,15:1 sobre branco.
-          light: '#0C7D54',
-          bg: '#D6F5E6',
-          // Verde para texto/links sobre fundo claro (branco ou cinza de página) —
-          // 5,36:1 sobre branco, 4,95:1 sobre `superficie.pagina`. Mais claro que
-          // `DEFAULT` seria reprovado nessas duas superfícies (a paleta de
-          // referência original, #0E8A5F, ficava em 4,36:1 sobre branco).
-          texto: '#0B7A52',
+          // Preenchimento de botão (texto branco em cima) — 11,05:1 sobre branco.
+          DEFAULT: '#1D3A72',
+          // Hover do preenchimento — 14,05:1 sobre branco. Escurece em vez de
+          // clarear: clarear reduziria o contraste com o texto branco em cima.
+          light: '#152A55',
+          // Fundo suave de destaque. Texto principal em cima — 14,23:1.
+          bg: '#E0E9F7',
+          // Texto e links sobre fundo claro — 11,05:1 sobre branco e 10,21:1
+          // sobre `superficie.pagina`.
+          texto: '#1D3A72',
+        },
+        /**
+         * Superfície escura da navegação e das telas de entrada — o mesmo
+         * azul do cabeçalho de martinslog.net.
+         *
+         * Os valores de `ativo`, `texto` e `borda` são hexadecimais
+         * resolvidos, não branco com opacidade: opacidade empilhada sobre
+         * fundo escuro muda de resultado conforme o que estiver atrás, e o
+         * contraste deixa de ser verificável.
+         */
+        sidebar: {
+          DEFAULT: '#0E1E3C',
+          // Fundo do item selecionado. Branco em cima — 12,79:1.
+          ativo: '#24324E',
+          // Item não selecionado — 7,07:1 sobre `sidebar.DEFAULT`.
+          texto: '#A3AAB5',
+          // Marcador do item selecionado — 3,90:1 sobre o fundo escuro,
+          // acima do mínimo de 3:1 para elemento gráfico.
+          marcador: '#E8323C',
+          borda: '#1C2B4A',
+        },
+        /**
+         * O vermelho de ação da landing — e ele existe **só nas telas
+         * abertas** (calculadora pública, rastreio público).
+         *
+         * Dentro do app autenticado a regra documentada em `brand` continua
+         * valendo: `erro` já é vermelho, e pintar de vermelho os 56 botões de
+         * preenchimento apagaria a diferença entre "ação principal" e "algo
+         * deu errado". Na página pública existe uma ação só, ela é a mesma
+         * ação do botão vermelho de martinslog.net, e a continuidade com o
+         * site vale mais do que a coerência interna de uma tela sem formulário
+         * de cadastro.
+         */
+        destaque: {
+          // Branco em cima — 5,08:1.
+          DEFAULT: '#D81E28',
+          // Hover: escurece, porque clarear reduziria o contraste com o texto
+          // branco. Branco em cima — 6,90:1.
+          escuro: '#B3151E',
         },
         alerta: {
           DEFAULT: '#F59E0B',
@@ -71,6 +123,19 @@ const config: Config = {
         subtitulo: ['1.25rem', { lineHeight: '1.4' }],
         titulo: ['1.5625rem', { lineHeight: '1.25' }],
         display: ['1.953rem', { lineHeight: '1.15', letterSpacing: '-0.01em' }],
+        /**
+         * O degrau seguinte na mesma razão de 1,25 — e existe só para a faixa
+         * de marca das páginas abertas.
+         *
+         * A escala parava em `display` porque foi desenhada para telas densas
+         * de trabalho, onde nada precisa ser maior que um título de página. A
+         * calculadora pública não é uma tela de trabalho: é a primeira coisa
+         * que alguém vê do produto, e ali o título compete com uma fotografia
+         * mental do site de onde a pessoa veio. Usar `display` deixava a
+         * chamada em 31px sobre uma faixa de 200px de altura — texto pequeno
+         * em muito espaço, que lê como rascunho.
+         */
+        hero: ['2.441rem', { lineHeight: '1.1', letterSpacing: '-0.02em' }],
       },
       borderRadius: {
         /** Campos e botões. */

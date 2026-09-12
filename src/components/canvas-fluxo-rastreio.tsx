@@ -3,10 +3,12 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { diasAcumulados, ordenarPorConexoes } from '@/domain/rastreio/template-rastreio'
 
 export type TipoNo = 'ETAPA' | 'COBRANCA'
 
@@ -27,7 +29,8 @@ export type No = {
   codigo: string
   titulo: string
   descricao: string
-  diasAposEmissao: number
+  /** Dias desde a etapa anterior do percurso; no primeiro nó, desde a emissão. */
+  diasAposAnterior: number
   tipo?: TipoNo
   x?: number
   y?: number
@@ -117,6 +120,22 @@ export function CanvasFluxoRastreio({
   onConectar: (de: string, para: string) => void
   onDesconectar: (de: string, para: string) => void
 }) {
+  /*
+    Em que dia do percurso cada nó cai. O número que a conta digita é o
+    intervalo desde a etapa anterior; o total é a soma até ali, e é ele que a
+    timeline do cliente vai mostrar — por isso aparece junto do campo, em vez
+    de deixar quem monta somando de cabeça.
+
+    A soma segue a ordem das conexões, não a do array: quem manda na sequência
+    são as setas desenhadas.
+  */
+  const totalPorNo = useMemo(() => {
+    const emOrdem = ordenarPorConexoes(nos, conexoes)
+    const totais = diasAcumulados(emOrdem)
+
+    return new Map(emOrdem.map((no, indice) => [no as No, totais[indice] ?? 0]))
+  }, [nos, conexoes])
+
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
   const [arrastandoNo, setArrastandoNo] = useState<number | null>(null)
   const [deslocamento, setDeslocamento] = useState({ x: 0, y: 0 })
@@ -636,7 +655,8 @@ export function CanvasFluxoRastreio({
                       {no.titulo}
                     </span>
                     <span className="text-xs text-texto-secundario">
-                      Dia {no.diasAposEmissao}
+                      {no.diasAposAnterior === 0 ? 'Junto com a anterior' : `+${no.diasAposAnterior} d`}
+                      {` · dia ${totalPorNo.get(no) ?? 0}`}
                       {ehCobranca && no.valorCentavos
                         ? ` · R$ ${(no.valorCentavos / 100).toFixed(2).replace('.', ',')}`
                         : ''}
@@ -735,15 +755,21 @@ export function CanvasFluxoRastreio({
 
             {editavel ? (
               <label className="flex flex-col gap-1 text-xs text-texto-secundario">
-                Dias após a emissão
+                Dias após a etapa anterior
                 <input
                   type="number"
                   min={0}
                   max={365}
                   className={CAMPO}
-                  value={noSelecionado.diasAposEmissao}
-                  onChange={(e) => onEditar(principal!, 'diasAposEmissao', Number(e.target.value))}
+                  value={noSelecionado.diasAposAnterior}
+                  onChange={(e) => onEditar(principal!, 'diasAposAnterior', Number(e.target.value))}
                 />
+                <span className="text-texto-secundario">
+                  Cai no dia {totalPorNo.get(noSelecionado) ?? 0} do percurso
+                  {noSelecionado.diasAposAnterior === 0
+                    ? ' — no mesmo instante da etapa anterior.'
+                    : '.'}
+                </span>
               </label>
             ) : null}
 

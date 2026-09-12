@@ -39,6 +39,42 @@ function dataHora(iso: string | null): string {
   return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
+type ResultadoCanal = {
+  canal: 'SMS' | 'WHATSAPP' | 'EMAIL'
+  resultado: 'reenfileirada' | 'enfileirada' | 'enviada' | 'sem-destino' | 'sem-canal'
+}
+
+const NOME_CANAL: Readonly<Record<ResultadoCanal['canal'], string>> = {
+  SMS: 'SMS',
+  WHATSAPP: 'WhatsApp',
+  EMAIL: 'e-mail',
+}
+
+/**
+ * Traduz o resultado do reenvio em uma frase.
+ *
+ * Diz por onde saiu E por onde não saiu, porque "reenviado" sozinho faria o
+ * lojista encerrar o atendimento achando que o comprador foi avisado quando
+ * nenhum canal estava configurado. Os motivos ficam separados: falta de
+ * contato do comprador é problema do cadastro do pedido; falta de canal é
+ * problema da configuração da loja.
+ */
+function resumirReenvio(canais: ResultadoCanal[]): string {
+  const saiu = canais
+    .filter((c) => c.resultado !== 'sem-destino' && c.resultado !== 'sem-canal')
+    .map((c) => NOME_CANAL[c.canal])
+
+  if (saiu.length === 0) {
+    const semDestino = canais.filter((c) => c.resultado === 'sem-destino')
+    if (semDestino.length === canais.length) {
+      return 'Nada foi reenviado: este envio não tem telefone nem e-mail do comprador.'
+    }
+    return 'Nada foi reenviado: nenhum canal de mensagem está conectado nesta loja.'
+  }
+
+  return `Aviso reenviado por ${saiu.join(', ')}.`
+}
+
 function Selo({ status }: { status: string }) {
   return (
     <span
@@ -105,6 +141,18 @@ export function ListaEtiquetas() {
   const [erro, setErro] = useState<string | null>(null)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [cancelandoId, setCancelandoId] = useState<string | null>(null)
+  const [avancandoId, setAvancandoId] = useState<string | null>(null)
+  const [reenviandoId, setReenviandoId] = useState<string | null>(null)
+  const [reenvioRecente, setReenvioRecente] = useState<{ id: string; texto: string } | null>(null)
+  const [avancoRecente, setAvancoRecente] = useState<{ id: string; titulo: string } | null>(null)
+  /*
+    A seleção guarda IDS, não índices nem posições. A lista se refaz a cada
+    carregamento — e recarregar é o que acontece logo depois de avançar — então
+    posição não sobrevive à própria ação que a criou.
+  */
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
+  const [avancandoLote, setAvancandoLote] = useState(false)
+  const [resumoLote, setResumoLote] = useState<string | null>(null)
 
   const carregar = useCallback(async () => {
     setErro(null)
@@ -157,7 +205,159 @@ export function ListaEtiquetas() {
     }
   }
 
+  /*
+    Avança o envio para a próxima etapa do percurso: a linha do tempo já
+    existe inteira, datada no futuro, e isto puxa o próximo evento para agora
+    — os seguintes andam junto, mantendo os intervalos do fluxo.
+  */
+  async function avancarEtapa(id: string) {
+    setAvancandoId(id)
+    setErro(null)
+    setAvancoRecente(null)
+
+    try {
+      const resposta = await fetch(`/api/etiquetas/${id}/avancar`, { method: 'POST' })
+      const corpo = (await resposta.json().catch(() => ({}))) as {
+        mensagem?: string
+        etapa?: { titulo: string }
+      }
+
+      if (!resposta.ok) {
+        setErro(corpo.mensagem ?? 'Não foi possível avançar a etapa deste envio.')
+        return
+      }
+
+      if (corpo.etapa) setAvancoRecente({ id, titulo: corpo.etapa.titulo })
+      await carregar()
+    } catch {
+      setErro('Não foi possível conectar ao servidor.')
+    } finally {
+      setAvancandoId(null)
+    }
+  }
+
+  /**
+   * Manda de novo ao comprador o aviso da situação atual.
+   *
+   * Não recarrega a lista depois: o reenvio não muda nada do que a linha
+   * mostra, e um recarregamento faria a tela piscar sugerindo que mudou.
+   */
+  async function reenviarAviso(id: string) {
+    setReenviandoId(id)
+    setErro(null)
+    setReenvioRecente(null)
+
+    try {
+      const resposta = await fetch(`/api/etiquetas/${id}/reenviar`, { method: 'POST' })
+      const corpo = (await resposta.json().catch(() => ({}))) as {
+        mensagem?: string
+        reenvio?: { canais: ResultadoCanal[] }
+      }
+
+      if (!resposta.ok) {
+        setErro(corpo.mensagem ?? 'Não foi possível reenviar o aviso deste envio.')
+        return
+      }
+
+      if (corpo.reenvio) {
+        setReenvioRecente({ id, texto: resumirReenvio(corpo.reenvio.canais) })
+      }
+    } catch {
+      setErro('Não foi possível conectar ao servidor.')
+    } finally {
+      setReenviandoId(null)
+    }
+  }
+
   const etiquetas = dados?.etiquetas ?? []
+
+  /*
+    Só entra na seleção quem PODE avançar. Deixar marcar o que não pode
+    produziria um lote com metade de falhas previsíveis — e a mensagem de erro
+    contando de volta algo que a tela já sabia antes de clicar.
+  */
+  const selecionaveis = etiquetas.filter((e) => e.podeAvancarEtapa)
+  const marcados = selecionaveis.filter((e) => selecionados.has(e.id))
+  const todosMarcados = selecionaveis.length > 0 && marcados.length === selecionaveis.length
+
+  function alternar(id: string) {
+    setSelecionados((atual) => {
+      const proximo = new Set(atual)
+      if (proximo.has(id)) proximo.delete(id)
+      else proximo.add(id)
+      return proximo
+    })
+  }
+
+  function alternarTodos() {
+    setSelecionados((atual) => {
+      if (todosMarcados) {
+        // Desmarca só os DESTA aba: quem selecionou em outra situação e trocou
+        // de aba não perde a seleção que fez antes.
+        const proximo = new Set(atual)
+        for (const e of selecionaveis) proximo.delete(e.id)
+        return proximo
+      }
+      return new Set([...atual, ...selecionaveis.map((e) => e.id)])
+    })
+  }
+
+  /*
+    Avança todos os marcados de uma vez.
+
+    O resultado vem por envio, e é isso que a tela mostra: "38 avançados, 2 não
+    deram" com o motivo do primeiro. Um "deu erro" seco depois de mover
+    quarenta encomendas deixaria quem clicou sem saber o que aconteceu com
+    quais — e a segunda tentativa puxaria OUTRA etapa nos que já andaram.
+  */
+  async function avancarSelecionados() {
+    const ids = marcados.map((e) => e.id)
+    if (ids.length === 0) return
+
+    setAvancandoLote(true)
+    setErro(null)
+    setAvancoRecente(null)
+    setResumoLote(null)
+
+    try {
+      const resposta = await fetch('/api/etiquetas/avancar-lote', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      const corpo = (await resposta.json().catch(() => ({}))) as {
+        mensagem?: string
+        avancados?: number
+        falhas?: number
+        itens?: { ok: boolean; erro?: string }[]
+      }
+
+      if (!resposta.ok) {
+        setErro(corpo.mensagem ?? 'Não foi possível avançar a etapa dos envios selecionados.')
+        return
+      }
+
+      const avancados = corpo.avancados ?? 0
+      const falhas = corpo.falhas ?? 0
+      const primeiroErro = corpo.itens?.find((i) => !i.ok)?.erro
+
+      setResumoLote(
+        falhas === 0
+          ? `${avancados} ${avancados === 1 ? 'envio avançou' : 'envios avançaram'} de etapa.`
+          : `${avancados} avançaram, ${falhas} não. Primeiro motivo: ${primeiroErro ?? 'não informado'}`,
+      )
+
+      // Limpa só o que de fato andou não é possível saber linha a linha sem
+      // devolver id por id — e o recarregamento abaixo já tira da aba quem
+      // mudou de situação. Limpar tudo é o comportamento previsível.
+      setSelecionados(new Set())
+      await carregar()
+    } catch {
+      setErro('Não foi possível conectar ao servidor.')
+    } finally {
+      setAvancandoLote(false)
+    }
+  }
 
   return (
     // Duas distâncias, não uma: os filtros são um bloco só (abas e busca
@@ -185,12 +385,12 @@ export function ListaEtiquetas() {
         </div>
 
         <label className="flex flex-col gap-1 text-dado">
-          <span className="text-texto-secundario">Buscar por código ou destinatário</span>
+          <span className="text-texto-secundario">Buscar por código, nome ou e-mail</span>
           <input
             type="search"
             value={busca}
             onChange={(evento) => setBusca(evento.target.value)}
-            placeholder="FR000000000BR ou nome do destinatário"
+            placeholder="FR000000000BR, nome ou e-mail do destinatário"
             className="w-full max-w-md rounded-campo border border-borda-campo bg-superficie-card px-3 py-2 text-texto-principal focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
           />
         </label>
@@ -200,6 +400,64 @@ export function ListaEtiquetas() {
         <p role="alert" className="rounded-campo bg-erro-fundo p-4 text-dado text-erro">
           {erro}
         </p>
+      ) : null}
+
+      {resumoLote ? (
+        <p role="status" className="rounded-campo bg-superficie-card p-4 text-dado text-texto-principal">
+          {resumoLote}
+        </p>
+      ) : null}
+
+      {/*
+        A barra da seleção.
+
+        Fica ACIMA da lista e some quando não há nada selecionável, em vez de
+        virar uma linha morta no topo de toda tela. E o botão só aparece com
+        algo marcado: ação em lote com zero selecionados é um botão que existe
+        para não fazer nada.
+      */}
+      {selecionaveis.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-4 rounded-campo bg-superficie-card p-4">
+          <label className="flex cursor-pointer items-center gap-2 text-dado text-texto-principal">
+            <input
+              type="checkbox"
+              checked={todosMarcados}
+              onChange={alternarTodos}
+              className="h-4 w-4 accent-brand"
+            />
+            Selecionar todos ({selecionaveis.length})
+          </label>
+
+          {marcados.length > 0 ? (
+            <>
+              <span className="text-dado text-texto-secundario">
+                {marcados.length} selecionado{marcados.length === 1 ? '' : 's'}
+              </span>
+              <button
+                type="button"
+                onClick={() => void avancarSelecionados()}
+                disabled={avancandoLote}
+                className="rounded-lg bg-brand px-4 py-2 text-dado font-medium text-white focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {avancandoLote
+                  ? `Avançando ${marcados.length}…`
+                  : `Avançar para o próximo passo (${marcados.length})`}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelecionados(new Set())}
+                disabled={avancandoLote}
+                className="text-dado text-texto-secundario underline underline-offset-2 disabled:opacity-60"
+              >
+                limpar seleção
+              </button>
+            </>
+          ) : (
+            <span className="text-dado text-texto-secundario">
+              Marque as encomendas para movê-las de uma vez.
+            </span>
+          )}
+        </div>
       ) : null}
 
       {carregando && !dados ? (
@@ -223,7 +481,37 @@ export function ListaEtiquetas() {
             <li key={etiqueta.id} className="flex flex-col gap-5 rounded-cartao bg-superficie-card p-5">
               <div className="flex flex-col gap-3">
                 <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                  <div className="flex flex-1 items-start gap-3">
+                    {/*
+                      A caixa só existe para quem PODE avançar. Mostrá-la
+                      desabilitada em envio entregue ou cancelado convidaria o
+                      clique para depois recusá-lo, e a lista tem centenas
+                      deles.
+                    */}
+                    {etiqueta.podeAvancarEtapa ? (
+                      <input
+                        type="checkbox"
+                        checked={selecionados.has(etiqueta.id)}
+                        onChange={() => alternar(etiqueta.id)}
+                        aria-label={`Selecionar o envio de ${etiqueta.destinatarioNome}`}
+                        className="mt-1 h-4 w-4 shrink-0 accent-brand"
+                      />
+                    ) : (
+                      // Espaço reservado: sem ele, as linhas com e sem caixa
+                      // ficariam desalinhadas e a coluna deixaria de ser coluna.
+                      <span aria-hidden className="mt-1 h-4 w-4 shrink-0" />
+                    )}
                   <div className="flex flex-col gap-1">
+                    {/*
+                      A loja só aparece na visão de administração, onde a lista
+                      mistura contas. Para o lojista o campo vem nulo — repetir
+                      o nome da própria loja em cada linha seria ruído.
+                    */}
+                    {etiqueta.loja ? (
+                      <p className="text-rotulo uppercase tracking-wide text-brand-texto">
+                        {etiqueta.loja}
+                      </p>
+                    ) : null}
                     <p className="font-medium text-texto-principal">{etiqueta.destinatarioNome}</p>
                     <p className="text-dado text-texto-secundario">
                       {etiqueta.destinoCidade
@@ -235,6 +523,15 @@ export function ListaEtiquetas() {
                     <p className="font-mono text-xs text-texto-secundario">
                       {etiqueta.codigoRastreio ?? 'sem código'}
                     </p>
+                    {/*
+                      O e-mail aparece porque é um dos campos da busca. Quem
+                      procura por um endereço precisa ver na linha que achou o
+                      envio daquela pessoa, e não um homônimo.
+                    */}
+                    {etiqueta.destinatarioEmail ? (
+                      <p className="text-xs text-texto-secundario">{etiqueta.destinatarioEmail}</p>
+                    ) : null}
+                    </div>
                   </div>
 
                   <div className="flex flex-col items-end gap-1">
@@ -274,6 +571,47 @@ export function ListaEtiquetas() {
                     >
                       Rastrear
                     </Link>
+                  ) : null}
+
+                  {etiqueta.podeAvancarEtapa ? (
+                    <button
+                      type="button"
+                      onClick={() => void avancarEtapa(etiqueta.id)}
+                      disabled={avancandoId === etiqueta.id}
+                      className="rounded-lg border border-brand px-4 py-2 text-sm font-medium text-brand-texto focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {avancandoId === etiqueta.id ? 'Avançando…' : 'Avançar etapa'}
+                    </button>
+                  ) : null}
+
+                  {/*
+                    O reenvio só existe onde há o que reenviar: envio sem
+                    código ou sem nenhuma movimentação não tem aviso nenhum
+                    para repetir, e o botão ali seria um clique que só sabe
+                    recusar.
+                  */}
+                  {etiqueta.codigoRastreio && etiqueta.ultimoEvento ? (
+                    <button
+                      type="button"
+                      onClick={() => void reenviarAviso(etiqueta.id)}
+                      disabled={reenviandoId === etiqueta.id}
+                      title="Manda de novo ao comprador o aviso da situação atual"
+                      className="rounded-lg border border-borda-campo px-4 py-2 text-sm font-medium text-texto-principal focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {reenviandoId === etiqueta.id ? 'Reenviando…' : 'Reenviar aviso'}
+                    </button>
+                  ) : null}
+
+                  {reenvioRecente?.id === etiqueta.id ? (
+                    <p role="status" className="self-center text-sm text-texto-secundario">
+                      {reenvioRecente.texto}
+                    </p>
+                  ) : null}
+
+                  {avancoRecente?.id === etiqueta.id ? (
+                    <p role="status" className="self-center text-sm text-texto-secundario">
+                      Avançou para “{avancoRecente.titulo}”.
+                    </p>
                   ) : null}
 
                   {etiqueta.podeCancelar ? (

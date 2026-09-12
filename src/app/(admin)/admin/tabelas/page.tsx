@@ -1,5 +1,6 @@
 import { prisma } from '@/infra/db/client'
 import { ImportarTabelaForm } from '@/components/admin/importar-tabela-form'
+import { exigirAdminNaPagina } from '@/server/admin/guarda'
 
 function reais(centavos: number): string {
   return (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -16,6 +17,7 @@ function cep(valor: number): string {
  * importação é um envio às cegas.
  */
 export default async function PaginaTabelas() {
+  await exigirAdminNaPagina()
   const regras = await prisma.priceRule.findMany({
     include: { service: { select: { codigo: true, nome: true } } },
     orderBy: [{ serviceId: 'asc' }, { pesoMinG: 'asc' }],

@@ -20,7 +20,19 @@ const enderecoEnvioSchema = z.object({
   logradouro: z.string().trim().min(1, 'Logradouro é obrigatório'),
   numero: z.string().trim().min(1, 'Número é obrigatório'),
   complemento: z.string().trim().optional(),
-  bairro: z.string().trim().min(1, 'Bairro é obrigatório'),
+  /**
+   * Bairro. **Opcional**, e o motivo é geografia, não frouxidão.
+   *
+   * Cidade pequena no Brasil tem CEP único para o município inteiro (aqueles
+   * terminados em `-000`), e nesses endereços **não existe bairro** — a
+   * consulta de CEP devolve nulo porque não há o que devolver. Exigir o campo
+   * recusava endereço legítimo: medido numa loja, vinte vendas pagas paradas
+   * com "Endereço incompleto: bairro", todas de municípios com CEP único.
+   *
+   * O que entrega o pacote é CEP, logradouro e número. O bairro é útil quando
+   * existe, e a etiqueta simplesmente não o imprime quando não existe.
+   */
+  bairro: z.string().trim().optional().default(''),
   cidade: z.string().trim().min(1, 'Cidade é obrigatória'),
   uf: z.string().trim().length(2, 'UF deve ter 2 letras'),
 })

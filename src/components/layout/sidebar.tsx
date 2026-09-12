@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, type RefObject } from 'react'
 import {
+  IconeAdmin,
   IconeAjuda,
   IconeCalcular,
   IconeConvide,
@@ -13,6 +14,8 @@ import {
   IconeIntegracoes,
   IconePerfil,
   IconeRastreio,
+  IconeSino,
+  IconeWhatsapp,
   IconeSair,
 } from './icones'
 import { useLogout } from './usar-logout'
@@ -25,10 +28,24 @@ const ITENS = [
   { rotulo: 'Rastreio', href: '/rastreio', Icone: IconeRastreio },
   { rotulo: 'Fluxo do rastreio', href: '/rastreio/status', Icone: IconeFluxo },
   { rotulo: 'Ajuda', href: '/ajuda', Icone: IconeAjuda },
+  { rotulo: 'WhatsApp', href: '/whatsapp', Icone: IconeWhatsapp },
+  { rotulo: 'Mensagens', href: '/mensagens', Icone: IconeSino },
   { rotulo: 'Integrações', href: '/integracoes', Icone: IconeIntegracoes },
   { rotulo: 'Convide e ganhe', href: '/convide', Icone: IconeConvide },
   { rotulo: 'Perfil', href: '/perfil', Icone: IconePerfil },
 ] as const
+
+/**
+ * O atalho para a administração.
+ *
+ * Fica separado da lista de cima porque não é uma tela da loja: é a área que
+ * enxerga TODAS as contas. Só aparece para quem é administrador — e sem ele o
+ * administrador não tinha como chegar em `/admin`, a não ser digitando o
+ * endereço. Ele entrava, via a tela de rastreio da PRÓPRIA conta (vazia, porque
+ * a conta de administração não tem envio nenhum) e concluía, com razão, que o
+ * painel estava quebrado.
+ */
+const ITEM_ADMIN = { rotulo: 'Administração', href: '/admin', Icone: IconeAdmin } as const
 
 type SidebarProps = {
   aberta: boolean
@@ -37,6 +54,8 @@ type SidebarProps = {
   botaoMenuRef?: RefObject<HTMLButtonElement | null>
   /** Ver `TopbarProps.autenticado` — controla se "Sair" aparece no menu mobile. */
   autenticado: boolean
+  /** Mostra o atalho da administração. Falso por padrão: ver `ITEM_ADMIN`. */
+  ehAdmin?: boolean
 }
 
 /**
@@ -45,8 +64,9 @@ type SidebarProps = {
  * disso, deslizando para dentro/fora com `translate`. Operável por
  * teclado e fechável com Escape.
  */
-export function Sidebar({ aberta, onFechar, botaoMenuRef, autenticado }: SidebarProps) {
+export function Sidebar({ aberta, onFechar, botaoMenuRef, autenticado, ehAdmin = false }: SidebarProps) {
   const pathname = usePathname()
+  const itens = ehAdmin ? [...ITENS, ITEM_ADMIN] : ITENS
 
   /**
    * Item destacado: o de rota mais específica que casa com a página atual.
@@ -56,7 +76,8 @@ export function Sidebar({ aberta, onFechar, botaoMenuRef, autenticado }: Sidebar
    * do rastreio" casariam, e a navegação diria ao usuário que ele está em
    * dois lugares.
    */
-  const hrefAtivo = ITENS.map((item) => item.href)
+  const hrefAtivo = itens
+    .map((item) => item.href)
     .filter((href) =>
       href === '/' ? pathname === '/' : pathname === href || pathname?.startsWith(`${href}/`),
     )
@@ -123,22 +144,36 @@ export function Sidebar({ aberta, onFechar, botaoMenuRef, autenticado }: Sidebar
           escolhe um dos dois — os dois juntos são o vício que a auditoria de
           estilo chama de "hairline border with wide shadow".
         */
-        className={`${aberta ? 'fixed flex shadow-flutuante' : 'hidden'} bottom-0 left-0 top-topbar z-40 w-sidebar bg-superficie-card lg:fixed lg:flex lg:border-r lg:border-superficie-bloco lg:shadow-none`}
+        /*
+          No desktop a lateral sobe até o topo da janela (`lg:top-0`) e leva a
+          marca consigo: é ela que carrega a identidade, e não o cabeçalho.
+          Em telas estreitas continua abrindo abaixo do cabeçalho, onde o
+          botão que a abre está.
+        */
+        className={`${aberta ? 'fixed flex shadow-flutuante' : 'hidden'} bottom-0 left-0 top-topbar z-40 w-sidebar bg-sidebar lg:fixed lg:top-0 lg:flex lg:border-r lg:border-sidebar-borda lg:shadow-none`}
       >
         <nav ref={navRef} aria-label="Navegação principal" className="flex h-full flex-col gap-1 p-3">
+          <div className="mb-3 hidden items-center gap-2.5 px-2 pt-2 lg:flex">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.webp" alt="" width={34} height={34} className="h-[34px] w-[34px] object-contain" />
+            <span className="text-base font-extrabold uppercase tracking-tight text-white">
+              Martins<span className="text-sidebar-marcador">Log</span>
+            </span>
+          </div>
+
           <div className="mb-2 flex items-center justify-between lg:hidden">
-            <span className="text-sm font-bold uppercase text-texto-secundario">Menu</span>
+            <span className="text-sm font-bold uppercase text-sidebar-texto">Menu</span>
             <button
               type="button"
               onClick={onFechar}
               aria-label="Fechar menu de navegação"
-              className="rounded-lg p-2 text-texto-principal hover:bg-superficie-bloco focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+              className="rounded-lg p-2 text-white hover:bg-sidebar-ativo focus-visible:outline focus-visible:outline-2 focus-visible:outline-sidebar-marcador"
             >
               <IconeFechar />
             </button>
           </div>
 
-          {ITENS.map(({ rotulo, href, Icone }) => {
+          {itens.map(({ rotulo, href, Icone }) => {
             const ativo = href === hrefAtivo
             return (
               <Link
@@ -148,8 +183,8 @@ export function Sidebar({ aberta, onFechar, botaoMenuRef, autenticado }: Sidebar
                 aria-current={ativo ? 'page' : undefined}
                 className={`flex items-center gap-3 rounded-r-lg border-l-4 px-3 py-2 text-sm font-medium transition ${
                   ativo
-                    ? 'border-brand bg-brand-bg text-brand-texto'
-                    : 'border-transparent text-texto-secundario hover:bg-superficie-bloco'
+                    ? 'border-sidebar-marcador bg-sidebar-ativo text-white'
+                    : 'border-transparent text-sidebar-texto hover:bg-sidebar-ativo hover:text-white'
                 }`}
               >
                 <Icone />
@@ -169,14 +204,14 @@ export function Sidebar({ aberta, onFechar, botaoMenuRef, autenticado }: Sidebar
               onClick={sair}
               disabled={saindo}
               aria-busy={saindo}
-              className="flex items-center gap-3 rounded-r-lg border-l-4 border-transparent px-3 py-2 text-sm font-medium text-texto-secundario hover:bg-superficie-bloco focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60 lg:hidden"
+              className="flex items-center gap-3 rounded-r-lg border-l-4 border-transparent px-3 py-2 text-sm font-medium text-sidebar-texto hover:bg-sidebar-ativo hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sidebar-marcador disabled:cursor-not-allowed disabled:opacity-60 lg:hidden"
             >
               <IconeSair />
               {saindo ? 'Saindo…' : 'Sair'}
             </button>
           ) : null}
 
-          <div className="mt-auto rounded-xl bg-superficie-bloco p-4 text-center text-xs text-texto-secundario">
+          <div className="mt-auto rounded-xl bg-sidebar-ativo p-4 text-center text-xs text-sidebar-texto">
             Espaço reservado para campanha
           </div>
         </nav>

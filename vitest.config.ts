@@ -26,6 +26,22 @@ export default defineConfig({
      * exatamente isso que apareceu ao cobrir a cadência em dias.
      */
     fileParallelism: false,
+    /**
+     * Cinco segundos é pouco quando o banco não está ao lado.
+     *
+     * A suíte fala com um Postgres de verdade, e o tempo de uma consulta
+     * depende de onde ele está: local, custa milissegundos; atrás de um túnel
+     * SSH até o servidor, custa centenas. Com o padrão de 5s, vinte e um
+     * testes ficaram vermelhos com "Test timed out" enquanto os vizinhos
+     * passavam em 4,8s — vermelho que não significa defeito nenhum, e que faz
+     * perder tempo procurando bug onde só havia latência.
+     *
+     * `VITEST_TIMEOUT_MS` deixa quem roda contra um banco remoto afrouxar sem
+     * mexer no arquivo. O padrão continua apertado para o banco local, onde
+     * teste lento É sinal de problema.
+     */
+    testTimeout: Number(process.env.VITEST_TIMEOUT_MS) || 5_000,
+    hookTimeout: Number(process.env.VITEST_TIMEOUT_MS) || 10_000,
     env: {
       // Banco de teste por sessão. Várias sessões rodando a suíte ao mesmo
       // tempo contra o mesmo banco produzem falhas intermitentes por corrida
@@ -40,6 +56,9 @@ export default defineConfig({
       // Chave mestra da cifra de segredos de terceiros. Valor só de teste;
       // em produção vem do ambiente e não tem padrão nenhum.
       SECRET_ENCRYPTION_KEY: 'y'.repeat(48),
+      // Segredo para impressão digital de CPF na base de leads. Valor de teste;
+      // em produção vem do ambiente e é validado em src/env.ts.
+      LEAD_FINGERPRINT_KEY: process.env.LEAD_FINGERPRINT_KEY ?? 'chave-de-teste-para-impressao-digital-de-cpf-nao-use-em-producao',
       NODE_ENV: 'test',
     },
     coverage: {

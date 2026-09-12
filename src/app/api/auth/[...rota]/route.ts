@@ -57,6 +57,27 @@ async function lerCorpo(request: NextRequest): Promise<unknown> {
 }
 
 async function tratarCadastro(request: NextRequest): Promise<NextResponse> {
+  /*
+    A trava vem ANTES de ler o corpo, de propósito.
+
+    Esconder o botão na tela não fecha nada: esta rota aceita requisição
+    direta de qualquer cliente. Enquanto ela responder, existe cadastro público —
+    o formulário é só a porta mais visível, não a única.
+
+    Padrão fechado: sem `CADASTRO_PUBLICO=true`, ninguém cria conta por aqui.
+    Conta nova nasce pelo painel de administração.
+  */
+  if (!env.CADASTRO_PUBLICO) {
+    return NextResponse.json(
+      {
+        codigo: 'CADASTRO_FECHADO',
+        mensagem:
+          'O cadastro não está aberto. O acesso à Martins Log é concedido pela nossa equipe.',
+      },
+      { status: 403 },
+    )
+  }
+
   const corpo = await lerCorpo(request)
   const analisado = cadastroRequestSchema.safeParse(corpo)
   if (!analisado.success) {

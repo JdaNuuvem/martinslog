@@ -35,19 +35,12 @@ type OpcaoFreteCardProps = {
   opcao: OpcaoCotacaoResposta
   quoteId: string
   autenticado: boolean
-  /**
-   * Chamado quando um visitante escolhe esta opção. Quem renderiza a lista
-   * abre o cadastro sem tirar a cotação da tela; sem o callback, o cartão
-   * volta a ser um link para o login.
-   */
-  aoEscolherComoVisitante?: (destino: string) => void
 }
 
 export function OpcaoFreteCard({
   opcao,
   quoteId,
   autenticado,
-  aoEscolherComoVisitante,
 }: OpcaoFreteCardProps) {
   if (!opcao.disponivel) {
     return (
@@ -90,7 +83,6 @@ export function OpcaoFreteCard({
         opcao={opcao}
         quoteId={quoteId}
         autenticado={autenticado}
-        aoEscolherComoVisitante={aoEscolherComoVisitante}
       >
         <div className="min-w-0">
           <p className="font-semibold text-texto-principal">{opcao.servicoNome}</p>
@@ -126,40 +118,25 @@ export function OpcaoFreteCard({
 }
 
 /**
- * O elemento clicável do cartão: link ou botão, conforme o destino.
+ * O elemento clicável do cartão. É sempre link, porque sempre navega.
  *
- * Autenticado vai para o fluxo de envio, e isso é navegação — link, com tudo
- * o que se espera dele: abrir em outra aba, foco por teclado, leitor de tela
- * anunciando para onde vai.
+ * Autenticado vai direto ao fluxo de envio. Visitante vai ao login levando o
+ * serviço escolhido no destino, e volta ao mesmo ponto depois de entrar —
+ * `destinoDaOpcao` monta os dois casos.
  *
- * Visitante abre o cadastro na mesma página, e isso é ação — botão. Um link
- * que não navega mente para quem usa teclado ou leitor de tela, e prometeria
- * "abrir em nova aba" um diálogo que não existe lá.
+ * Já foi botão: existia um diálogo de cadastro que abria em cima da cotação.
+ * O cadastro público foi fechado (conta é criada pela equipe) e o diálogo saiu,
+ * então o ramo de botão virou código que nunca executava.
  */
 function Alvo({
   opcao,
   quoteId,
   autenticado,
-  aoEscolherComoVisitante,
   children,
 }: OpcaoFreteCardProps & { children: ReactNode }) {
   const rotulo = `Contratar ${opcao.carrierNome} ${opcao.servicoNome} por ${formatarReais(opcao.precoFinalCentavos)}`
   const classe =
     'flex w-full flex-col gap-3 rounded-cartao p-5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand sm:flex-row sm:items-center sm:justify-between'
-
-  if (!autenticado && aoEscolherComoVisitante) {
-    return (
-      <button
-        type="button"
-        data-testid="opcao-frete-link"
-        aria-label={rotulo}
-        onClick={() => aoEscolherComoVisitante(destinoDaOpcao(quoteId, opcao.servicoId, true))}
-        className={classe}
-      >
-        {children}
-      </button>
-    )
-  }
 
   return (
     <Link

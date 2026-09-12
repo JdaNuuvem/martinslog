@@ -4,7 +4,9 @@ import type { AmbienteApiToken, Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { garantirTransicao } from '@/domain/shipment/estados'
 import {
+  DomainError,
   EnvioNaoEncontradoError,
+  ServicoInvalidoError,
   LimiteRequisicoesExcedidoError,
   TokenInvalidoError,
   TransicaoInvalidaError,
@@ -95,6 +97,8 @@ export type EntradaCarrinho = {
   remetente: EntradaEnvio['remetente']
   destinatario: EntradaEnvio['destinatario']
   produtos: EntradaEnvio['produtos']
+  /** Código do pedido na loja, para o comprador ver um código só. */
+  external_id?: string
 }
 
 /**
@@ -115,46 +119,24 @@ export type ItemCarrinho = {
   label_fee: string
   charged: boolean
   status: string
+  /** A referência que a loja mandou. Nulo quando não mandou. */
+  external_id: string | null
 }
 
 function dividirIdServico(service: string): { quoteId: string; servicoId: string } {
   const separador = service.indexOf(':')
-  if (separador === -1) {
-    throw new EnvioNaoEncontradoError(`Identificador de serviço inválido: ${service}`)
+  const quoteId = separador === -1 ? '' : service.slice(0, separador)
+  const servicoId = separador === -1 ? '' : service.slice(separador + 1)
+
+  if (!quoteId || !servicoId) {
+    throw new ServicoInvalidoError(
+      `O campo "service" precisa vir no formato "quoteId:servicoId", como devolvido por /calculator. Recebido: "${service}".`,
+    )
   }
-  return { quoteId: service.slice(0, separador), servicoId: service.slice(separador + 1) }
+
+  return { quoteId, servicoId }
 }
 
-/**
- * Marca como sandbox a(s) entrega(s) de webhook recém-enfileiradas para
- * `shipmentId`/`evento`.
- *
- * `enfileirarEvento` (reusada de `webhook-service.ts`, que é de outra
- * sessão) monta o payload no formato SuperFrete sem nenhuma marcação de
- * ambiente — correto para o fluxo real, mas perigoso para sandbox: sem
- * marcação, a loja processaria um pedido de teste como venda real. Como
- * não é possível alterar `webhook-service.ts` aqui, este adaptador
- * pós-processa as linhas que acabaram de ser gravadas, acrescentando
- * `sandbox: true` ao JSON já congelado — sem duplicar o disparo (que
- * continua sendo feito uma única vez, pelo cron/disparo normal de
- * `WebhookDelivery`).
- */
-async function marcarEntregasComoSandbox(shipmentId: string, evento: Evento): Promise<void> {
-  const entregas = await prisma.webhookDelivery.findMany({
-    where: {
-      evento,
-      payload: { path: ['data', 'id'], equals: shipmentId },
-    },
-  })
-
-  for (const entrega of entregas) {
-    const payload = entrega.payload as Prisma.JsonObject
-    await prisma.webhookDelivery.update({
-      where: { id: entrega.id },
-      data: { payload: { ...payload, sandbox: true } as unknown as Prisma.InputJsonValue },
-    })
-  }
-}
 
 /**
  * `POST /api/v0/cart`. Cria o envio reusando `criarEnvio` — preço sempre
@@ -175,11 +157,44 @@ export async function criarCarrinho(
     remetente: entrada.remetente,
     destinatario: entrada.destinatario,
     produtos: entrada.produtos,
+    referenciaExterna: entrada.external_id ?? null,
     sandbox,
+    // Vem do token, não do corpo: um perfil informado a cada requisição é um
+    // perfil que uma hora vai vir trocado, e o comprador receberia a mensagem
+    // pelo WhatsApp de outra loja sem que nada acusasse o erro.
+    perfilId: contexto.perfilId,
   })
 
-  if (sandbox) {
-    await marcarEntregasComoSandbox(envio.id, 'order.created')
+  /*
+    Amarra o envio ao PEDIDO que a loja já tinha empurrado.
+
+    A loja manda o mesmo código nos dois lugares — `external_id` em
+    `/pedidos` e em `/cart` — mas `Pedido.shipmentId` nunca era escrito por
+    ninguém, e o vínculo só existia na cabeça de quem integrou. Com ele
+    gravado, a consulta pública do pedido e a tela de administração mostram o
+    rastreio sem precisar reconstruir o par a cada leitura.
+
+    Silencioso quando não há pedido correspondente: a loja pode usar só o
+    `/cart`, e nesse caso não há o que amarrar. Falha aqui nunca derruba a
+    criação do envio, que é o que a chamada veio fazer.
+  */
+  if (contexto.perfilId && entrada.external_id) {
+    try {
+      await prisma.pedido.updateMany({
+        where: {
+          perfilId: contexto.perfilId,
+          externalId: entrada.external_id,
+          shipmentId: null,
+        },
+        data: { shipmentId: envio.id },
+      })
+    } catch (erro) {
+      console.error('Falha ao amarrar o envio ao pedido da loja', {
+        shipmentId: envio.id,
+        externalId: entrada.external_id,
+        cause: erro,
+      })
+    }
   }
 
   return {
@@ -188,6 +203,7 @@ export async function criarCarrinho(
     label_fee: (envio.precoCobradoCentavos / 100).toFixed(2),
     charged: await houveCobranca(envio.id),
     status: envio.status,
+    external_id: envio.referenciaExterna,
   }
 }
 
@@ -226,50 +242,107 @@ async function pagarEnvioSandbox(userId: string, shipmentId: string): Promise<vo
   }
 
   await enfileirarEvento(shipmentId, 'order.released')
-  await marcarEntregasComoSandbox(shipmentId, 'order.released')
+}
+
+export type PagamentoDeEnvio = {
+  id: string
+  /** `paid` (pagou agora), `already_paid` (já estava) ou `failed`. */
+  result: 'paid' | 'already_paid' | 'failed'
+  /** Status do envio no banco depois da tentativa. Nulo quando nem existe. */
+  status: string | null
+  /** Código do erro, quando `failed`. Ex.: `SALDO_INSUFICIENTE`. */
+  error_code?: string
+  error?: string
 }
 
 export type ResultadoCheckout = {
-  status: string
-  orders: { id: string; status: string }[]
+  /** `approved` quando todos passaram, `partial` quando alguns falharam. */
+  status: 'approved' | 'partial'
+  orders: PagamentoDeEnvio[]
 }
 
 /**
  * `POST /api/v0/checkout`. Cada envio da lista é resolvido pelo dono do
  * token, nunca por um id de usuário vindo do corpo — um token não paga
- * envio de outra conta (`EnvioNaoEncontradoError` → 404, o mesmo padrão
- * dos outros serviços desta base para "não existe" vs. "não é seu").
+ * envio de outra conta.
  *
  * Produção usa `pagarEnvio` (débito real, idêntico ao do painel). Sandbox
  * usa `pagarEnvioSandbox`, que nunca encosta na `Wallet`.
+ *
+ * **Cada envio é resolvido por si, e o resultado vem por envio.**
+ *
+ * Antes, o primeiro erro derrubava a chamada inteira. Com `orders: [A, B]`,
+ * A era debitado e ganhava etiqueta, B faltava saldo, e a resposta era um 402
+ * sem `orders` nenhum: o integrador não tinha como saber que A foi pago.
+ * Repetir o mesmo corpo era pior — A já estava `RELEASED`, `garantirTransicao`
+ * lançava, e o lote inteiro voltava 422. B nunca era pago por aquele corpo, e
+ * A ficava pago sem ninguém saber. Dinheiro debitado e informação perdida.
+ *
+ * Agora **repetir a chamada é seguro**: envio já pago responde `already_paid`,
+ * não erro. É a mesma idempotência que a rota de pedidos promete, e que esta
+ * não tinha.
  */
 export async function checkout(
   contexto: ContextoApi,
   orderIds: string[],
 ): Promise<ResultadoCheckout> {
-  const orders: { id: string; status: string }[] = []
+  const orders: PagamentoDeEnvio[] = []
 
   for (const id of orderIds) {
     const envio = await prisma.shipment.findUnique({ where: { id } })
+
     if (!envio || envio.userId !== contexto.userId) {
-      throw new EnvioNaoEncontradoError(`Envio não encontrado: ${id}`)
+      /*
+        "Não é seu" responde igual a "não existe", de propósito: distinguir os
+        dois deixaria um token descobrir quais ids existem na plataforma.
+      */
+      orders.push({
+        id,
+        result: 'failed',
+        status: null,
+        error_code: 'ENVIO_NAO_ENCONTRADO',
+        error: 'Envio não encontrado.',
+      })
+      continue
     }
 
-    if (contexto.ambiente === 'SANDBOX') {
-      await pagarEnvioSandbox(contexto.userId, id)
-    } else {
-      await pagarEnvio(contexto.userId, id)
+    if (envio.status !== 'PENDING') {
+      // Já pago (ou cancelado). Repetir a chamada não é erro — é a rede
+      // fazendo o que rede faz.
+      orders.push({ id, result: 'already_paid', status: envio.status })
+      continue
     }
 
-    // Relê o status após pagar: em produção, `pagarEnvio` tenta emitir a
-    // etiqueta na sequência (`emitirEtiquetaAposPagamento`), e o envio pode
-    // já estar em `GENERATED` quando esta função devolve — devolver
-    // `RELEASED` fixo aqui mentiria sobre o estado real gravado no banco.
-    const atualizado = await prisma.shipment.findUniqueOrThrow({ where: { id } })
-    orders.push({ id, status: atualizado.status })
+    try {
+      if (contexto.ambiente === 'SANDBOX') {
+        await pagarEnvioSandbox(contexto.userId, id)
+      } else {
+        await pagarEnvio(contexto.userId, id)
+      }
+
+      // Relê o status após pagar: em produção, `pagarEnvio` tenta emitir a
+      // etiqueta na sequência (`emitirEtiquetaAposPagamento`), e o envio pode
+      // já estar em `GENERATED` quando esta função devolve — devolver
+      // `RELEASED` fixo aqui mentiria sobre o estado real gravado no banco.
+      const atualizado = await prisma.shipment.findUniqueOrThrow({ where: { id } })
+      orders.push({ id, result: 'paid', status: atualizado.status })
+    } catch (erro) {
+      const atual = await prisma.shipment.findUnique({
+        where: { id },
+        select: { status: true },
+      })
+      orders.push({
+        id,
+        result: 'failed',
+        status: atual?.status ?? null,
+        error_code: erro instanceof DomainError ? erro.codigo : 'ERRO_INTERNO',
+        error: erro instanceof Error ? erro.message : 'Falha ao pagar o envio.',
+      })
+    }
   }
 
-  return { status: 'approved', orders }
+  const algumFalhou = orders.some((o) => o.result === 'failed')
+  return { status: algumFalhou ? 'partial' : 'approved', orders }
 }
 
 export type InfoEnvio = {
@@ -277,6 +350,8 @@ export type InfoEnvio = {
   status: string
   tracking: string | null
   tracking_url: string | null
+  /** A referência que a loja mandou no `/cart`. Nulo quando não mandou. */
+  external_id: string | null
   /** Frete do envio: o valor do transporte, que o comprador do lojista vê. */
   price: string
   /** Taxa por etiqueta gerada. É o preço; `charged` diz se foi cobrado. */
@@ -284,6 +359,14 @@ export type InfoEnvio = {
   /** Se a taxa saiu da carteira de fato. Falso em sandbox e antes do pagamento. */
   charged: boolean
   sandbox: boolean
+  /**
+   * Quando a carga voltou ao remetente, em vez de chegar ao comprador.
+   *
+   * Existe porque devolução também vira `DELIVERED` e também dispara
+   * `order.delivered`: sem este campo, a loja marcaria como entregue ao
+   * cliente um pacote que está de volta no estoque dela.
+   */
+  returned_at: string | null
   created_at: string
 }
 
@@ -304,10 +387,12 @@ export async function obterInfoEnvio(contexto: ContextoApi, shipmentId: string):
     status: envio.status,
     tracking: envio.codigoRastreio,
     tracking_url: envio.codigoRastreio ? `/r/${envio.codigoRastreio}` : null,
+    external_id: envio.referenciaExterna,
     price: (envio.precoFreteCentavos / 100).toFixed(2),
     label_fee: (envio.precoCobradoCentavos / 100).toFixed(2),
     charged: await houveCobranca(envio.id),
     sandbox: envio.sandbox,
+    returned_at: envio.devolvidoEm?.toISOString() ?? null,
     created_at: envio.criadoEm.toISOString(),
   }
 }
@@ -321,7 +406,7 @@ export async function obterInfoEnvio(contexto: ContextoApi, shipmentId: string):
  * gera lançamento, e um envio ainda `PENDING` também não — os dois respondem
  * falso pelo mesmo motivo, sem precisar de caso especial.
  */
-async function houveCobranca(shipmentId: string): Promise<boolean> {
+export async function houveCobranca(shipmentId: string): Promise<boolean> {
   const lancamentos = await prisma.ledgerEntry.count({
     where: { refTipo: 'SHIPMENT', refId: shipmentId, tipo: 'DEBITO' },
   })
@@ -330,3 +415,145 @@ async function houveCobranca(shipmentId: string): Promise<boolean> {
 }
 
 export type { AmbienteApiToken }
+
+/* ===================== Histórico e entregas ===================== */
+
+export type PassoHistorico = {
+  status: string
+  /** Código do catálogo de rastreio: `POSTADO`, `ENTREGUE`… */
+  code: string
+  title: string
+  description: string
+  city: string | null
+  state: string | null
+  occurred_at: string
+}
+
+export type HistoricoEnvio = {
+  id: string
+  status: string
+  tracking: string | null
+  external_id: string | null
+  steps: PassoHistorico[]
+}
+
+/**
+ * `GET /api/v0/order/history/:id` — tudo que já aconteceu com o envio.
+ *
+ * Existe para tirar da conta do integrador o trabalho de descobrir MUDANÇA por
+ * repetição: sem isto, saber que algo andou exige consultar o estado atual de
+ * novo e de novo, e essa consulta divide a mesma cota das chamadas que vendem.
+ *
+ * Devolve só o que JÁ ocorreu. A timeline é gravada inteira e datada na
+ * emissão da etiqueta, então filtrar pelo relógio é o que impede a rota de
+ * revelar ao comprador uma entrega que ainda não aconteceu.
+ */
+export async function obterHistorico(
+  contexto: ContextoApi,
+  shipmentId: string,
+  agora = new Date(),
+): Promise<HistoricoEnvio> {
+  const envio = await prisma.shipment.findUnique({
+    where: { id: shipmentId },
+    select: {
+      id: true,
+      userId: true,
+      status: true,
+      codigoRastreio: true,
+      referenciaExterna: true,
+    },
+  })
+
+  if (!envio || envio.userId !== contexto.userId) {
+    throw new EnvioNaoEncontradoError(`Envio não encontrado: ${shipmentId}`)
+  }
+
+  const passos = await prisma.trackingEvent.findMany({
+    where: { shipmentId, ocorridoEm: { lte: agora } },
+    orderBy: { ocorridoEm: 'asc' },
+    select: {
+      status: true,
+      codigo: true,
+      titulo: true,
+      descricao: true,
+      cidade: true,
+      uf: true,
+      ocorridoEm: true,
+    },
+  })
+
+  return {
+    id: envio.id,
+    status: envio.status,
+    tracking: envio.codigoRastreio,
+    external_id: envio.referenciaExterna,
+    steps: passos.map((p) => ({
+      status: p.status,
+      code: p.codigo,
+      title: p.titulo,
+      description: p.descricao,
+      city: p.cidade || null,
+      state: p.uf || null,
+      occurred_at: p.ocorridoEm.toISOString(),
+    })),
+  }
+}
+
+export type EntregaWebhook = {
+  event_id: string
+  event: string
+  status: 'entregue' | 'pendente' | 'desistiu'
+  attempts: number
+  http_status: number | null
+  error: string | null
+  created_at: string
+  delivered_at: string | null
+  payload: unknown
+}
+
+/**
+ * `GET /api/v0/webhooks/deliveries` — o que tentamos entregar, e o que houve.
+ *
+ * É a rede de recuperação para quem ficou fora do ar além das seis tentativas:
+ * sem ela, um evento perdido só é reconstruído varrendo pedido a pedido, e essa
+ * varredura compete pela mesma cota das chamadas que vendem.
+ *
+ * O `payload` volta inteiro, exatamente como foi enviado — inclusive o
+ * `event_id`, que é o que permite reprocessar sem duplicar o que já entrou.
+ */
+export async function listarEntregasWebhook(
+  contexto: ContextoApi,
+  filtro: { shipmentId?: string; desde?: Date; limite?: number },
+): Promise<EntregaWebhook[]> {
+  const limite = Math.min(Math.max(filtro.limite ?? 100, 1), 500)
+
+  const entregas = await prisma.webhookDelivery.findMany({
+    where: {
+      // O dono do token, sempre. Nunca um id vindo do corpo.
+      webhookApp: { userId: contexto.userId },
+      ...(filtro.desde ? { criadoEm: { gte: filtro.desde } } : {}),
+      /*
+        O envio não é coluna da entrega: ele vive dentro do payload. Filtrar
+        pelo JSON evita uma coluna nova só para consulta, e o volume por conta
+        é pequeno o bastante para isso não pesar.
+      */
+      ...(filtro.shipmentId
+        ? { payload: { path: ['data', 'id'], equals: filtro.shipmentId } }
+        : {}),
+    },
+    orderBy: { criadoEm: 'desc' },
+    take: limite,
+  })
+
+  return entregas.map((e) => ({
+    event_id: e.id,
+    event: e.evento,
+    status: e.entregueEm ? 'entregue' : e.proximaTentativaEm ? 'pendente' : 'desistiu',
+    attempts: e.tentativas,
+    http_status: e.statusHttp,
+    error: e.erro,
+    created_at: e.criadoEm.toISOString(),
+    delivered_at: e.entregueEm?.toISOString() ?? null,
+    payload: e.payload,
+  }))
+}

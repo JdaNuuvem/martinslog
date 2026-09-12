@@ -64,11 +64,12 @@ describe('gerarRoteiro com posições em dias', () => {
   })
 
   it('código repetido: a segunda ocorrência preserva o intervalo até a primeira', () => {
-    // TRANSFERENCIA aparece duas vezes na rota interestadual, em 0,25·P e
-    // 0,55·P — 0,30·P de intervalo, que com prazo 5 são 1,5 dias.
+    // TRANSFERENCIA aparece duas vezes na rota interestadual, em 0,14·P e
+    // 0,35·P — 0,21·P de intervalo, que com prazo 5 são 1,05 dia.
     const offsets = offsetPorCodigo({ ...base, posicoesDias: { TRANSFERENCIA: 1 } })
 
-    expect(offsets.TRANSFERENCIA).toEqual([1 * MINUTOS_POR_DIA, 2.5 * MINUTOS_POR_DIA])
+    // 2,05 dias escrito em minutos, já arredondado pelo motor.
+    expect(offsets.TRANSFERENCIA).toEqual([1 * MINUTOS_POR_DIA, 2952])
   })
 
   it('cadência fixa: cada etapa do fluxo normal a cada 2 dias', () => {
@@ -84,9 +85,9 @@ describe('gerarRoteiro com posições em dias', () => {
     })
 
     expect(eventos.map((evento) => evento.offsetMinutos / MINUTOS_POR_DIA)).toEqual([
-      0, 2, 4, 5.5, 8, 10,
+      0, 2, 4, 5.05, 8, 10,
     ])
-    // 5,5 é a segunda TRANSFERENCIA, que herdou o intervalo de 1,5 dia da
+    // 5,05 é a segunda TRANSFERENCIA, que herdou o intervalo de 1,05 dia da
     // primeira; a ordem cronológica dos eventos continua íntegra.
     expect(eventos.map((evento) => evento.codigo)).toEqual([
       'ETIQUETA_EMITIDA',

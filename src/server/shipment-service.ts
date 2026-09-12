@@ -16,6 +16,7 @@ import {
 } from '@/domain/errors'
 import { emitirEtiqueta } from './emitir-etiqueta-service'
 import { enfileirarEvento } from './webhook-service'
+import { enfileirarSms } from './sms-service'
 
 /**
  * Endereço copiado para dentro do envio (`Shipment.remetente` /
@@ -63,7 +64,18 @@ export type EntradaEnvio = {
    * linha — não muda nenhum cálculo de preço nem a validação de endereço.
    * Default `false`: o fluxo do painel nunca passa este campo.
    */
+  /** Código do pedido na loja, para o comprador ver um código só. */
+  referenciaExterna?: string | null
   sandbox?: boolean
+  /**
+   * Loja que originou o envio, quando a chamada veio de um token de perfil.
+   *
+   * Só grava o vínculo — é o que permite avisar o comprador pelo WhatsApp da
+   * marca certa quando o status mudar. Envio sem perfil não gera mensagem
+   * nenhuma, que é o comportamento correto: melhor não avisar do que avisar
+   * pelo número de outra loja.
+   */
+  perfilId?: string | null
 }
 
 export type EnvioCriado = {
@@ -77,6 +89,8 @@ export type EnvioCriado = {
   descontoCentavos: number
   valorDeclaradoCentavos: number
   sandbox: boolean
+  /** Código do pedido na loja, quando ela mandou um. */
+  referenciaExterna: string | null
 }
 
 export type PreviaEnvio = {
@@ -218,7 +232,9 @@ export async function criarEnvio(userId: string, entrada: EntradaEnvio): Promise
         opcionais: {},
         valorDeclaradoCentavos,
         produtos: entrada.produtos as unknown as Prisma.InputJsonValue,
+        referenciaExterna: entrada.referenciaExterna ?? null,
         sandbox: entrada.sandbox ?? false,
+        perfilId: entrada.perfilId ?? null,
       },
     })
 
@@ -239,6 +255,7 @@ export async function criarEnvio(userId: string, entrada: EntradaEnvio): Promise
     descontoCentavos: envio.descontoCentavos,
     valorDeclaradoCentavos: envio.valorDeclaradoCentavos,
     sandbox: envio.sandbox,
+    referenciaExterna: envio.referenciaExterna,
   }
 }
 
@@ -311,6 +328,25 @@ export async function pagarEnvio(userId: string, shipmentId: string): Promise<vo
       throw new CarteiraNaoEncontradaError(`Carteira não encontrada para o usuário ${userId}.`)
     }
 
+    const dono = await tx.user.findUnique({
+      where: { id: userId },
+      select: { isentoCobranca: true, papel: true },
+    })
+    /*
+      Administrador é isento por definição, sem depender da marcação nominal.
+
+      Quem administra a plataforma não é cliente dela: a taxa por etiqueta é o
+      que a Martins Log cobra de quem usa o serviço, e cobrá-la de si mesma
+      obrigaria a manter saldo fictício numa carteira interna só para poder
+      operar. Pior: uma conta de administração sem saldo travaria a emissão
+      manual justamente quando ela é usada — para destravar o envio de um
+      cliente.
+
+      Continua sem lançamento no livro-caixa, como qualquer isenção: nada de
+      creditar dinheiro de mentira e inflar o extrato.
+    */
+    const isento = dono?.isentoCobranca === true || dono?.papel === 'ADMIN'
+
     const envio = await tx.shipment.findUnique({ where: { id: shipmentId } })
     if (!envio) {
       throw new EnvioNaoEncontradoError(`Envio não encontrado: ${shipmentId}`)
@@ -341,24 +377,38 @@ export async function pagarEnvio(userId: string, shipmentId: string): Promise<vo
       }
     }
 
-    const lancamento = aplicarDebito(carteira.saldoCentavos, envio.precoCobradoCentavos)
+    /*
+      Conta isenta não paga e não gera lançamento.
 
-    await tx.ledgerEntry.create({
-      data: {
-        walletId: carteira.id,
-        tipo: lancamento.tipo,
-        valorCentavos: lancamento.valorCentavos,
-        saldoAposCentavos: lancamento.saldoAposCentavos,
-        refTipo: 'SHIPMENT',
-        refId: envio.id,
-        descricao: `Pagamento do envio ${envio.id}`,
-      },
-    })
+      Não é saldo infinito: creditar a carteira de mentira inventaria
+      receita no extrato, e o financeiro passaria a somar dinheiro que
+      ninguém pagou. Sem lançamento, `houveCobranca` responde falso e a API
+      devolve `charged: false` — que é a verdade.
 
-    await tx.wallet.update({
-      where: { id: carteira.id },
-      data: { saldoCentavos: lancamento.saldoAposCentavos },
-    })
+      Tudo o mais é idêntico ao caminho pago: posse, recusa de sandbox,
+      cotação vencida, transição e emissão da etiqueta. A isenção tira o
+      dinheiro do caminho, não as regras.
+    */
+    if (!isento) {
+      const lancamento = aplicarDebito(carteira.saldoCentavos, envio.precoCobradoCentavos)
+
+      await tx.ledgerEntry.create({
+        data: {
+          walletId: carteira.id,
+          tipo: lancamento.tipo,
+          valorCentavos: lancamento.valorCentavos,
+          saldoAposCentavos: lancamento.saldoAposCentavos,
+          refTipo: 'SHIPMENT',
+          refId: envio.id,
+          descricao: `Pagamento do envio ${envio.id}`,
+        },
+      })
+
+      await tx.wallet.update({
+        where: { id: carteira.id },
+        data: { saldoCentavos: lancamento.saldoAposCentavos },
+      })
+    }
 
     const resultado = await tx.shipment.updateMany({
       where: { id: envio.id, status: 'PENDING' },
@@ -382,6 +432,50 @@ export async function pagarEnvio(userId: string, shipmentId: string): Promise<vo
   // acima nem derruba esta chamada — `pagarEnvio` sempre resolve depois que
   // o pagamento em si foi gravado.
   await emitirEtiquetaAposPagamento(shipmentId)
+
+  await avisarCompradorPorSms(shipmentId)
+}
+
+/**
+ * Avisa o comprador, por SMS, de que o pagamento entrou.
+ *
+ * Roda depois da etiqueta para que o código de rastreio já exista quando a
+ * mensagem for composta — o aviso vale bem mais com o link do que sem.
+ *
+ * Nunca lança e nunca derruba o pagamento. Aviso ao comprador é um extra do
+ * envio: uma falha aqui não pode desfazer um débito que já aconteceu nem
+ * devolver erro a quem pagou corretamente. É a mesma regra do aviso por
+ * e-mail, algumas linhas acima em `sincronizar-envio-service`.
+ *
+ * O telefone sai do destinatário do próprio envio — o mesmo que a loja mandou
+ * em `/cart`. Não há campo novo a preencher nem integração a mudar do lado de
+ * quem já integrou.
+ */
+async function avisarCompradorPorSms(shipmentId: string): Promise<void> {
+  try {
+    const envio = await prisma.shipment.findUnique({
+      where: { id: shipmentId },
+      select: { perfilId: true, sandbox: true, destinatario: true },
+    })
+
+    // Sem perfil não há loja dona da mensagem, e envio de teste não avisa
+    // ninguém: o comprador de um pedido que não existe não pode receber SMS.
+    if (!envio || !envio.perfilId || envio.sandbox) return
+
+    const destinatario = envio.destinatario as { telefone?: string | null } | null
+    const telefone = destinatario?.telefone?.trim()
+    if (!telefone) return
+
+    await enfileirarSms({
+      perfilId: envio.perfilId,
+      evento: 'PEDIDO_PAGO',
+      para: telefone,
+      shipmentId,
+      valores: {},
+    })
+  } catch (error) {
+    console.error('Falha ao enfileirar o aviso de pagamento por SMS', { cause: error })
+  }
 }
 
 /**

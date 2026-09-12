@@ -66,7 +66,14 @@ describe('api-token-service', () => {
 
     const autenticado = await autenticarToken(criado.tokenClaro)
 
-    expect(autenticado).toEqual({ tokenId: criado.id, userId: user.id, ambiente: 'PRODUCAO' })
+    // `perfilId` nulo é o token de conta: vale para a conta inteira, e é o
+    // que os tokens criados antes dos perfis continuam sendo.
+    expect(autenticado).toEqual({
+      tokenId: criado.id,
+      userId: user.id,
+      ambiente: 'PRODUCAO',
+      perfilId: null,
+    })
   })
 
   it('recusa token inexistente', async () => {

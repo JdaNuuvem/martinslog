@@ -1,4 +1,6 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { headers } from 'next/headers'
+import { notFound } from 'next/navigation'
+import { NextRequest, NextResponse } from 'next/server'
 import type { PapelUser } from '@prisma/client'
 import { lerSessao } from '@/server/auth/sessao'
 
@@ -43,4 +45,32 @@ export async function exigirAdmin(request: NextRequest): Promise<ResultadoGuarda
   }
 
   return { autorizado: true, sessao }
+}
+
+/**
+ * Guarda para PÁGINA da área administrativa. Chame no início de toda
+ * `page.tsx` de `(admin)`, antes de qualquer consulta.
+ *
+ * Por que na página, e não só no layout: no App Router o layout e os filhos
+ * renderizam EM PARALELO. Um `notFound()` no layout troca o status para 404 e
+ * a tela que o navegador pinta — e não impede o filho de rodar. As consultas
+ * da página já foram ao banco, e o resultado sai no corpo da resposta como
+ * payload RSC. Era o que acontecia: `/admin/pedidos` devolvia 404 e, dentro
+ * dele, 240 KB com telefone, nome e valor pago de cliente, para qualquer
+ * requisição anônima. **404 não prova que a rota está protegida.**
+ *
+ * Aqui o `notFound()` acontece dentro da própria página, antes das consultas,
+ * então não há o que vazar. Cada rota de `/api/admin` já fazia isto por conta
+ * própria — é por isso que a API nunca vazou e as páginas vazaram.
+ */
+export async function exigirAdminNaPagina(): Promise<SessaoAdmin> {
+  const cabecalhos = await headers()
+  const requisicao = new NextRequest('http://localhost/admin', { headers: cabecalhos })
+
+  const guarda = await exigirAdmin(requisicao)
+  if (!guarda.autorizado) {
+    notFound()
+  }
+
+  return guarda.sessao
 }

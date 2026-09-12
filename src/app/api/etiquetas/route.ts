@@ -20,7 +20,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const busca = buscaEtiquetasSchema.parse(request.nextUrl.searchParams.get('busca') ?? '')
 
   try {
-    const resultado = await listarEtiquetas(sessao.userId, { aba, busca })
+    /*
+      O papel vem da SESSÃO, nunca da URL. Aceitar um parâmetro de "ver tudo"
+      seria dar a qualquer lojista os envios dos outros com uma digitada na
+      barra de endereço.
+    */
+    const resultado = await listarEtiquetas(sessao.userId, {
+      aba,
+      busca,
+      todasAsContas: sessao.papel === 'ADMIN',
+    })
     return NextResponse.json(resultado)
   } catch (error) {
     console.error('Erro inesperado ao listar etiquetas', { cause: error })

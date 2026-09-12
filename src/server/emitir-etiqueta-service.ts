@@ -9,6 +9,7 @@ import { catalogoDoUsuario } from "./status-rastreio-service";
 import { obterTemplate } from "./template-rastreio-service";
 import { gerarRoteiroDeTemplate } from "@/domain/rastreio/template-rastreio";
 import { obterConfigSimulacao } from "./simulacao-config";
+import { registrarLead } from "./lead-service";
 
 /**
  * Emissão da etiqueta: é aqui que o envio ganha código de rastreio e que a
@@ -66,7 +67,7 @@ export async function emitirEtiqueta(
   // internamente inconsistente.
   const simulacaoIniciadaEm = new Date();
 
-  return prisma.$transaction(async (tx) => {
+  const resultado = await prisma.$transaction(async (tx) => {
     const envio = await tx.shipment.findUnique({
       where: { id: shipmentId },
       select: {
@@ -143,13 +144,6 @@ export async function emitirEtiqueta(
       })),
     });
 
-    // Depois do código e dos eventos, para que o payload saia com `tracking`
-    // preenchido — é o campo que o cliente espera justamente neste evento.
-    // Só grava linhas em WebhookDelivery: nenhuma requisição de rede acontece
-    // aqui, para que o tempo de resposta de um servidor de terceiro não possa
-    // derrubar esta transação.
-    await enfileirarEvento(envio.id, "order.generated", tx);
-
     await tx.shipment.update({
       where: { id: envio.id },
       data: {
@@ -162,6 +156,72 @@ export async function emitirEtiqueta(
       },
     });
 
+    // Depois do código, dos eventos E do novo status.
+    //
+    // O payload é congelado na leitura da linha, então enfileirar antes do
+    // `update` fazia `order.generated` sair anunciando `status: "RELEASED"` —
+    // o estado anterior. Quem programasse pelo campo `status` nunca veria
+    // GENERATED chegar, e trataria a emissão da etiqueta como se ela não
+    // tivesse acontecido.
+    //
+    // Continua sendo a última coisa da transação, e continua só gravando
+    // linhas em WebhookDelivery: nenhuma requisição de rede acontece aqui,
+    // para que o tempo de resposta de um servidor de terceiro não possa
+    // derrubar a emissão.
+    await enfileirarEvento(envio.id, "order.generated", tx);
+
     return { codigoRastreio };
   });
+
+  /*
+    O lead entra FORA da transação, de propósito.
+
+    A transação acima emite o código de rastreio e cria a timeline inteira —
+    é o caminho crítico da emissão. Enfiar a busca e a eventual fusão de
+    leads lá dentro alongaria essa transação por causa de um subproduto, e
+    um erro no subproduto desfaria a etiqueta.
+  */
+  await registrarLeadDoEnvio(shipmentId);
+
+  return resultado;
+}
+
+/**
+ * Põe o destinatário do envio na base de leads.
+ *
+ * É a única origem que traz CPF, e por isso a que mais importa para a
+ * identidade: sem ela, a cascata quase nunca tem chave forte para usar.
+ */
+async function registrarLeadDoEnvio(shipmentId: string): Promise<void> {
+  try {
+    const envio = await prisma.shipment.findUnique({
+      where: { id: shipmentId },
+      select: { perfilId: true, sandbox: true, destinatario: true, geradoEm: true },
+    });
+
+    // Envio de teste não avisa nem cadastra ninguém: o comprador não existe.
+    if (!envio || envio.sandbox) return;
+
+    const destinatario = envio.destinatario as {
+      nome?: string;
+      email?: string;
+      telefone?: string;
+      documento?: string;
+    } | null;
+
+    if (!destinatario) return;
+
+    await registrarLead({
+      tipo: "ENVIO",
+      perfilId: envio.perfilId,
+      shipmentId,
+      ocorridoEm: envio.geradoEm ?? new Date(),
+      nome: destinatario.nome,
+      email: destinatario.email,
+      telefone: destinatario.telefone,
+      cpf: destinatario.documento,
+    });
+  } catch (error) {
+    console.error("Falha ao registrar o lead do envio", { shipmentId, cause: error });
+  }
 }

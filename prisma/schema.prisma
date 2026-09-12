@@ -73,6 +73,18 @@ model User {
   telefone          String?
   emailVerificadoEm DateTime?
   cepOrigemPadrao   String?
+  /**
+   * Conta isenta da taxa por etiqueta.
+   * Emite etiqueta sem saldo e **sem lançamento no livro-caixa** — não é
+   * saldo infinito. A diferença importa: dar crédito de mentira à carteira
+   * criaria receita que nunca existiu no extrato, e o financeiro passaria a
+   * somar dinheiro que ninguém pagou. Sem lançamento, `charged` responde
+   * falso na API e o número continua verdadeiro.
+   * Existe para as contas de parceiro e de teste da própria plataforma. Não
+   * é plano comercial: é exceção nominal, ligada uma a uma, e por isso o
+   * padrão é `false` e nada na interface a concede.
+   */
+  isentoCobranca    Boolean   @default(false)
   criadoEm          DateTime  @default(now())
 
   sessions         Session[]
@@ -87,6 +99,7 @@ model User {
   apiTokens        ApiToken[]
   emailConfig      EmailConfig?
   emailDeliveries  EmailDelivery[]
+  perfis           Perfil[]
 
   @@map("users")
 }
@@ -255,6 +268,17 @@ model Shipment {
   labelUrl               String?
   dceNumero              String?
   /**
+   * O código do pedido no sistema da loja.
+   * Existe para o comprador ver UM código só. Sem ele, quem compra recebe o
+   * código da loja no e-mail e o nosso no rastreio, e não tem como saber que
+   * são o mesmo pedido — a dúvida vira contato no suporte.
+   * Opcional de propósito: quem integra sem referência continua funcionando.
+   * E não é único: a loja é dona do próprio espaço de códigos, e recusar um
+   * repetido faria a nossa trava derrubar um envio legítimo dela. A
+   * idempotência de pedido mora em `Pedido.externalId`, onde é decisão nossa.
+   */
+  referenciaExterna      String?
+  /**
    * `true` para envios criados por um `ApiToken` de ambiente SANDBOX pela
    * API pública (`/api/v0`). Isola o teste do lojista do dinheiro real: o
    * pagamento de um envio sandbox nunca toca a `Wallet` nem dispara a
@@ -272,12 +296,23 @@ model Shipment {
   devolvidoEm            DateTime?
   canceladoEm            DateTime?
 
+  /// Perfil que originou o envio.
+  ///
+  /// É o que permite avisar o comprador pelo WhatsApp da loja certa quando o
+  /// envio muda de status. Opcional: envio criado pelo painel, antes de
+  /// existirem perfis, ou por conta que só tem um, não tem dono de marca — e
+  /// sem perfil simplesmente não há mensagem a enviar.
+  perfilId String?
+
   user           User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  perfil         Perfil?         @relation(fields: [perfilId], references: [id], onDelete: SetNull)
   quote          Quote?          @relation(fields: [quoteId], references: [id], onDelete: SetNull)
   service        Service         @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   trackingEvents TrackingEvent[]
 
   @@index([userId, status])
+  @@index([perfilId, status])
+  @@index([referenciaExterna])
   @@map("shipments")
 }
 
@@ -385,6 +420,12 @@ model AuditLog {
 model WebhookApp {
   id       String   @id @default(cuid())
   userId   String
+  /// Perfil dono do webhook.
+  ///
+  /// Opcional porque os webhooks que já existiam nasceram antes dos perfis e
+  /// continuam valendo para a conta inteira. Preenchido, o destino passa a
+  /// receber só os eventos daquela loja — que é o motivo de existir perfil.
+  perfilId String?
   url      String
   eventos  Json
   segredo  String
@@ -392,9 +433,11 @@ model WebhookApp {
   criadoEm DateTime @default(now())
 
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  perfil     Perfil?           @relation(fields: [perfilId], references: [id], onDelete: Cascade)
   deliveries WebhookDelivery[]
 
   @@index([userId, ativo])
+  @@index([perfilId, ativo])
   @@map("webhook_apps")
 }
 
@@ -482,6 +525,17 @@ model RastreioTemplate {
 model ApiToken {
   id          String           @id @default(cuid())
   userId      String
+  /// Perfil ao qual o token pertence.
+  ///
+  /// Amarrar o token a uma loja é o que dispensa o integrador de dizer, em
+  /// toda requisição, de qual loja ele está falando — e dizer isso a cada
+  /// chamada é justamente onde se erra: um `perfil_id` trocado no corpo
+  /// mandaria o pedido para o WhatsApp da marca errada, sem erro nenhum.
+  ///
+  /// Anulável porque os tokens que já existem valem para a conta inteira e
+  /// continuam valendo. Sem perfil, o envio criado não tem por qual WhatsApp
+  /// avisar, e simplesmente não há mensagem — nunca a mensagem errada.
+  perfilId    String?
   nome        String
   tokenHash   String           @unique
   ambiente    AmbienteApiToken
@@ -489,9 +543,11 @@ model ApiToken {
   revogadoEm  DateTime?
   criadoEm    DateTime         @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  perfil Perfil? @relation(fields: [perfilId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([perfilId])
   @@map("api_tokens")
 }
 
@@ -531,4 +587,794 @@ model EmailDelivery {
 
   @@index([userId, criadoEm])
   @@map("email_deliveries")
+}
+
+/// Perfil de envio: uma loja dentro da conta.
+///
+/// Existe porque uma conta raramente é uma loja só. Quem opera três marcas
+/// precisa de três números de WhatsApp, três textos de mensagem e três
+/// destinos de webhook — e, antes disto, tudo era por `userId`, o que
+/// obrigava a criar três contas separadas e perder a visão do conjunto.
+///
+/// O que é do perfil é o que fala com o comprador (WhatsApp, texto da
+/// mensagem, webhook). O que é da conta continua na conta: carteira, tokens
+/// de API e endereços — dinheiro e credencial não se multiplicam por marca.
+model Perfil {
+  id           String   @id @default(cuid())
+  userId       String
+  /// Nome interno, para o lojista se achar no seletor de perfil.
+  nome         String
+  /**
+   * Nome que o COMPRADOR vê nas mensagens.
+   * Existe porque os dois raramente coincidem. O operador precisa distinguir
+   * "Best Buy Tech" de "Loja PG" no painel; o comprador nunca ouviu falar de
+   * nenhum dos dois — ele lembra do lugar onde comprou. Sem este campo, ou o
+   * painel fica com três perfis de nome igual, ou o comprador recebe uma
+   * mensagem de um remetente que não reconhece e denuncia como spam.
+   * Nulo usa `nome`. É o comportamento de quem não configurou nada.
+   */
+  nomeExibicao String?
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+
+  /**
+   * Qual provedor de WhatsApp atende esta loja.
+   * Explícito, e não derivado de "qual config existe", porque as duas podem
+   * existir ao mesmo tempo: quem está migrando da Evolution para a oficial
+   * mantém as duas ligadas durante a verificação da Meta, que leva dias. Sem
+   * este campo, o desempate seria uma regra implícita no código — e a loja
+   * descobriria por qual número a mensagem saiu depois de ela ter saído.
+   * `META` é o padrão por ser o que já existia quando este campo nasceu.
+   */
+  whatsappProvedor ProvedorWhatsapp @default(META)
+
+  /**
+   * Janela de silêncio: nada sai entre estas horas.
+   * A fila roda de minuto em minuto e nunca olhou as horas — pagamento
+   * confirmado às três da manhã virava SMS às três da manhã. Mensagem nesse
+   * horário não é ignorada, é denunciada, e denúncia é o que tira um número
+   * não oficial do ar.
+   * Guardadas como hora local (0–23), e não como faixa de UTC: quem configura
+   * pensa "não mandar de madrugada", não em fuso. A conversão acontece na
+   * leitura, contra `America/Sao_Paulo`.
+   * O padrão 22h–8h é conservador de propósito. Quem quiser mandar de
+   * madrugada muda; quem nunca abrir esta tela fica protegido.
+   */
+  silencioInicioHora Int     @default(22)
+  silencioFimHora    Int     @default(8)
+  /// Desligar é decisão consciente, e por isso é um campo próprio: zerar as
+  /// horas para "desligar" deixaria a intenção ilegível seis meses depois.
+  silencioAtivo      Boolean @default(true)
+
+  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  whatsappConfig       WhatsappConfig?
+  evolutionConfig      EvolutionConfig?
+  smsConfig            SmsConfig?
+  templates            MensagemTemplate[]
+  pedidos              Pedido[]
+  mensagens            MensagemEnvio[]
+  regrasRecuperacao    RegraRecuperacao[]
+  webhookApps          WebhookApp[]
+  shipments            Shipment[]
+  apiTokens            ApiToken[]
+  conversas            Conversa[]
+  respostasAutomaticas RespostaAutomatica[]
+  naoPerturbe          NaoPerturbe[]
+  campanhas            Campanha[]
+
+  /// Dois perfis com o mesmo nome na mesma conta tornam a lista inútil — é
+  /// por ele que a pessoa escolhe no seletor do topo.
+  @@unique([userId, nome])
+  @@index([userId, ativo])
+  @@map("perfis")
+}
+
+/// Credenciais da Cloud API do WhatsApp, por perfil.
+///
+/// O caminho escolhido é "o lojista traz as próprias credenciais": ele cria a
+/// conta na Meta, gera um token permanente e cola aqui. A alternativa seria a
+/// plataforma enviar pelo próprio número, o que exigiria ser Tech Provider
+/// aprovado pela Meta — e faria o comprador receber a mensagem da
+/// transportadora em vez da marca onde ele comprou.
+///
+/// `tokenCifrado` nunca volta em leitura: a tela mostra `dicaToken`, os
+/// últimos caracteres, que bastam para a pessoa reconhecer qual credencial
+/// está ali sem que a credencial inteira passe a viajar em toda resposta.
+model WhatsappConfig {
+  id             String    @id @default(cuid())
+  perfilId       String    @unique
+  /// Identificador do número emissor na Meta (`phone_number_id`).
+  phoneNumberId  String
+  /// Conta comercial dona do número (`waba_id`). Só para exibição e suporte.
+  wabaId         String?
+  tokenCifrado   String
+  dicaToken      String
+  /// Número em formato legível, como o comprador o vê. Não entra no envio.
+  numeroExibicao String?
+  ativo          Boolean   @default(true)
+  /// Quando a credencial foi conferida contra a Meta pela última vez. Nulo
+  /// significa "nunca testada", que é diferente de "quebrada".
+  verificadaEm   DateTime?
+  ultimoErro     String?
+  criadoEm       DateTime  @default(now())
+  atualizadoEm   DateTime  @updatedAt
+
+  perfil Perfil @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+
+  @@map("whatsapp_configs")
+}
+
+/// Por onde o WhatsApp da loja sai.
+///
+/// `META` é a API oficial: exige verificação da empresa, cobra por conversa e
+/// só deixa iniciar conversa com template aprovado. `EVOLUTION` fala o
+/// protocolo do WhatsApp Web a partir de um celular pareado por QR — não tem
+/// verificação nem template, e por isso mesmo o número pode ser banido pela
+/// Meta. São dois compromissos diferentes, e a escolha é da loja.
+enum ProvedorWhatsapp {
+  META
+  EVOLUTION
+}
+
+/// Instância da Evolution API que atende uma loja.
+///
+/// A `apikey` NÃO mora aqui: ela é do servidor inteiro (`EVOLUTION_API_KEY`),
+/// não de uma loja. O que é da loja é a instância — o pareamento com um
+/// celular, que é o que de fato manda a mensagem.
+///
+/// Separada de `WhatsappConfig` de propósito. Afrouxar aquele modelo para
+/// caber os dois provedores tornaria `phoneNumberId` e `tokenCifrado`
+/// opcionais para sempre, e todo código que hoje confia que uma config da
+/// Meta TEM token passaria a tratar um nulo que só existe por causa da
+/// Evolution.
+model EvolutionConfig {
+  id           String    @id @default(cuid())
+  perfilId     String    @unique
+  /// Nome da instância na Evolution. Único no servidor inteiro, não só na
+  /// conta — é a chave que a API usa em todas as rotas.
+  instancia    String    @unique
+  /// Número pareado, como o comprador o vê. Vem da Evolution ao conectar.
+  numero       String?
+  /// Última vez que o pareamento foi confirmado como aberto. Nulo é "nunca
+  /// conectou", diferente de "caiu".
+  conectadoEm  DateTime?
+  ultimoErro   String?
+  criadoEm     DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
+
+  perfil Perfil @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+
+  @@map("evolution_configs")
+}
+
+/// Mensagem que o COMPRADOR mandou para a loja.
+///
+/// `MensagemEnvio` não serve para isto: ela é a fila de saída, com tentativas,
+/// backoff e template. O que chega não tem nada disso — chega uma vez, ou não
+/// chega. Misturar os dois faria toda consulta de fila ter que filtrar por
+/// direção, e um bug nesse filtro tentaria "reenviar" o que o cliente
+/// escreveu.
+///
+/// Só a API oficial e a Evolution entregam mensagem de entrada; SMS não.
+/// Quem pediu para parar de receber mensagem.
+///
+/// Existe porque não havia como parar. O comprador respondia "PARE" e nada
+/// acontecia — a fila continuava mandando, e a única saída dele era bloquear
+/// o número ou denunciar. Denúncia, no WhatsApp não oficial, é o que tira o
+/// número do ar e leva junto o canal de todas as lojas daquele celular.
+///
+/// Por telefone e por loja: quem não quer saber da Loja A pode continuar
+/// querendo saber da Loja B, e um opt-out global decidiria pelo comprador uma
+/// coisa que é dele.
+///
+/// Vale para TODOS os canais daquele número. Quem pediu para parar de receber
+/// WhatsApp não está pedindo para receber SMS no lugar.
+model NaoPerturbe {
+  id       String @id @default(cuid())
+  perfilId String
+  /// Telefone normalizado, só dígitos, como a fila o usa.
+  contato  String
+
+  /**
+   * Como o pedido chegou.
+   * `CLIENTE` é o comprador que escreveu "pare"; `LOJA` é alguém do painel
+   * que registrou por telefone ou e-mail. A diferença importa numa eventual
+   * disputa: o primeiro é prova de vontade do titular.
+   */
+  origem String  @default("CLIENTE")
+  /// O que a pessoa escreveu, quando foi ela. Guardado como prova.
+  motivo String?
+
+  criadoEm DateTime @default(now())
+
+  perfil Perfil @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+
+  @@unique([perfilId, contato])
+  @@index([contato])
+  @@map("nao_perturbe")
+}
+
+/// Resposta pronta que o robô dá quando o comprador escreve certa coisa.
+///
+/// Existe porque o robô nasceu sabendo só o que a plataforma sabe: rastreio.
+/// "Vocês entregam no sábado?" e "qual o prazo para minha cidade?" são
+/// perguntas da LOJA, não da plataforma — e cada loja responde diferente.
+///
+/// Sem isto, toda pergunta fora do rastreio virava "vou chamar alguém", e o
+/// atendimento humano recebia de volta as mesmas cinco perguntas todo dia.
+model RespostaAutomatica {
+  id       String   @id @default(cuid())
+  perfilId String
+  /// Nome interno, para a loja se achar na lista. Não vai para o comprador.
+  nome     String
+  /**
+   * Palavras que disparam esta resposta. Qualquer uma basta.
+   * Comparadas sem acento e sem maiúscula: quem escreve no WhatsApp escreve
+   * "sabado" e "SÁBADO", e uma regra que só pega a forma exata não vale nada.
+   */
+  gatilhos String[]
+  resposta String
+  /**
+   * Ordem de avaliação. A primeira que casar responde.
+   * Importa porque gatilhos se sobrepõem: "prazo" e "prazo de entrega" pegam
+   * a mesma frase, e sem ordem definida qual responde vira sorteio.
+   */
+  ordem    Int      @default(0)
+  ativo    Boolean  @default(true)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  perfil Perfil @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+
+  @@index([perfilId, ativo, ordem])
+  @@map("respostas_automaticas")
+}
+
+enum StatusCampanha {
+  RASCUNHO
+  AGENDADA
+  ENVIANDO
+  CONCLUIDA
+  CANCELADA
+}
+
+enum StatusDestinatario {
+  PENDENTE
+  ENVIADA
+  FALHA
+}
+
+/// Um disparo de mensagem para vários compradores.
+///
+/// PERIGOSO POR NATUREZA, e o desenho reflete isso. Mandar a mesma mensagem
+/// para muita gente de um número não-oficial é o padrão que a Meta procura
+/// para banir — e número banido não volta.
+///
+/// Por isso o envio não é imediato nem paralelo: a fila solta aos poucos
+/// (ver `campanha-service`), e o limite por hora é do serviço, não da tela.
+/// Uma trava que mora só na interface é uma trava que a primeira chamada
+/// direta à API ignora.
+model Campanha {
+  id       String @id @default(cuid())
+  perfilId String
+  nome     String
+  /// O texto, com as mesmas variáveis das mensagens de evento.
+  texto    String
+
+  status       StatusCampanha @default(RASCUNHO)
+  /// Quando começar a soltar. Nulo em rascunho.
+  agendadaPara DateTime?
+  iniciadaEm   DateTime?
+  concluidaEm  DateTime?
+
+  criadoEm DateTime @default(now())
+
+  perfil        Perfil                 @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+  destinatarios CampanhaDestinatario[]
+
+  @@index([status, agendadaPara])
+  @@index([perfilId, criadoEm])
+  @@map("campanhas")
+}
+
+model CampanhaDestinatario {
+  id         String             @id @default(cuid())
+  campanhaId String
+  contato    String
+  nome       String?
+  status     StatusDestinatario @default(PENDENTE)
+  erro       String?
+  idExterno  String?
+  enviadaEm  DateTime?
+
+  campanha Campanha @relation(fields: [campanhaId], references: [id], onDelete: Cascade)
+
+  /// O mesmo número não recebe a mesma campanha duas vezes, nem que ele
+  /// apareça repetido na lista colada pela loja.
+  @@unique([campanhaId, contato])
+  @@index([campanhaId, status])
+  @@map("campanha_destinatarios")
+}
+
+/// Quem escreveu uma mensagem da conversa.
+///
+/// `ROBO` e `ATENDENTE` saem os dois pelo mesmo número e chegam iguais para o
+/// comprador — a distinção é nossa, e existe para duas perguntas que aparecem
+/// sempre: "isso foi o robô que respondeu?" e "alguém de verdade já atendeu
+/// esta pessoa?".
+enum AutorMensagem {
+  CLIENTE
+  ROBO
+  ATENDENTE
+}
+
+/// Uma conversa com um comprador, por loja.
+///
+/// A chave é o par loja + telefone: a mesma pessoa falando com duas lojas são
+/// duas conversas, porque quem atende é outro e o histórico não deve vazar de
+/// uma marca para a outra.
+model Conversa {
+  id          String  @id @default(cuid())
+  perfilId    String
+  /// Telefone do comprador, só dígitos, como a Evolution entrega.
+  contato     String
+  /// Nome que a pessoa escolheu no WhatsApp. Texto de terceiro, nunca
+  /// identidade confirmada — não use para decidir nada.
+  nomeContato String?
+
+  /// Ordenação da lista. Redundante com a última mensagem, e de propósito:
+  /// sem isto, listar conversas por atividade exigiria juntar com a tabela de
+  /// mensagens e agregar a cada abertura de tela.
+  ultimaMensagemEm DateTime @default(now())
+  /// Quantas o comprador mandou e ninguém leu. Mantido no lugar de contar na
+  /// hora pelo mesmo motivo acima.
+  naoLidas         Int      @default(0)
+
+  /**
+   * Até quando o robô fica calado nesta conversa.
+   * Quando um atendente assume, o robô precisa parar — duas respostas para a
+   * mesma pergunta, uma humana e uma automática, é pior que só a automática.
+   * É prazo e não booleano porque ninguém lembra de "devolver" a conversa ao
+   * robô: sem expirar sozinho, toda conversa atendida uma vez ficaria sem
+   * automação para sempre.
+   */
+  roboPausadoAte DateTime?
+
+  criadoEm DateTime @default(now())
+
+  mensagens ConversaMensagem[]
+  loja      Perfil             @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+
+  @@unique([perfilId, contato])
+  @@index([perfilId, ultimaMensagemEm])
+  @@map("conversas")
+}
+
+/// Uma mensagem da conversa, nas duas direções.
+///
+/// Entrada e saída na mesma tabela porque a tela mostra as duas na mesma
+/// lista, em ordem. Separá-las obrigaria a unir e reordenar a cada abertura, e
+/// a ordem é o que faz uma conversa ser legível.
+model ConversaMensagem {
+  id         String        @id @default(cuid())
+  conversaId String
+  autor      AutorMensagem
+  texto      String
+
+  /// Id no provedor. Único para o webhook poder reentregar sem duplicar, e
+  /// nulo enquanto uma mensagem nossa não foi aceita pelo provedor.
+  idExterno String? @unique
+  /// Erro do provedor, quando a nossa mensagem não saiu.
+  erro      String?
+
+  /// Quando aconteceu, segundo o provedor. É por ele que a lista ordena.
+  ocorridoEm DateTime @default(now())
+  criadoEm   DateTime @default(now())
+
+  /// Corpo cru do webhook, só para mensagem recebida. A Evolution muda o
+  /// formato entre versões, e sem o original um campo novo vira "mensagem
+  /// sem conteúdo" impossível de investigar depois.
+  payload Json?
+
+  conversa Conversa @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+
+  @@index([conversaId, ocorridoEm])
+  @@map("conversa_mensagens")
+}
+
+/// Amarração entre um evento nosso e um template aprovado pela Meta.
+///
+/// Na API oficial o texto da mensagem NÃO é livre: fora da janela de 24
+/// horas, só sai o que a Meta aprovou previamente, referenciado pelo nome.
+/// Por isso este modelo guarda o `nome` do template lá, e não o texto — o que
+/// fica em `previa` serve para a tela mostrar ao lojista o que será enviado, e
+/// nunca é o que viaja na requisição.
+///
+/// `variaveis` é a ordem em que os campos do pedido entram nos `{{1}}`,
+/// `{{2}}` do template. A ordem importa e é do template, não nossa: trocá-la
+/// manda o código de rastreio no lugar do nome do cliente sem erro nenhum.
+enum CanalMensagem {
+  WHATSAPP
+  SMS
+  /**
+   * E-mail enviado pela LOJA, reportado à plataforma.
+   * Diferente dos outros dois, a plataforma não envia — ela registra. A loja
+   * já tem provedor e domínio verificados; o que faltava era o painel poder
+   * responder "o comprador foi avisado?" sem trocar de sistema.
+   * Por isso uma mensagem de e-mail nasce com o desfecho já conhecido
+   * (`ENVIADA` ou `DESISTIU`), nunca `PENDENTE`: não há fila daqui para ela.
+   */
+  EMAIL
+}
+
+/// Credenciais de SMS, por perfil.
+///
+/// Espelha `WhatsappConfig` porque o raciocínio é o mesmo: cada loja paga o
+/// próprio envio e aparece como o próprio remetente. A plataforma não
+/// intermedia mensagem nem empresta reputação de número.
+///
+/// `provedor` é texto livre e não enum: a escolha do fornecedor ainda está em
+/// aberto, e um enum obrigaria a uma migration a cada troca — exatamente o que
+/// a interface `SmsProvider` existe para evitar.
+model SmsConfig {
+  id            String    @id @default(cuid())
+  perfilId      String    @unique
+  provedor      String
+  /// Conta no provedor, quando ele exigir uma além da chave.
+  identificador String?
+  chaveCifrada  String
+  dicaChave     String
+  /// Número ou nome que aparece como remetente, quando o provedor permitir.
+  remetente     String?
+  ativo         Boolean   @default(true)
+  verificadaEm  DateTime?
+  ultimoErro    String?
+  criadoEm      DateTime  @default(now())
+  atualizadoEm  DateTime  @updatedAt
+
+  perfil Perfil @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+
+  @@map("sms_configs")
+}
+
+model MensagemTemplate {
+  id           String        @id @default(cuid())
+  perfilId     String
+  /**
+   * Canal por onde este texto sai.
+   * Muda o papel de `previa`. No WhatsApp o texto vive aprovado na Meta e
+   * `nome` é o que o identifica lá — `previa` serve só para a tela mostrar ao
+   * lojista o que será enviado. No SMS não há aprovação nenhuma: `previa` É a
+   * mensagem, com as variáveis entre chaves duplas.
+   */
+  canal        CanalMensagem @default(WHATSAPP)
+  /// Evento que dispara: `PEDIDO_PENDENTE`, `PEDIDO_PAGO` ou um código de
+  /// rastreio do catálogo (`POSTADO`, `ENTREGUE`…). É String, e não enum,
+  /// porque o catálogo de status já é personalizável por conta — um enum
+  /// aqui proibiria disparar mensagem nos status que o próprio cliente criou.
+  evento       String
+  nome         String
+  idioma       String        @default("pt_BR")
+  previa       String
+  variaveis    Json          @default("[]")
+  ativo        Boolean       @default(true)
+  criadoEm     DateTime      @default(now())
+  atualizadoEm DateTime      @updatedAt
+
+  perfil    Perfil             @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+  mensagens MensagemEnvio[]
+  regras    RegraRecuperacao[]
+
+  /// Um evento e um canal, uma mensagem. O canal faz parte da chave porque a
+  /// loja pode querer avisar por SMS **e** por WhatsApp do mesmo fato; sem
+  /// ele, escolher um canal proibiria o outro.
+  @@unique([perfilId, evento, canal])
+  @@index([perfilId, ativo])
+  @@map("mensagem_templates")
+}
+
+enum StatusPedido {
+  PENDENTE
+  PAGO
+  CANCELADO
+}
+
+/// Pedido da loja, empurrado por ela via `POST /api/v0/pedidos`.
+///
+/// A plataforma só conhecia envios, e envio só nasce depois do pagamento — o
+/// que torna impossível recuperar a venda que NÃO foi paga, justamente a que
+/// vale dinheiro. Este modelo é o pedido antes disso.
+///
+/// `externalId` é o identificador do pedido na loja, e o par com o perfil é
+/// único: é ele que impede o mesmo pedido de virar dois. A API pública de
+/// envios não tem essa trava e a deduplicação fica com o integrador; aqui o
+/// erro não se repete.
+model Pedido {
+  id            String       @id @default(cuid())
+  perfilId      String
+  externalId    String
+  status        StatusPedido @default(PENDENTE)
+  clienteNome   String
+  /// E.164 sem sinais, como a Cloud API exige: 5511999999999.
+  clienteFone   String
+  clienteEmail  String?
+  valorCentavos Int          @default(0)
+  produtos      Json         @default("[]")
+  /// Para onde mandar o comprador que quer terminar a compra.
+  checkoutUrl   String?
+  shipmentId    String?
+  /**
+   * O comprovante que o comprador mandou para a loja.
+   * Guarda o que a loja tem: hoje uma URI de dados
+   * (`data:image/jpeg;base64,…`), cerca de 95 KB cada, e são dezenas — não
+   * milhares. Um endereço http também cabe aqui, e é para onde isto deve
+   * caminhar: no dia em que a loja guardar o arquivo fora do banco, nada
+   * neste campo precisa mudar.
+   */
+  comprovante   String?
+  comprovanteEm DateTime?
+  /**
+   * Este comprador pode ser cutucado pela régua de recuperação?
+   * Falso para o que entrou como HISTÓRICO. A régua varre pedido pendente por
+   * idade e cria mensagem direto — e a trava que existia (`notificar_cliente`)
+   * valia só para a requisição em que era mandada, morrendo ali. Bastava uma
+   * regra ativa para milhares de "conclua sua compra" saírem para gente que
+   * abandonou o carrinho semanas atrás.
+   * Vive no dado de propósito: trava que depende de quem chama lembrar de
+   * mandar um campo não é trava.
+   */
+  recuperavel   Boolean      @default(true)
+  criadoEm      DateTime     @default(now())
+  atualizadoEm  DateTime     @updatedAt
+  pagoEm        DateTime?
+  canceladoEm   DateTime?
+
+  perfil    Perfil          @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+  mensagens MensagemEnvio[]
+
+  @@unique([perfilId, externalId])
+  @@index([perfilId, status, criadoEm])
+  /// O caminho da régua de recuperação, que roda de cinco em cinco minutos.
+  @@index([perfilId, recuperavel, status, criadoEm])
+  /// Quem mandou comprovante é um recorte que se procura, e são poucos entre
+  /// muitos. O índice no banco é PARCIAL (`WHERE comprovanteEm IS NOT NULL`) —
+  /// o Prisma não sabe escrever isso, então a migration é a fonte da verdade.
+  @@index([perfilId, comprovanteEm])
+  @@map("pedidos")
+}
+
+/// Quando cutucar um pedido que ficou pendente.
+///
+/// `atrasoMinutos` conta a partir da criação do pedido, não do último envio:
+/// contar do envio faria a régua andar sozinha a cada tentativa, e o comprador
+/// receberia a quarta mensagem dias depois de já ter desistido.
+model RegraRecuperacao {
+  id            String   @id @default(cuid())
+  perfilId      String
+  templateId    String
+  atrasoMinutos Int
+  ativo         Boolean  @default(true)
+  criadoEm      DateTime @default(now())
+
+  perfil   Perfil           @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+  template MensagemTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  /// Duas regras com o mesmo atraso disparariam duas mensagens no mesmo
+  /// minuto.
+  @@unique([perfilId, atrasoMinutos])
+  @@index([perfilId, ativo])
+  @@map("regras_recuperacao")
+}
+
+enum StatusMensagem {
+  PENDENTE
+  ENVIADA
+  FALHA
+  DESISTIU
+}
+
+/// Toda mensagem que saiu ou tentou sair, com o motivo da falha.
+///
+/// Mesmo papel do `EmailDelivery`: sem histórico, "a mensagem não chegou" não
+/// tem como ser investigado — e no WhatsApp é pior, porque a recusa vem da
+/// Meta com um código que só faz sentido guardado ao lado do destinatário e do
+/// template usados.
+///
+/// A chave única impede que a mesma notificação saia duas vezes quando um
+/// evento for reprocessado. No Postgres, nulo nunca é igual a nulo, então a
+/// restrição vale de fato para as linhas que têm pedido ou envio — que são as
+/// que podem repetir.
+model MensagemEnvio {
+  id                 String         @id @default(cuid())
+  perfilId           String
+  canal              CanalMensagem  @default(WHATSAPP)
+  /// Por onde a mensagem saiu de fato — `registrado` quando nenhum provedor
+  /// estava contratado. Sem isto, "o cliente não recebeu" não distingue falha
+  /// do fornecedor de canal que nunca chegou a ser ligado.
+  provedor           String?
+  templateId         String?
+  pedidoId           String?
+  shipmentId         String?
+  evento             String
+  /// Destinatário congelado no disparo: o pedido pode ter o telefone
+  /// corrigido depois, e o histórico precisa dizer para onde a mensagem foi
+  /// de fato.
+  para               String
+  /**
+   * O texto exato que saiu, congelado no envio.
+   * Compor de novo na hora de exibir não serve: o template pode ter sido
+   * editado e o código de rastreio pode ter mudado, então a tela mostraria uma
+   * mensagem que ninguém recebeu. Quando o comprador diz "a mensagem veio
+   * errada", esta coluna é a única resposta possível.
+   * Nulo no que foi enviado antes desta coluna existir, e no e-mail reportado
+   * pela loja — ali o corpo vive lá, e copiá-lo criaria uma segunda versão do
+   * mesmo texto para divergir na primeira edição.
+   */
+  texto              String?
+  /**
+   * Assunto do e-mail. Vazio nos canais que não têm um.
+   */
+  assunto            String?
+  status             StatusMensagem @default(PENDENTE)
+  tentativas         Int            @default(0)
+  /// Identificador da mensagem no provedor (`wamid` na Meta, id da SMS Dev,
+  /// id da Resend quando a loja reporta o próprio e-mail).
+  ///
+  /// **Entra na trava contra repetição.** Numa mensagem REPORTADA pela loja,
+  /// pedido/envio/regra são nulos e a chave desabaria para
+  /// `(perfil, evento, canal)`, colapsando milhares de e-mails num só — ver o
+  /// comentário da migration `20260906190000`. No que a plataforma enfileira
+  /// este campo é nulo até o envio, e a deduplicação segue idêntica.
+  idExterno          String?
+  erro               String?
+  proximaTentativaEm DateTime?
+  /// Quando o provedor ACEITOU a mensagem. Não é o mesmo que entregue.
+  enviadaEm          DateTime?
+  /**
+   * Quando a mensagem chegou ao APARELHO, segundo a operadora.
+   * Existe porque `enviadaEm` só diz que o provedor aceitou, e os dois estados
+   * se separam na prática: num teste real, duas mensagens quase idênticas
+   * saíram com minutos de diferença — uma foi confirmada no aparelho, a outra
+   * ficou sete minutos em "aceita" e nunca chegou.
+   * Sem este campo o aviso de situação do provedor não tinha onde escrever, e
+   * gravava o mesmo estado que a mensagem já tinha. O recurso existia e não
+   * produzia informação nenhuma: para saber se chegou era preciso consultar o
+   * provedor à mão, uma mensagem por vez.
+   * Nulo não significa "não chegou" — significa "ninguém confirmou". Nem toda
+   * operadora devolve a confirmação.
+   */
+  entregueEm         DateTime?
+  criadoEm           DateTime       @default(now())
+
+  perfil   Perfil            @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+  template MensagemTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  pedido   Pedido?           @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  /// Qual regra da régua de recuperação gerou esta mensagem.
+  ///
+  /// Entra na chave única porque várias cobranças para o MESMO pedido são o
+  /// desenho da régua — 15 minutos, 2 horas, 24 horas. Sem ela, a segunda
+  /// seria barrada como se fosse repetição da primeira, e a régua inteira
+  /// mandaria uma mensagem só.
+  regraId String?
+
+  /// A trava contra mandar a mesma mensagem duas vezes.
+  ///
+  /// O canal entra na chave: sem ele, o SMS enviado bloquearia o WhatsApp do
+  /// mesmo evento, em silêncio, como se fosse repetição.
+  ///
+  /// CUIDADO — ISTO AQUI NÃO É A VERDADE INTEIRA. No banco, o índice é criado
+  /// com `NULLS NOT DISTINCT`, cláusula que o Prisma não sabe escrever. Sem
+  /// ela, o Postgres trata cada NULL como valor único e deixa passar duas
+  /// linhas idênticas — e como toda mensagem de envio tem `pedidoId` nulo, a
+  /// trava não valia justamente para o caso que acontece sempre.
+  ///
+  /// Quem regenerar migration a partir deste schema precisa conferir se a
+  /// cláusula sobreviveu: ver
+  /// `20260903090000_trava_duplicata_com_nulos/migration.sql`.
+  @@unique([perfilId, evento, canal, pedidoId, shipmentId, regraId, idExterno], map: "mensagem_envios_dedupe_key")
+  @@index([regraId])
+  @@index([proximaTentativaEm, status])
+  @@index([perfilId, criadoEm])
+  @@map("mensagem_envios")
+}
+
+/// De onde um lead veio. Cada aparição da pessoa gera uma linha em
+/// `LeadOrigem`; este enum diz qual porta ela usou daquela vez.
+enum OrigemLead {
+  PEDIDO_PAGO
+  PEDIDO_PENDENTE
+  ENVIO
+  CONVERSA
+}
+
+/// Uma pessoa que comprou (ou quase comprou) em alguma loja da plataforma.
+///
+/// Existe porque o dado do comprador estava espalhado por `Pedido`,
+/// `Shipment.destinatario`, `Address` e `Conversa`, sem nada que dissesse
+/// "esta pessoa": a mesma compradora com três pedidos em duas lojas e uma
+/// conversa era sete linhas desconexas.
+///
+/// A base é da PLATAFORMA, não da loja: o mesmo comprador aparece uma vez
+/// ainda que tenha comprado em três lugares, e `LeadOrigem` guarda de quais
+/// lojas ele veio.
+model Lead {
+  id String @id @default(cuid())
+
+  nome String?
+
+  /// Como a pessoa informou. O normalizado ao lado é o que compara.
+  email             String?
+  /// Minúsculas e sem espaços. Chave de reserva quando não há CPF.
+  emailNormalizado  String? @unique
+
+  telefone            String?
+  /// Só dígitos, sem o DDI 55. Sem isso "(21) 99999-0001" e "5521999990001"
+  /// viram duas pessoas.
+  telefoneNormalizado String? @unique
+
+  /// HMAC-SHA256 do CPF — a chave principal de identidade.
+  ///
+  /// HMAC, e não SHA-256 puro: existem cerca de um bilhão de CPFs válidos, e
+  /// testar todos contra um hash sem segredo leva segundos numa placa de
+  /// vídeo comum. Sem o segredo do servidor, esta coluna não diz nada a quem
+  /// rouba o banco.
+  cpfHash    String? @unique
+  /// O CPF em si, cifrado. Só é decifrado quando alguém pede para ver, e o
+  /// pedido fica registrado em `AuditLog`.
+  cpfCifrado String?
+
+  primeiroContatoEm DateTime
+  ultimoContatoEm   DateTime
+
+  /// Resumo mantido na escrita, para a lista não somar nada na leitura.
+  totalPedidos       Int @default(0)
+  totalEnvios        Int @default(0)
+  valorTotalCentavos Int @default(0)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  origens LeadOrigem[]
+
+  @@index([ultimoContatoEm])
+  @@index([nome])
+  @@map("leads")
+}
+
+/// Cada vez que a pessoa apareceu, e por onde.
+model LeadOrigem {
+  id     String     @id @default(cuid())
+  leadId String
+  tipo   OrigemLead
+
+  /// De qual loja veio. Nulo só em origem que não tem perfil.
+  perfilId String?
+
+  pedidoId   String?
+  shipmentId String?
+  conversaId String?
+
+  ocorridoEm DateTime
+
+  criadoEm DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  /// Reprocessar a mesma origem não cria linha repetida — é o que torna a
+  /// carga inicial idempotente e permite interrompê-la e retomá-la.
+  ///
+  /// CUIDADO — ISTO AQUI NÃO É A VERDADE INTEIRA. No banco, o índice é criado
+  /// com `NULLS NOT DISTINCT`, cláusula que o Prisma não sabe escrever. Sem
+  /// ela, cada origem preenche só uma das três colunas (pedidoId OU
+  /// shipmentId OU conversaId) e o Postgres trata as duas nulas restantes
+  /// como sempre diferentes — a trava não vale justamente para o caso que
+  /// acontece sempre. Mesmo cuidado de `20260903090000_trava_duplicata_com_nulos`.
+  /// Quem regenerar migration a partir deste schema precisa conferir se a
+  /// cláusula sobreviveu: ver `20260912192405_base_de_leads/migration.sql`.
+  @@unique([tipo, pedidoId, shipmentId, conversaId], map: "lead_origens_dedupe_key")
+  @@index([leadId, ocorridoEm])
+  @@index([perfilId])
+  @@map("lead_origens")
 }

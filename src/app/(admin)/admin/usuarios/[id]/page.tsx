@@ -5,6 +5,7 @@ import { AjusteSaldoForm } from '@/components/admin/ajuste-saldo-form'
 import { CriarEtiquetaForm } from '@/components/admin/criar-etiqueta-form'
 import { AcoesEtiqueta } from '@/components/admin/acoes-etiqueta'
 import { PapelAcessoForm } from '@/components/admin/papel-acesso-form'
+import { exigirAdminNaPagina } from '@/server/admin/guarda'
 
 function reais(centavos: number): string {
   return (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -23,6 +24,7 @@ function dataHora(valor: Date): string {
  * tela, para não repetir um ajuste que já existe.
  */
 export default async function PaginaUsuario({ params }: { params: Promise<{ id: string }> }) {
+  await exigirAdminNaPagina()
   const { id } = await params
   const usuario = await obterUsuario(id)
 

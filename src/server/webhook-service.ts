@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto'
+import { randomBytes, randomUUID } from 'crypto'
 import { lookup } from 'dns/promises'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
@@ -111,8 +111,11 @@ export async function enfileirarEvento(
       userId: true,
       status: true,
       codigoRastreio: true,
+      precoFreteCentavos: true,
       precoCobradoCentavos: true,
       criadoEm: true,
+      referenciaExterna: true,
+      sandbox: true,
     },
   })
 
@@ -133,13 +136,24 @@ export async function enfileirarEvento(
     return 0
   }
 
-  const payload = montarPayload(evento, envio)
+  /*
+    O id é gerado aqui, e não pelo banco, porque o MESMO valor precisa ir
+    dentro do payload e na linha. `createMany` não devolve os ids gerados,
+    e ler de volta depois abriria uma janela em que a entrega existe sem
+    identidade no corpo.
+
+    Cada destino interessado recebe o SEU id: são entregas distintas do
+    mesmo evento, e quem recebe precisa poder deduplicar sem esbarrar na
+    entrega feita a outro app.
+  */
+  const comId = interessados.map((app) => ({ app, entregaId: randomUUID() }))
 
   await tx.webhookDelivery.createMany({
-    data: interessados.map((app) => ({
+    data: comId.map(({ app, entregaId }) => ({
+      id: entregaId,
       webhookAppId: app.id,
       evento,
-      payload,
+      payload: montarPayload(evento, envio, entregaId),
       // Primeira tentativa é imediata: o disparo pega tudo que está vencido.
       proximaTentativaEm: new Date(),
     })),
@@ -151,9 +165,14 @@ export async function enfileirarEvento(
 type EnvioPayload = {
   id: string
   status: string
+  sandbox: boolean
   codigoRastreio: string | null
+  /** O transporte. É o que o integrador mostra ao comprador dele. */
+  precoFreteCentavos: number
+  /** A taxa por etiqueta. Fica fora do payload — ver `montarPayload`. */
   precoCobradoCentavos: number
   criadoEm: Date
+  referenciaExterna: string | null
 }
 
 /**
@@ -161,7 +180,7 @@ type EnvioPayload = {
  * funcionem trocando apenas a base URL. `tracking` é nulo enquanto o envio
  * não tem código — o que, na prática, significa antes de `order.generated`.
  */
-function montarPayload(evento: Evento, envio: EnvioPayload) {
+function montarPayload(evento: Evento, envio: EnvioPayload, entregaId: string) {
   return {
     event: evento,
     data: {
@@ -169,9 +188,50 @@ function montarPayload(evento: Evento, envio: EnvioPayload) {
       status: envio.status,
       tracking: envio.codigoRastreio,
       tracking_url: envio.codigoRastreio ? `/r/${envio.codigoRastreio}` : null,
-      price: (envio.precoCobradoCentavos / 100).toFixed(2),
+      /*
+        A referência da loja viaja no mesmo evento que traz o código. Sem
+        ela, quem recebe o webhook precisa de uma consulta extra só para
+        saber de qual pedido dele se trata.
+      */
+      external_id: envio.referenciaExterna,
+      /*
+        O FRETE, não a taxa por etiqueta.
+
+        Vinha de `precoCobradoCentavos` — o R$ 1,00 que a plataforma cobra
+        do lojista — onde o integrador espera o valor do transporte. O
+        mesmo erro já tinha sido corrigido no /cart e no /order/info; aqui
+        ficou para trás, e uma loja que gravasse este campo como custo de
+        envio registraria 1,00 no lugar de 28,00.
+
+        A taxa não entra no payload de propósito: ela é assunto entre a
+        plataforma e o lojista, e quem consome o webhook nada tem a ver com
+        ela. Quem precisar dela lê `label_fee` em /order/info.
+      */
+      price: (envio.precoFreteCentavos / 100).toFixed(2),
       created_at: envio.criadoEm.toISOString(),
     },
+    /*
+      Identidade desta entrega, estável entre as retentativas.
+
+      Existe porque `sent_at` muda a cada tentativa e não serve de chave.
+      Sem ele, quem integra precisa deduplicar por envio + tipo de evento —
+      o que funciona hoje, mas passa a descartar entrega legítima no dia em
+      que o mesmo evento for disparado duas vezes para o mesmo envio.
+    */
+    event_id: entregaId,
+    /*
+      Vem do envio, e não de um carimbo posterior.
+
+      Antes o flag era gravado DEPOIS de a entrega existir, por uma função
+      chamada em dois lugares — então só `order.created` e `order.released`
+      o traziam. Quem integrava tinha que adivinhar o ambiente pelo prefixo
+      do código de rastreio, e um dia em que esse formato mudasse um evento
+      de teste viraria etapa em pedido real.
+
+      Nascendo aqui, os seis eventos carregam o valor e não há como um
+      caminho novo esquecer de carimbar.
+    */
+    sandbox: envio.sandbox,
     sent_at: new Date().toISOString(),
   }
 }

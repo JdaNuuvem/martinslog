@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { Prisma } from '@prisma/client'
 import { listarAuditoria, listarFacetas, type FiltroAuditoria } from '@/server/admin/auditoria'
+import { exigirAdminNaPagina } from '@/server/admin/guarda'
 
 type Busca = {
   acao?: string
@@ -53,6 +54,7 @@ export default async function PaginaAuditoria({
 }: {
   searchParams: Promise<Busca>
 }) {
+  await exigirAdminNaPagina()
   const parametros = await searchParams
 
   const filtro: FiltroAuditoria = {

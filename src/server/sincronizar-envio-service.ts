@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { EnvioNaoEncontradoError } from '@/domain/errors'
+import { env } from '@/env'
 import {
   garantirTransicao,
   transicoesValidas,
@@ -8,6 +9,29 @@ import {
 } from '@/domain/shipment/estados'
 import { statusDoEvento } from '@/domain/simulacao/roteiro'
 import { enviarAtualizacao } from './email-service'
+import { enfileirarEvento, type Evento } from './webhook-service'
+
+/**
+ * Eventos de webhook que nascem aqui, e só aqui.
+ *
+ * `order.created`, `order.released`, `order.generated` e `order.cancelled` são
+ * enfileirados nos serviços que causam cada uma dessas transições. `POSTED` e
+ * `DELIVERED` não têm serviço próprio: eles acontecem sozinhos, quando o
+ * relógio da simulação alcança o evento — e, por isso, ficaram sem notificação
+ * nenhuma desde que os webhooks existem.
+ *
+ * O efeito era silencioso e sério: quem integrou recebia o código de rastreio
+ * em `order.generated` e nunca mais ouvia falar do pedido. O rastreio do
+ * comprador congelava em "etiqueta emitida" até a entrega, e nada no log
+ * acusava, porque não havia entrega falhando — não havia entrega alguma.
+ *
+ * `LOST` fica de fora de propósito: extravio não é cancelamento, e mandar
+ * `order.cancelled` descreveria errado o que aconteceu com a carga.
+ */
+const EVENTO_POR_STATUS: Partial<Record<StatusShipment, Evento>> = {
+  POSTED: 'order.posted',
+  DELIVERED: 'order.delivered',
+}
 
 /**
  * Sincronização do status do envio com o relógio da simulação.
@@ -154,12 +178,27 @@ export async function sincronizarEnvio(
 
     const porDevolucao = evento.codigo === 'DEVOLVIDO'
 
-    await prisma.shipment.update({
-      where: { id: envio.id, status },
-      data: {
-        status: alvo,
-        ...datasDoStatus(alvo, evento.ocorridoEm, porDevolucao),
-      },
+    /*
+      Mudança de status e notificação na mesma transação, ao contrário do
+      e-mail logo abaixo. Enfileirar fora dela abriria a janela em que o
+      status avançou e a notificação não existe — e, como aqui só se gravam
+      linhas (a entrega é do disparo, depois), não há I/O de rede prendendo
+      a conexão pelo tempo de um servidor de terceiro responder.
+    */
+    const eventoWebhook = EVENTO_POR_STATUS[alvo]
+
+    await prisma.$transaction(async (tx) => {
+      await tx.shipment.update({
+        where: { id: envio.id, status },
+        data: {
+          status: alvo,
+          ...datasDoStatus(alvo, evento.ocorridoEm, porDevolucao),
+        },
+      })
+
+      if (eventoWebhook) {
+        await enfileirarEvento(envio.id, eventoWebhook, tx)
+      }
     })
 
     status = alvo
@@ -235,8 +274,30 @@ export async function sincronizarEnviosPendentesDoUsuario(
   let sincronizados = 0
 
   for (const envio of desatualizados) {
-    await sincronizarEnvio(envio.id, agora)
-    sincronizados += 1
+    try {
+      await sincronizarEnvio(envio.id, agora)
+      sincronizados += 1
+    } catch (error) {
+      /*
+        Um envio que falha não pode levar os seguintes junto.
+
+        A falha esperada aqui é a corrida: `sincronizarEnvio` grava com
+        `where: { id, status }`, e se a consulta pública do comprador tiver
+        avançado o mesmo envio no intervalo, o `update` não encontra linha e o
+        Prisma lança `P2025`. Sem este `catch`, essa exceção subia e abortava
+        a varredura inteira daquela conta — a loja com quatrocentos envios
+        cujo terceiro estava em corrida ficava com trezentos e noventa e sete
+        sem sincronizar, e a resposta não dizia quantos ficaram para trás.
+
+        E é a conta com MAIS tráfego de rastreio que mais sofre, porque é o
+        comprador abrindo a página que cria a corrida.
+
+        Perder este envio nesta passada não custa nada: a varredura é
+        periódica, e na próxima ele entra de novo — já com o status que a
+        outra execução gravou.
+      */
+      console.error('Falha ao sincronizar envio na varredura', { envio: envio.id, cause: error })
+    }
   }
 
   return sincronizados
@@ -282,7 +343,6 @@ async function avisarPorEmail(shipmentId: string, codigoEvento: string): Promise
 
   if (!evento) return
 
-  const base = process.env.APP_URL ?? 'http://localhost:3000'
 
   await enviarAtualizacao({
     userId: envio.userId,
@@ -294,6 +354,6 @@ async function avisarPorEmail(shipmentId: string, codigoEvento: string): Promise
     descricao: evento.descricao,
     cidade: evento.cidade ?? destinatario?.cidade ?? '',
     uf: evento.uf ?? destinatario?.uf ?? '',
-    urlRastreio: `${base}/r/${envio.codigoRastreio}`,
+    urlRastreio: `${env.APP_URL}/r/${envio.codigoRastreio}`,
   })
 }

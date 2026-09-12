@@ -144,7 +144,10 @@ export function ConexaoEmail() {
       ) : null}
 
       {!carregando ? (
-        <form onSubmit={conectar} className="flex flex-col gap-3">
+        // `method="post"`: sem ele um submit nativo levaria a API key para a
+        // URL. Ver o comentário em `(auth)/login/page.tsx`.
+        <form method="post" onSubmit={conectar} className="flex flex-col gap-3">
+
           <div className="flex flex-col gap-1">
             <label htmlFor={`${idBase}-chave`} className="text-sm font-medium text-texto-secundario">
               {config ? 'Trocar a chave de API' : 'Chave de API do Resend'}

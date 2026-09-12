@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { CanvasFluxoRastreio, posicaoPadrao } from './canvas-fluxo-rastreio'
+import { INTERVALO_PADRAO_DIAS } from '@/domain/rastreio/template-rastreio'
 
 type ItemPaleta = {
   codigo: string
@@ -18,7 +19,8 @@ type Passo = {
   codigo: string
   titulo: string
   descricao: string
-  diasAposEmissao: number
+  /** Dias desde a etapa anterior; no primeiro nó, desde a emissão. */
+  diasAposAnterior: number
   tipo?: 'ETAPA' | 'COBRANCA'
   x?: number
   y?: number
@@ -48,6 +50,15 @@ export function ConstrutorTemplateRastreio() {
   const [padraoDoFluxo, setPadraoDoFluxo] = useState<Passo[]>([])
   const [passos, setPassos] = useState<Passo[]>([])
   const [usaTemplate, setUsaTemplate] = useState(false)
+  /*
+    O que está valendo de fato para as etiquetas, segundo o servidor — que não
+    é a mesma coisa que o modo aberto na tela. Quem monta um fluxo sem salvar,
+    ou abre a aba do personalizado só para olhar, continua emitindo pelo
+    caminho padrão; sem dizer isso em algum lugar, a tela deixa a pessoa
+    achando que já trocou.
+  */
+  const [ativoNoServidor, setAtivoNoServidor] = useState(false)
+  const [reaplicando, setReaplicando] = useState(false)
   const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
@@ -80,6 +91,7 @@ export function ConstrutorTemplateRastreio() {
       // Template salvo mas desligado é caminho padrão para todos os efeitos:
       // é o roteiro automático que sai nas etiquetas.
       setUsaTemplate(Boolean(corpo.template?.ativo))
+      setAtivoNoServidor(Boolean(corpo.template?.ativo))
       // Templates montados antes da repetição não têm id; atribui na leitura
       // para que dois nós do mesmo tipo não se confundam ao editar.
       const comId = (corpo.template?.passos ?? corpo.padrao).map((passo, indice) => ({
@@ -133,7 +145,10 @@ export function ConstrutorTemplateRastreio() {
         codigo: item.codigo,
         titulo: item.rotulo,
         descricao: item.descricaoPadrao,
-        diasAposEmissao: item.diasSugeridos,
+        // Um dia depois da etapa anterior. `diasSugeridos` da paleta é um dia
+        // absoluto, que não diz nada quando o nó entra no fim de um percurso
+        // já montado.
+        diasAposAnterior: INTERVALO_PADRAO_DIAS,
         tipo: item.tipo,
       },
     ])
@@ -224,11 +239,65 @@ export function ConstrutorTemplateRastreio() {
         return
       }
       setUsaTemplate(true)
+      setAtivoNoServidor(true)
       setAviso('Fluxo salvo. Envios novos passam a seguir este percurso.')
     } catch {
       setErro('Não foi possível conectar ao servidor. Tente novamente.')
     } finally {
       setSalvando(false)
+    }
+  }
+
+  /*
+    Aplica o fluxo aos envios que já saíram.
+
+    A linha do tempo nasce inteira na emissão: ligar o fluxo vale para as
+    etiquetas seguintes, e as anteriores continuam com o percurso que tinham
+    quando foram emitidas. Quem acabou de montar o fluxo costuma testá-lo numa
+    etiqueta antiga e conclui que "não funcionou" — daí este botão, que
+    reescreve o passado de propósito e diz isso antes.
+  */
+  async function aplicarNosEmitidos() {
+    if (
+      !window.confirm(
+        'Reescrever a linha do tempo dos envios que você já emitiu com este fluxo?\n\n' +
+          'Rastreios que seus clientes já consultaram podem passar a mostrar outras etapas. ' +
+          'Envios cancelados não mudam.',
+      )
+    ) {
+      return
+    }
+
+    setErro(null)
+    setAviso(null)
+    setReaplicando(true)
+    try {
+      const resposta = await fetch('/api/rastreio-template/ativar', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ativo: true, reaplicarNosEnvios: true }),
+      })
+      const corpo = (await resposta.json().catch(() => ({}))) as {
+        mensagem?: string
+        enviosAtualizados?: number
+      }
+
+      if (!resposta.ok) {
+        setErro(corpo.mensagem ?? 'Não foi possível aplicar o fluxo aos envios já emitidos.')
+        return
+      }
+
+      const total = corpo.enviosAtualizados ?? 0
+      setAtivoNoServidor(true)
+      setAviso(
+        total === 0
+          ? 'Nenhum envio anterior precisou ser reescrito.'
+          : `${total} envio${total > 1 ? 's já emitidos foram reescritos' : ' já emitido foi reescrito'} com este fluxo.`,
+      )
+    } catch {
+      setErro('Não foi possível conectar ao servidor. Tente novamente.')
+    } finally {
+      setReaplicando(false)
     }
   }
 
@@ -289,6 +358,7 @@ export function ConstrutorTemplateRastreio() {
       return
     }
     setUsaTemplate(false)
+    setAtivoNoServidor(false)
     setAviso('Voltou ao caminho padrão. Seu fluxo personalizado fica guardado, desligado.')
   }
 
@@ -299,12 +369,37 @@ export function ConstrutorTemplateRastreio() {
       aria-label="Fluxo do rastreio"
       className="flex flex-col gap-5 rounded-xl bg-superficie-card p-6"
     >
-      <div>
-        <h2 className="text-lg font-bold text-texto-principal">Fluxo do rastreio</h2>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-lg font-bold text-texto-principal">Fluxo do rastreio</h2>
+          <span
+            className={`rounded-pilula px-3 py-1 text-xs font-bold ${
+              ativoNoServidor ? 'bg-brand text-white' : 'bg-superficie-bloco text-texto-secundario'
+            }`}
+          >
+            {ativoNoServidor ? 'Valendo: fluxo personalizado' : 'Valendo: caminho padrão'}
+          </span>
+        </div>
         <p className="text-sm text-texto-secundario">
           Cada nó é uma etapa que o seu cliente vê na timeline. Clique em um nó para editar o
           texto e quando ele acontece.
         </p>
+
+        {/* O modo aberto na tela e o que está valendo são coisas diferentes:
+            montar um percurso não o liga, salvar liga. Enquanto os dois não
+            coincidem, a tela diz qual está de pé. */}
+        {usaTemplate && !ativoNoServidor ? (
+          <p role="status" className="rounded-lg bg-superficie-bloco p-3 text-sm text-texto-secundario">
+            Você está montando o fluxo personalizado, mas as etiquetas novas ainda seguem o{' '}
+            <strong>caminho padrão</strong>. Ele só passa a valer depois de salvar.
+          </p>
+        ) : null}
+        {!usaTemplate && ativoNoServidor ? (
+          <p role="status" className="rounded-lg bg-superficie-bloco p-3 text-sm text-texto-secundario">
+            Você está vendo o caminho padrão, mas as etiquetas novas seguem o seu{' '}
+            <strong>fluxo personalizado</strong>. Clique em “Caminho padrão” para desligá-lo.
+          </p>
+        ) : null}
       </div>
 
       <div
@@ -421,14 +516,35 @@ export function ConstrutorTemplateRastreio() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={salvar}
-            disabled={salvando || passos.length === 0}
-            className="self-start rounded-pilula bg-brand px-6 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {salvando ? 'Salvando…' : 'Salvar fluxo'}
-          </button>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={salvar}
+                disabled={salvando || passos.length === 0}
+                className="rounded-pilula bg-brand px-6 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {salvando ? 'Salvando…' : 'Salvar fluxo'}
+              </button>
+
+              {ativoNoServidor ? (
+                <button
+                  type="button"
+                  onClick={aplicarNosEmitidos}
+                  disabled={reaplicando}
+                  className="rounded-pilula border border-borda-campo px-6 py-2 text-sm font-medium text-texto-principal hover:bg-superficie-bloco disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {reaplicando ? 'Aplicando…' : 'Aplicar aos envios já emitidos'}
+                </button>
+              ) : null}
+            </div>
+
+            <p className="text-xs text-texto-secundario">
+              Salvar vale para as etiquetas emitidas daqui em diante. As que já saíram mantêm o
+              percurso que tinham na emissão — para trocá-lo, use “Aplicar aos envios já
+              emitidos”.
+            </p>
+          </div>
         </>
       ) : null}
     </section>

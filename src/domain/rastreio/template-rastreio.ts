@@ -1,4 +1,6 @@
 import { ValorInvalidoError } from '../errors'
+import { escalasDaRota } from '../simulacao/corredor'
+import { unidadeTratamento } from '../simulacao/unidades'
 import type { StatusShipment } from '../shipment/estados'
 
 /**
@@ -43,8 +45,23 @@ export type PassoTemplate = {
   codigo: string
   titulo: string
   descricao: string
-  /** Dias após a emissão. Zero é o instante da emissão. */
-  diasAposEmissao: number
+  /**
+   * Dias de espera **desde o nó anterior** do percurso. No primeiro nó, desde
+   * a emissão.
+   *
+   * O percurso é uma linha: cada etapa acontece um tanto de tempo depois da
+   * que veio antes. Contar tudo a partir da emissão obrigava quem monta o
+   * fluxo a somar de cabeça — e mover um nó no meio desalinhava todos os
+   * seguintes, porque cada um carregava um total absoluto que ninguém tinha
+   * pedido para recalcular.
+   */
+  diasAposAnterior: number
+  /**
+   * Campo dos templates montados antes desta mudança, quando o número era o
+   * total acumulado desde a emissão. Só de leitura: `normalizarDias` o
+   * converte em `diasAposAnterior` e nada volta a gravá-lo.
+   */
+  diasAposEmissao?: number
   /** Ausente em templates antigos, que só tinham etapas. */
   tipo?: TipoNo
   /** Posição no canvas. Ausente em templates montados antes do canvas. */
@@ -222,6 +239,61 @@ export function statusPorCodigoDoTemplate(
 }
 
 /**
+ * Intervalo sugerido ao acrescentar um nó ao percurso: um dia depois do
+ * anterior. Sugestão de partida, não regra — quem monta ajusta.
+ */
+export const INTERVALO_PADRAO_DIAS = 1
+
+/**
+ * Converte passos legados, que guardavam o total de dias desde a emissão, no
+ * intervalo entre etapas que o percurso usa hoje.
+ *
+ * Roda na leitura, não numa migração de banco: os passos vivem como JSON
+ * dentro do template, e converter ao ler mantém templates antigos e novos
+ * funcionando sem precisar reescrever tudo de uma vez. É idempotente — passo
+ * que já tem `diasAposAnterior` passa intacto.
+ *
+ * Um total menor que o do passo anterior (possível nos templates antigos,
+ * que só validavam a ordem no salvamento) vira intervalo zero em vez de
+ * negativo: o percurso é uma linha do tempo, e voltar no tempo não é uma
+ * posição válida.
+ */
+export function normalizarDias(passos: readonly PassoTemplate[]): PassoTemplate[] {
+  let acumuladoLegado = 0
+
+  return passos.map((passo) => {
+    if (typeof passo.diasAposAnterior === 'number') {
+      acumuladoLegado += passo.diasAposAnterior
+      return passo
+    }
+
+    const total = passo.diasAposEmissao ?? acumuladoLegado
+    const intervalo = Math.max(0, total - acumuladoLegado)
+    acumuladoLegado = Math.max(acumuladoLegado, total)
+
+    return { ...passo, diasAposAnterior: intervalo }
+  })
+}
+
+/**
+ * Dia de cada passo contado da emissão — a soma dos intervalos até ele.
+ *
+ * É o que a timeline precisa (o evento tem uma data) e o que a tela mostra
+ * ao lado do intervalo, para quem monta ver o total sem somar de cabeça.
+ */
+export function diasAcumulados(passos: readonly PassoTemplate[]): number[] {
+  const totais: number[] = []
+  let total = 0
+
+  for (const passo of normalizarDias(passos)) {
+    total += passo.diasAposAnterior
+    totais.push(total)
+  }
+
+  return totais
+}
+
+/**
  * Valida o template inteiro, e não passo a passo.
  *
  * A validade de um percurso só existe na sequência: um passo perfeitamente
@@ -230,7 +302,13 @@ export function statusPorCodigoDoTemplate(
  * mensagem aponta o passo problemático — não adianta dizer "template
  * inválido" para quem montou doze passos.
  */
-export function validarTemplate(passos: readonly PassoTemplate[]): void {
+export function validarTemplate(passosRecebidos: readonly PassoTemplate[]): void {
+  // Valida já no formato de hoje: um template legado (dias absolutos) é
+  // convertido antes, senão a checagem de intervalo reprovaria totais
+  // perfeitamente válidos.
+  const passos = normalizarDias(passosRecebidos)
+  const totais = diasAcumulados(passos)
+
   if (passos.length === 0) {
     throw new ValorInvalidoError('O template precisa de ao menos um passo.')
   }
@@ -266,11 +344,13 @@ export function validarTemplate(passos: readonly PassoTemplate[]): void {
     // Dois nós do mesmo tipo, no mesmo dia e com o mesmo texto seriam
     // indistinguíveis na timeline — quem acompanha veria a mesma linha duas
     // vezes sem saber por quê.
+    // Compara o dia em que cada um cai, não o intervalo: dois nós com o
+    // mesmo intervalo em pontos diferentes do percurso são etapas distintas.
     const gemeo = passos.findIndex(
       (outro, i) =>
         i < indice &&
         outro.codigo === passo.codigo &&
-        outro.diasAposEmissao === passo.diasAposEmissao &&
+        totais[i] === totais[indice] &&
         outro.titulo.trim() === passo.titulo.trim(),
     )
     if (gemeo >= 0) {
@@ -284,12 +364,20 @@ export function validarTemplate(passos: readonly PassoTemplate[]): void {
     }
 
     if (
-      !Number.isFinite(passo.diasAposEmissao) ||
-      passo.diasAposEmissao < 0 ||
-      passo.diasAposEmissao > DIAS_MAXIMO
+      !Number.isFinite(passo.diasAposAnterior) ||
+      passo.diasAposAnterior < 0 ||
+      passo.diasAposAnterior > DIAS_MAXIMO
     ) {
       throw new ValorInvalidoError(
-        `Passo ${posicao}: os dias após a emissão devem estar entre 0 e ${DIAS_MAXIMO}.`,
+        `Passo ${posicao}: o intervalo até a etapa anterior deve estar entre 0 e ${DIAS_MAXIMO} dias.`,
+      )
+    }
+
+    // O percurso inteiro também não pode passar do teto: intervalos pequenos
+    // somados chegariam a anos de linha do tempo.
+    if (totais[indice]! > DIAS_MAXIMO) {
+      throw new ValorInvalidoError(
+        `Passo ${posicao}: o percurso passa de ${DIAS_MAXIMO} dias no total (${totais[indice]}). Reduza os intervalos.`,
       )
     }
 
@@ -303,29 +391,29 @@ export function validarTemplate(passos: readonly PassoTemplate[]): void {
     }
   })
 
-  // Fora de ordem no tempo, a timeline sairia embaralhada em relação ao que
-  // a conta desenhou.
-  for (let i = 1; i < passos.length; i += 1) {
-    const anterior = passos[i - 1]!
-    const atual = passos[i]!
-    if (atual.diasAposEmissao < anterior.diasAposEmissao) {
-      throw new ValorInvalidoError(
-        `Passo ${i + 1}: acontece antes do passo anterior (${atual.diasAposEmissao} contra ${anterior.diasAposEmissao} dias).`,
-      )
-    }
-  }
+  // A regra que exigia ordem crescente no tempo saiu daqui: com intervalos
+  // entre etapas, um passo nunca pode cair antes do anterior — o intervalo
+  // não negativo já garante isso por construção.
 }
 
 /** Template pronto para uso, com os passos preenchidos a partir da paleta. */
 export function templatePadrao(): PassoTemplate[] {
+  let diaAnterior = 0
+
   return ['ETIQUETA_EMITIDA', 'POSTADO', 'TRANSFERENCIA', 'SAIU_PARA_ENTREGA', 'ENTREGUE'].map(
     (codigo) => {
       const item = itemDaPaleta(codigo)!
+      // `diasSugeridos` da paleta é o dia absoluto em que a etapa costuma
+      // cair; o percurso guarda o intervalo desde a anterior.
+      const diaDoPasso = Math.max(diaAnterior, item.diasSugeridos)
+      const intervalo = diaDoPasso - diaAnterior
+      diaAnterior = diaDoPasso
+
       return {
         codigo,
         titulo: item.rotulo,
         descricao: item.descricaoPadrao,
-        diasAposEmissao: item.diasSugeridos,
+        diasAposAnterior: intervalo,
       }
     },
   )
@@ -358,28 +446,133 @@ export function gerarRoteiroDeTemplate(
 }[] {
   validarTemplate(passos)
 
+  // Cada etapa cai o seu intervalo depois da anterior: o offset do evento é
+  // a soma dos intervalos até ele.
+  const totais = diasAcumulados(passos)
+
   const MINUTOS_POR_DIA = 1440
   const indiceEntrega = passos.findIndex((passo) =>
     ['SAIU_PARA_ENTREGA', 'TENTATIVA_FRUSTRADA'].includes(passo.codigo) ||
     passo.codigo.startsWith('TENTATIVA_ENTREGA_'),
   )
 
+  /*
+    Os nós de deslocamento acontecem no meio do caminho, não na cidade de
+    quem enviou. Um envio do Ceará para o Rio Grande do Sul que "transfere"
+    duas vezes dentro de Fortaleza não convence ninguém que acompanha o
+    rastreio; passar por Recife e São Paulo, sim.
+
+    Só os de deslocamento: as etapas de preparo continuam na origem, e da
+    saída para entrega em diante tudo acontece na cidade de destino.
+  */
+  const indicesEmTransito = passos
+    .map((passo, indice) => ({ passo, indice }))
+    .filter(
+      ({ passo, indice }) =>
+        ehDeslocamento(passo.codigo) && (indiceEntrega < 0 || indice < indiceEntrega),
+    )
+    .map(({ indice }) => indice)
+
+  const escalas = escalasDaRota(origem, destino, indicesEmTransito.length)
+  const escalaPorIndice = new Map<number, { cidade: string; uf: string }>()
+
+  /*
+    NENHUM nó de trânsito fica na cidade de origem.
+
+    Antes as escalas ficavam com os ÚLTIMOS nós e a sobra toda se acumulava no
+    ponto de partida — um percurso com cinco transferências entre São Paulo e
+    Curitiba, onde a geografia não justifica escala nenhuma, mostrava cinco
+    dias seguidos de "em transferência" sem sair de São Paulo. Quem acompanha
+    lê isso como pacote parado e liga para a loja.
+
+    Agora os nós se distribuem pelas paradas do caminho, na ordem: a primeira
+    transferência já tira a encomenda da cidade de quem postou, que é o evento
+    que o comprador está esperando. Quem quiser um passo de preparo na origem
+    tem os códigos de preparo para isso — trânsito é, por definição, a
+    encomenda andando.
+  */
+  const paradas = [...escalas, destino]
+
+  indicesEmTransito.forEach((indiceDoPasso, i) => {
+    /*
+      Com mais nós desenhados do que paradas que a geografia comporta, dois
+      nós seguidos caem na mesma cidade — o que acontece de verdade quando a
+      encomenda chega e sai do mesmo centro de triagem, e é muito melhor do
+      que empilhá-los todos no ponto de partida.
+    */
+    const posicao = Math.floor((i * paradas.length) / indicesEmTransito.length)
+    escalaPorIndice.set(indiceDoPasso, paradas[posicao]!)
+  })
+
   return passos.map((passo, indice) => {
     const noDestino = indiceEntrega >= 0 && indice >= indiceEntrega
-    const local = noDestino ? destino : origem
+    const local = noDestino ? destino : (escalaPorIndice.get(indice) ?? origem)
+
+    /*
+      De onde para onde, quando o nó é um deslocamento que de fato leva a
+      algum lugar novo. Num trecho curto, sem escala, os três nós de trânsito
+      diriam todos "de Santos para Campinas" — repetição que não informa
+      nada; ali só o último anuncia o destino.
+    */
+    const ehTransito = ehDeslocamento(passo.codigo)
+    const destinoDoTrecho =
+      ehTransito && !noDestino && (escalaPorIndice.has(indice) || ehUltimoTransito(indice))
+        ? proximoLocal(indice)
+        : null
+
+    /*
+      "De Curitiba para Curitiba" não é destino, é ruído.
+
+      Acontece quando dois nós de trânsito seguidos caem na mesma cidade —
+      inevitável num percurso com mais paradas desenhadas do que a geografia
+      comporta. Nesse caso o evento diz só onde a encomenda está, que é a
+      informação verdadeira, e omite um deslocamento que não existe.
+    */
+    const proximaParada =
+      destinoDoTrecho && !mesmaCidade(destinoDoTrecho, local) ? destinoDoTrecho : null
 
     return {
       sequencia: indice + 1,
-      offsetMinutos: Math.round(passo.diasAposEmissao * MINUTOS_POR_DIA),
+      offsetMinutos: Math.round(totais[indice]! * MINUTOS_POR_DIA),
       codigo: passo.codigo,
       titulo: passo.titulo,
       descricao: passo.descricao,
-      unidadeOrigem: null,
-      unidadeDestino: null,
+      unidadeOrigem: ehTransito ? unidadeTratamento(local) : null,
+      unidadeDestino: proximaParada ? unidadeTratamento(proximaParada) : null,
       cidade: local.cidade,
       uf: local.uf,
     }
   })
+
+  /** Duas localidades são o mesmo lugar para efeito de exibição. */
+  function mesmaCidade(
+    a: { cidade: string; uf: string },
+    b: { cidade: string; uf: string },
+  ): boolean {
+    return (
+      a.cidade.trim().toLowerCase() === b.cidade.trim().toLowerCase() &&
+      a.uf.trim().toUpperCase() === b.uf.trim().toUpperCase()
+    )
+  }
+
+  /** Se é o último nó de deslocamento antes da entrega. */
+  function ehUltimoTransito(indice: number): boolean {
+    return indicesEmTransito[indicesEmTransito.length - 1] === indice
+  }
+
+  /** Onde a encomenda estará depois deste nó: a próxima escala, ou o destino. */
+  function proximoLocal(indice: number): { cidade: string; uf: string } {
+    for (let i = indice + 1; i < passos.length; i += 1) {
+      const escala = escalaPorIndice.get(i)
+      if (escala) return escala
+    }
+    return destino
+  }
+}
+
+/** Nós que representam a encomenda andando, e não parada em algum lugar. */
+function ehDeslocamento(codigo: string): boolean {
+  return codigo === 'TRANSFERENCIA' || codigo === 'TRANSFERENCIA_FILIAL'
 }
 
 /** Ligação entre dois nós, pelos ids das instâncias. */
@@ -424,12 +617,13 @@ export function ordenarPorConexoes(
     passos.map((passo, indice) => [passo.id ?? `sem-id-${indice}`, indice]),
   )
 
-  const criterio = (a: string, b: string): number => {
-    const pa = porId.get(a)!
-    const pb = porId.get(b)!
-    if (pa.diasAposEmissao !== pb.diasAposEmissao) return pa.diasAposEmissao - pb.diasAposEmissao
-    return (posicaoOriginal.get(a) ?? 0) - (posicaoOriginal.get(b) ?? 0)
-  }
+  /*
+    Empate entre nós prontos resolve-se pela posição original, e não mais pelo
+    dia. Com intervalos, o número de um nó só significa alguma coisa depois de
+    saber quem vem antes dele — ordenar por ele seria circular.
+  */
+  const criterio = (a: string, b: string): number =>
+    (posicaoOriginal.get(a) ?? 0) - (posicaoOriginal.get(b) ?? 0)
 
   const prontos = [...grauEntrada.entries()]
     .filter(([, grau]) => grau === 0)

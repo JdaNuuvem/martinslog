@@ -63,7 +63,7 @@ describe('gerarRoteiro — ENTREGA_NORMAL', () => {
     ])
     // 5 dias = 7200 minutos de simulação.
     expect(roteiro.map((evento) => evento.offsetMinutos)).toEqual([
-      0, 720, 1800, 3960, 6120, 7200,
+      0, 720, 1008, 2520, 6120, 7200,
     ])
   })
 
@@ -207,5 +207,97 @@ describe('calcularOcorridoEm', () => {
   it('recusa fator não positivo', () => {
     expect(() => calcularOcorridoEm(inicio, 60, 0)).toThrow()
     expect(() => calcularOcorridoEm(inicio, 60, -3)).toThrow()
+  })
+})
+
+describe('escalas no caminho', () => {
+  const ceara = { cidade: 'Fortaleza', uf: 'CE' }
+  const gaucho = { cidade: 'Porto Alegre', uf: 'RS' }
+
+  it('atravessa o país parando em cidades que ficam entre a origem e o destino', () => {
+    const roteiro = gerarRoteiro({
+      cenario: 'ENTREGA_NORMAL',
+      prazoDias: 5,
+      origem: ceara,
+      destino: gaucho,
+    })
+
+    const cidadesDoMeio = roteiro
+      .filter((e) => e.codigo === 'TRANSFERENCIA')
+      .map((e) => `${e.cidade}/${e.uf}`)
+      .filter((local) => local !== 'Fortaleza/CE' && local !== 'Porto Alegre/RS')
+
+    expect(cidadesDoMeio.length).toBeGreaterThan(0)
+    expect(cidadesDoMeio).not.toContain('Manaus/AM')
+  })
+
+  it('as transferências acontecem em ordem crescente de tempo', () => {
+    const roteiro = gerarRoteiro({
+      cenario: 'ENTREGA_NORMAL',
+      prazoDias: 5,
+      origem: ceara,
+      destino: gaucho,
+    })
+
+    const offsets = roteiro.map((e) => e.offsetMinutos)
+    expect(offsets.every((o, i) => i === 0 || o >= offsets[i - 1]!)).toBe(true)
+  })
+
+  it('trecho longo ganha uma parada a cada ~600 km, e nenhuma se repete', () => {
+    const roteiro = gerarRoteiro({
+      cenario: 'ENTREGA_NORMAL',
+      prazoDias: 8,
+      origem: { cidade: 'Fortaleza', uf: 'CE' },
+      destino: { cidade: 'Porto Alegre', uf: 'RS' },
+    })
+
+    const transferencias = roteiro.filter((e) => e.codigo === 'TRANSFERENCIA')
+    // Uma na própria origem e as demais pelo caminho: um trecho de ~3.500 km
+    // não pode mostrar o mesmo punhado de cidades que um de 800.
+    expect(transferencias.length).toBeGreaterThanOrEqual(5)
+
+    const cidades = transferencias.map((e) => `${e.cidade}/${e.uf}`)
+    expect(new Set(cidades).size).toBe(cidades.length)
+  })
+
+  it('sai da cidade de origem antes de um terço do prazo', () => {
+    const roteiro = gerarRoteiro({
+      cenario: 'ENTREGA_NORMAL',
+      prazoDias: 9,
+      origem: { cidade: 'Fortaleza', uf: 'CE' },
+      destino: { cidade: 'Porto Alegre', uf: 'RS' },
+    })
+
+    /*
+      É a queixa concreta que originou este ajuste: a encomenda ficava
+      "parada" na primeira cidade tempo demais, e quem acompanha conclui que
+      o pedido não andou. O primeiro evento em outra cidade é o que desfaz
+      essa leitura, então ele tem hora marcada.
+    */
+    const primeiroForaDaOrigem = roteiro.find((evento) => evento.cidade !== 'Fortaleza')
+    expect(primeiroForaDaOrigem).toBeDefined()
+    expect(primeiroForaDaOrigem!.offsetMinutos).toBeLessThan((9 * 1440) / 3)
+  })
+
+  it('trecho curto continua com a transferência única de sempre', () => {
+    const roteiro = gerarRoteiro({
+      cenario: 'ENTREGA_NORMAL',
+      prazoDias: 2,
+      origem: { cidade: 'Santos', uf: 'SP' },
+      destino: { cidade: 'Campinas', uf: 'SP' },
+    })
+
+    expect(roteiro.every((e) => e.uf === 'SP')).toBe(true)
+  })
+
+  it('mesma cidade não ganha escala nenhuma', () => {
+    const roteiro = gerarRoteiro({
+      cenario: 'ENTREGA_NORMAL',
+      prazoDias: 1,
+      origem: { cidade: 'Campinas', uf: 'SP' },
+      destino: { cidade: 'Campinas', uf: 'SP' },
+    })
+
+    expect(roteiro.every((e) => e.cidade === 'Campinas')).toBe(true)
   })
 })

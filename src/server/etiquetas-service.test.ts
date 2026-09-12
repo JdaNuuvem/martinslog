@@ -43,9 +43,10 @@ const remetente: EnderecoEnvio = {
   uf: 'SP',
 }
 
-function destinatarioChamado(nome: string): EnderecoEnvio {
+function destinatarioChamado(nome: string, email?: string): EnderecoEnvio {
   return {
     nome,
+    email,
     documento: '52998224725',
     cep: '20040-020',
     logradouro: 'Av. Rio Branco',
@@ -65,21 +66,29 @@ async function criarCliente(): Promise<string> {
 }
 
 /** Cria um envio em `PENDING` (não pago, logo sem código nem timeline). */
-async function criarEnvioDe(userId: string, nomeDestinatario = 'Bruno Lima'): Promise<string> {
+async function criarEnvioDe(
+  userId: string,
+  nomeDestinatario = 'Bruno Lima',
+  emailDestinatario?: string,
+): Promise<string> {
   const cotacao = await criarCotacaoValida(userId, { precoCentavos: PRECO_CENTAVOS })
   const envio = await criarEnvio(userId, {
     quoteId: cotacao.id,
     servicoId: 'eco',
     remetente,
-    destinatario: destinatarioChamado(nomeDestinatario),
+    destinatario: destinatarioChamado(nomeDestinatario, emailDestinatario),
     produtos: [{ nome: 'Camiseta', quantidade: 1, valorUnitarioCentavos: 5000 }],
   })
   return envio.id
 }
 
 /** Marca como pago e emite, sem passar por `pagarEnvio` (que já emite). */
-async function emitirEnvioDe(userId: string, nomeDestinatario = 'Bruno Lima'): Promise<string> {
-  const shipmentId = await criarEnvioDe(userId, nomeDestinatario)
+async function emitirEnvioDe(
+  userId: string,
+  nomeDestinatario = 'Bruno Lima',
+  emailDestinatario?: string,
+): Promise<string> {
+  const shipmentId = await criarEnvioDe(userId, nomeDestinatario, emailDestinatario)
   await prisma.shipment.update({
     where: { id: shipmentId },
     data: { status: 'RELEASED', pagoEm: new Date() },
@@ -151,6 +160,32 @@ describe('listarEtiquetas', () => {
     // A contagem das abas ignora a busca: os números das abas descrevem a
     // conta inteira, não o resultado do filtro de texto.
     expect(semResultado.contagem.todos).toBe(2)
+  })
+
+  it('busca pelo e-mail do destinatário, que é o que o suporte tem em mãos', async () => {
+    const dono = await criarCliente()
+    const alvo = await emitirEnvioDe(dono, 'Maria Aparecida', 'maria.aparecida@exemplo.com')
+    await emitirEnvioDe(dono, 'João Pedro', 'joao.pedro@exemplo.com')
+
+    // Caixa alta de propósito: o comprador escreve o próprio endereço como
+    // quiser, e quem cola no campo de busca não vai normalizar antes.
+    const porEmail = await listarEtiquetas(dono, { busca: 'MARIA.APARECIDA@EXEMPLO.COM' })
+    expect(porEmail.etiquetas.map((e) => e.id)).toEqual([alvo])
+    expect(porEmail.etiquetas[0]?.destinatarioEmail).toBe('maria.aparecida@exemplo.com')
+
+    // Pedaço do endereço também acha: o domínio separa as compras de uma
+    // empresa das de pessoa física.
+    const porDominio = await listarEtiquetas(dono, { busca: '@exemplo.com' })
+    expect(porDominio.etiquetas).toHaveLength(2)
+  })
+
+  it('envio sem e-mail não quebra a busca nem inventa um endereço', async () => {
+    const dono = await criarCliente()
+    await emitirEnvioDe(dono, 'Sem Email')
+
+    const { etiquetas } = await listarEtiquetas(dono, { busca: 'sem email' })
+    expect(etiquetas).toHaveLength(1)
+    expect(etiquetas[0]?.destinatarioEmail).toBeNull()
   })
 })
 

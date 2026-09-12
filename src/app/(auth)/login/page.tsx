@@ -87,7 +87,14 @@ export default function LoginPage() {
         <p className="mt-1 text-corpo text-texto-secundario">Acesse sua conta para continuar.</p>
       </header>
 
-      <form onSubmit={aoSubmeter} noValidate className="flex flex-col gap-4">
+      {/*
+        `method="post"` não é decorativo: sem ele o padrão do HTML é GET, e
+        qualquer submit que escape do React — hidratação ainda não concluída,
+        chunk antigo em cache, JS bloqueado — manda a senha na query string.
+        De lá ela vai para o histórico do navegador, o log de acesso do
+        servidor e o cabeçalho Referer. Já aconteceu em produção.
+      */}
+      <form method="post" onSubmit={aoSubmeter} noValidate className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <label htmlFor={`${idBase}-email`} className="text-sm font-medium text-texto-secundario">
             E-mail

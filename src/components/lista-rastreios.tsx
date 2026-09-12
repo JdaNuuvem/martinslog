@@ -73,6 +73,15 @@ function LinhaEnvio({ envio }: { envio: EnvioResumo }) {
       <IconeStatus tom={tom} />
 
       <div className="min-w-0 flex-1">
+        {/*
+          A loja só vem preenchida na visão de administração, onde a lista
+          mistura contas. Para o lojista é nulo — todo envio é dele.
+        */}
+        {envio.loja ? (
+          <p className="truncate text-rotulo uppercase tracking-wide text-brand-texto">
+            {envio.loja}
+          </p>
+        ) : null}
         <p className="truncate text-sm text-texto-principal">{envio.destinatarioNome}</p>
         <p className={`text-sm font-bold ${TEXTO_POR_TOM[tom]}`}>{rotulo}</p>
         <p className="truncate font-mono text-xs text-texto-secundario">

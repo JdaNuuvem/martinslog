@@ -59,7 +59,7 @@ describe('gerarRoteiro com catálogo da conta', () => {
       entrada({
         etapasExtras: [
           {
-            fracao: 0.4,
+            fracao: 0.25,
             codigo: 'EM_CONFERENCIA',
             titulo: 'Em conferência',
             descricao: 'Conferindo o pedido',
@@ -73,7 +73,7 @@ describe('gerarRoteiro com catálogo da conta', () => {
     const codigos = eventos.map((e) => e.codigo)
     expect(codigos).toContain('EM_CONFERENCIA')
 
-    // Entre a transferência de 0,25 e a de 0,55.
+    // Entre a transferência de 0,14 e a de 0,35.
     const posicao = codigos.indexOf('EM_CONFERENCIA')
     expect(eventos[posicao - 1]?.codigo).toBe('TRANSFERENCIA')
     expect(eventos[posicao + 1]?.codigo).toBe('TRANSFERENCIA')

@@ -35,10 +35,19 @@ const STATUS_POR_ABA: Readonly<Record<AbaEtiquetas, readonly StatusShipment[] | 
 export type FiltroEtiquetas = {
   aba?: AbaEtiquetas
   busca?: string
+  /**
+   * Enxergar TODAS as contas, não só a de quem está logado.
+   *
+   * Ligado apenas para administrador, e decidido no servidor a partir do papel
+   * da sessão — nunca por parâmetro vindo do cliente, que seria um jeito de
+   * qualquer lojista ler os envios dos outros digitando na barra de endereço.
+   */
+  todasAsContas?: boolean
 }
 
 type EnderecoGravado = {
   nome?: string
+  email?: string
   documento?: string
   cidade?: string
   uf?: string
@@ -81,7 +90,12 @@ function cabeNaAba(status: StatusShipment, aba: AbaEtiquetas): boolean {
 }
 
 /**
- * Casa a busca contra código de rastreio e nome do destinatário.
+ * Casa a busca contra código de rastreio, nome e e-mail do destinatário.
+ *
+ * O e-mail entra porque é o que o suporte tem em mãos: o comprador escreve
+ * do endereço dele perguntando do pedido, sem citar código nenhum, e
+ * procurar pelo nome falha em toda grafia divergente — "Ana Paula" contra
+ * "ana paula da silva". O e-mail é único e foi digitado uma vez só.
  *
  * O filtro roda em memória, e não no banco, porque o destinatário é um JSON
  * copiado dentro do envio (`Shipment.destinatario`) — não há índice para
@@ -97,7 +111,8 @@ function casaComBusca(etiqueta: EtiquetaResumo, termo: string): boolean {
   const alvo = termo.toLowerCase()
   return (
     (etiqueta.codigoRastreio ?? '').toLowerCase().includes(alvo) ||
-    etiqueta.destinatarioNome.toLowerCase().includes(alvo)
+    etiqueta.destinatarioNome.toLowerCase().includes(alvo) ||
+    (etiqueta.destinatarioEmail ?? '').toLowerCase().includes(alvo)
   )
 }
 
@@ -117,20 +132,72 @@ export async function listarEtiquetas(
 ): Promise<ListaEtiquetasResposta> {
   const aba = filtro.aba ?? 'todos'
   const busca = (filtro.busca ?? '').trim()
+  const todas = filtro.todasAsContas === true
 
   const statusPorCodigo = await obterStatusPorCodigo(userId)
 
   const envios = await prisma.shipment.findMany({
-    where: { userId },
+    /*
+      Na visão de administração o dono deixa de ser filtro. É a diferença
+      entre "minhas etiquetas" e "as etiquetas da plataforma" — e quem entra
+      com a conta de administração espera a segunda.
+    */
+    where: {
+      ...(todas ? {} : { userId }),
+      /*
+        A BUSCA VAI PARA O BANCO na visão de administração, não para a memória.
+
+        Com o teto de mil linhas, filtrar depois do corte faria a busca
+        enxergar só as mil mais novas: procurar o código de um envio de agosto
+        devolveria "nenhuma etiqueta", que é indistinguível de "não existe" —
+        e um comentário meu chegou a afirmar o contrário. Para o lojista, que
+        não tem teto, o filtro em memória continuava correto; foi o papel novo
+        que quebrou a promessa.
+      */
+      ...(todas && busca
+        ? {
+            OR: [
+              { codigoRastreio: { contains: busca, mode: 'insensitive' as const } },
+              {
+                destinatario: {
+                  path: ['nome'],
+                  string_contains: busca,
+                },
+              },
+              {
+                destinatario: {
+                  path: ['email'],
+                  string_contains: busca,
+                },
+              },
+            ],
+          }
+        : {}),
+    },
     include: {
+      // De quem é cada linha. O perfil é o nome da LOJA, que é como o dono
+      // pensa; o nome da conta é a rede de segurança para envio sem perfil.
+      perfil: { select: { nome: true } },
+      user: { select: { nome: true } },
       service: { select: { nome: true, prazoBase: true } },
       trackingEvents: {
         where: { ocorridoEm: { lte: agora } },
         orderBy: [{ ocorridoEm: 'desc' }, { sequencia: 'desc' }],
         take: 1,
       },
+      // Só a contagem: a tela precisa saber se ainda há etapa pela frente,
+      // não quais são — os eventos futuros continuam fora da resposta.
+      _count: { select: { trackingEvents: { where: { ocorridoEm: { gt: agora } } } } },
     },
     orderBy: { criadoEm: 'desc' },
+    /*
+      Teto na visão de administração. Sem ele, a tela carregaria a plataforma
+      inteira num único JSON — e cresce todo dia. Mil linhas já é mais do que
+      alguém lê; quem procura um envio específico usa a busca, que é aplicada
+      no BANCO (ver o `where` acima) e por isso alcança tudo, não só o pedaço
+      carregado.
+    */
+    ...(todas ? { take: 1000 } : {}),
   })
 
   const resumos: EtiquetaResumo[] = envios.map((envio) => {
@@ -145,6 +212,7 @@ export async function listarEtiquetas(
       ultimoEvento: ultimo?.titulo ?? null,
       ocorridoEm: ultimo?.ocorridoEm.toISOString() ?? null,
       destinatarioNome: destinatario?.nome ?? 'Destinatário',
+      destinatarioEmail: destinatario?.email ?? null,
       destinoCidade: destinatario?.cidade ?? null,
       destinoUf: destinatario?.uf ?? null,
       servico: envio.service.nome,
@@ -152,15 +220,38 @@ export async function listarEtiquetas(
       valorCentavos: envio.precoCobradoCentavos,
       criadoEm: envio.criadoEm.toISOString(),
       podeCancelar: podeCancelar(status),
+      podeAvancarEtapa:
+        envio.status !== 'CANCELLED' &&
+        envio.codigoRastreio !== null &&
+        envio._count.trackingEvents > 0,
+      // De quem é a linha. Só na visão de administração: para o lojista,
+      // repetir o nome da própria loja em cada etiqueta seria ruído.
+      loja: todas ? (envio.perfil?.nome ?? envio.user.nome) : null,
     }
   })
 
-  const contagem = Object.fromEntries(
-    (Object.keys(STATUS_POR_ABA) as AbaEtiquetas[]).map((chave) => [
-      chave,
-      resumos.filter((etiqueta) => cabeNaAba(etiqueta.status as StatusShipment, chave)).length,
-    ]),
-  ) as Record<AbaEtiquetas, number>
+  /*
+    A contagem das abas vem do BANCO quando a lista tem teto.
+
+    Contá-la sobre as linhas carregadas diria "Entregues (612)" com dezenas de
+    milhares na base, e o total nunca passaria de mil — sem nada na tela
+    dizendo que houve corte. Para o lojista, que carrega tudo, contar em
+    memória é o mesmo número e uma consulta a menos.
+
+    O status aqui é o PERSISTIDO, não o derivado do último evento: derivar
+    exigiria carregar tudo, que é justamente o que o teto evita. A diferença
+    aparece só na janela entre um evento ocorrer e a sincronização gravá-lo, e
+    um número de aba levemente atrasado é muito melhor do que um número que
+    para de crescer em mil.
+  */
+  const contagem = todas
+    ? await contarPorAbaNoBanco(busca)
+    : (Object.fromEntries(
+        (Object.keys(STATUS_POR_ABA) as AbaEtiquetas[]).map((chave) => [
+          chave,
+          resumos.filter((etiqueta) => cabeNaAba(etiqueta.status as StatusShipment, chave)).length,
+        ]),
+      ) as Record<AbaEtiquetas, number>)
 
   return {
     etiquetas: resumos.filter(
@@ -179,6 +270,42 @@ export async function listarEtiquetas(
  * chamador não distingue "não existe" de "não é seu", então não descobre ids
  * válidos por tentativa.
  */
+/**
+ * Conta cada aba direto no banco, respeitando a busca quando há uma.
+ *
+ * Um `groupBy` por status, e as abas somam os status que cada uma agrupa —
+ * cinco contagens numa consulta, em vez de cinco consultas.
+ */
+async function contarPorAbaNoBanco(busca: string): Promise<Record<AbaEtiquetas, number>> {
+  const where = busca
+    ? {
+        OR: [
+          { codigoRastreio: { contains: busca, mode: 'insensitive' as const } },
+          { destinatario: { path: ['nome'], string_contains: busca } },
+          { destinatario: { path: ['email'], string_contains: busca } },
+        ],
+      }
+    : {}
+
+  const grupos = await prisma.shipment.groupBy({
+    by: ['status'],
+    where,
+    _count: { _all: true },
+  })
+
+  const porStatus = new Map(grupos.map((g) => [g.status, g._count._all]))
+
+  return Object.fromEntries(
+    (Object.keys(STATUS_POR_ABA) as AbaEtiquetas[]).map((aba) => {
+      const status = STATUS_POR_ABA[aba]
+      const total = status
+        ? status.reduce((soma, s) => soma + (porStatus.get(s) ?? 0), 0)
+        : grupos.reduce((soma, g) => soma + g._count._all, 0)
+      return [aba, total]
+    }),
+  ) as Record<AbaEtiquetas, number>
+}
+
 export async function obterEtiqueta(
   userId: string,
   shipmentId: string,
@@ -192,6 +319,9 @@ export async function obterEtiqueta(
         where: { ocorridoEm: { lte: agora } },
         orderBy: [{ ocorridoEm: 'desc' }, { sequencia: 'desc' }],
       },
+      // Só a contagem do que ainda está por vir: a tela precisa saber se há
+      // próxima etapa, e os eventos futuros continuam fora da resposta.
+      _count: { select: { trackingEvents: { where: { ocorridoEm: { gt: agora } } } } },
     },
   })
 
@@ -211,6 +341,7 @@ export async function obterEtiqueta(
     ultimoEvento: ultimo?.titulo ?? null,
     ocorridoEm: ultimo?.ocorridoEm.toISOString() ?? null,
     destinatarioNome: destinatario.nome ?? 'Destinatário',
+    destinatarioEmail: destinatario.email ?? null,
     destinoCidade: destinatario.cidade ?? null,
     destinoUf: destinatario.uf ?? null,
     servico: envio.service.nome,
@@ -218,6 +349,10 @@ export async function obterEtiqueta(
     valorCentavos: envio.precoCobradoCentavos,
     criadoEm: envio.criadoEm.toISOString(),
     podeCancelar: podeCancelar(status),
+    podeAvancarEtapa:
+      envio.status !== 'CANCELLED' &&
+      envio.codigoRastreio !== null &&
+      envio._count.trackingEvents > 0,
     remetente: (envio.remetente as EnderecoGravado | null) ?? {},
     destinatario,
     produtos: (envio.produtos as ProdutoGravado[] | null) ?? [],

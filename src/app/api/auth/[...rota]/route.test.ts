@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '@/infra/db/client'
 import { limparRateLimit } from '@/server/auth/rate-limit'
+import { cadastrarUsuario, type DadosCadastro } from '@/server/auth/cadastro'
 import { POST } from './route'
 
 function criarRequest(rota: string[], body: unknown, opts?: { ip?: string; cookie?: string }): NextRequest {
@@ -26,6 +27,19 @@ function chamarRota(
 
 const emailsCriados: string[] = []
 
+/**
+ * Cria a conta pelo SERVIÇO, e não pela rota pública.
+ *
+ * A rota de cadastro está fechada — conta nasce pelo painel de administração,
+ * que chama esta mesma função. Os testes de login precisam de um usuário, não
+ * da porta por onde ele entrou: usar a rota fechada como fixture faria falhas
+ * de login que na verdade são "o usuário nunca existiu".
+ */
+async function criarConta(dados: DadosCadastro, anonSessionId: string | null = null) {
+  emailsCriados.push(dados.email)
+  return cadastrarUsuario(dados, { anonSessionId })
+}
+
 afterAll(async () => {
   await prisma.session.deleteMany({}).catch(() => {})
   await prisma.wallet.deleteMany({ where: { user: { email: { in: emailsCriados } } } })
@@ -33,40 +47,60 @@ afterAll(async () => {
   await prisma.user.deleteMany({ where: { email: { in: emailsCriados } } })
 })
 
-describe('POST /api/auth/cadastro', () => {
+describe('POST /api/auth/cadastro — fechado', () => {
   beforeEach(() => {
     limparRateLimit()
   })
 
-  it('cria usuário com carteira de saldo zero, verificado no banco', async () => {
-    const email = `cadastro-${Date.now()}@teste.com`
-    emailsCriados.push(email)
-
+  it('recusa qualquer cadastro pela rota pública', async () => {
+    /*
+      A trava está no SERVIDOR, não na tela. Esconder o formulário não fecharia
+      nada: esta rota aceita requisição direta de qualquer cliente, e o
+      formulário é só a porta mais visível.
+    */
     const resposta = await chamarRota(['cadastro'], {
+      nome: 'Quem Tentou',
+      documento: '52998224725',
+      email: `tentativa-${Date.now()}@teste.com`,
+      senha: 'SenhaForte123!',
+    })
+
+    expect(resposta.status).toBe(403)
+    expect((await resposta.json()).codigo).toBe('CADASTRO_FECHADO')
+  })
+
+  it('recusa ANTES de olhar o corpo, então corpo inválido também é 403', async () => {
+    // Se a validação viesse primeiro, um corpo malformado devolveria 400 e
+    // revelaria que a rota ainda processa cadastro.
+    const resposta = await chamarRota(['cadastro'], { nada: 'disso' })
+    expect(resposta.status).toBe(403)
+  })
+})
+
+/**
+ * O que a criação de conta faz, testado onde ela VIVE.
+ *
+ * Estes casos rodavam pela rota pública, que fechou. A lógica não sumiu — o
+ * painel de administração chama exatamente esta função —, então os testes
+ * seguiram a lógica em vez de morrer com a porta.
+ */
+describe('cadastrarUsuario', () => {
+  it('cria a carteira zerada junto com o usuário', async () => {
+    const { userId } = await criarConta({
       nome: 'Fulano da Silva',
       documento: '52998224725',
-      email,
+      email: `cadastro-${Date.now()}@teste.com`,
       telefone: '11999999999',
       senha: 'SenhaForte123!',
     })
 
-    expect(resposta.status).toBe(201)
-    const json = await resposta.json()
-    expect(typeof json.userId).toBe('string')
-
-    const wallet = await prisma.wallet.findUnique({ where: { userId: json.userId } })
+    const wallet = await prisma.wallet.findUnique({ where: { userId } })
     expect(wallet).not.toBeNull()
     expect(wallet!.saldoCentavos).toBe(0)
-
-    const cookie = resposta.headers.get('set-cookie')
-    expect(cookie).toContain('session_id=')
-    expect(cookie).toContain('HttpOnly')
   })
 
-  it('devolve 409 quando o e-mail já está cadastrado', async () => {
+  it('recusa e-mail já cadastrado', async () => {
     const email = `duplicado-${Date.now()}@teste.com`
-    emailsCriados.push(email)
-
     const dados = {
       nome: 'Duplicado Um',
       documento: '11144477735',
@@ -74,11 +108,9 @@ describe('POST /api/auth/cadastro', () => {
       senha: 'SenhaForte123!',
     }
 
-    const primeira = await chamarRota(['cadastro'], dados)
-    expect(primeira.status).toBe(201)
-
-    const segunda = await chamarRota(['cadastro'], { ...dados, documento: '83703692600' })
-    expect(segunda.status).toBe(409)
+    await criarConta(dados)
+    // Duas contas com o mesmo e-mail deixariam o login ambíguo.
+    await expect(criarConta({ ...dados, documento: '83703692600' })).rejects.toThrow()
   })
 
   it('migra as Quote de uma AnonSession para o usuário recém-criado', async () => {
@@ -101,27 +133,21 @@ describe('POST /api/auth/cadastro', () => {
       },
     })
 
-    const email = `migracao-${Date.now()}@teste.com`
-    emailsCriados.push(email)
-
-    const resposta = await chamarRota(
-      ['cadastro'],
+    const { userId } = await criarConta(
       {
         nome: 'Migração Teste',
         documento: '25386230140',
-        email,
+        email: `migracao-${Date.now()}@teste.com`,
         senha: 'SenhaForte123!',
       },
-      { cookie: `anon_session_id=${anonSession.id}` },
+      anonSession.id,
     )
 
-    expect(resposta.status).toBe(201)
-    const json = await resposta.json()
     const quoteAtualizada = await prisma.quote.findUnique({ where: { id: quote.id } })
-    expect(quoteAtualizada?.userId).toBe(json.userId)
+    expect(quoteAtualizada?.userId).toBe(userId)
   })
 
-  it('IMP-1: cadastrar com o anon_session_id de uma AnonSession já consumida não rouba a Quote da vítima', async () => {
+  it('IMP-1: uma AnonSession já consumida não entrega a Quote da vítima a mais ninguém', async () => {
     const anonSession = await prisma.anonSession.create({ data: {} })
     const quoteDaVitima = await prisma.quote.create({
       data: {
@@ -141,51 +167,40 @@ describe('POST /api/auth/cadastro', () => {
       },
     })
 
-    // A vítima se cadastra normalmente com o cookie da própria AnonSession:
-    // isto consome a sessão (marca `consumidaEm`) e migra a cotação para ela.
-    const emailVitima = `vitima-${Date.now()}@teste.com`
-    emailsCriados.push(emailVitima)
-    const respostaVitima = await chamarRota(
-      ['cadastro'],
+    // A vítima cria a conta com a própria sessão: isto a CONSOME e migra a
+    // cotação.
+    const vitima = await criarConta(
       {
         nome: 'Vítima Legítima',
         documento: '56543092696',
-        email: emailVitima,
+        email: `vitima-${Date.now()}@teste.com`,
         senha: 'SenhaForte123!',
       },
-      { cookie: `anon_session_id=${anonSession.id}` },
+      anonSession.id,
     )
-    expect(respostaVitima.status).toBe(201)
-    const jsonVitima = await respostaVitima.json()
 
-    const quoteAposVitima = await prisma.quote.findUnique({ where: { id: quoteDaVitima.id } })
-    expect(quoteAposVitima?.userId).toBe(jsonVitima.userId)
+    expect((await prisma.quote.findUnique({ where: { id: quoteDaVitima.id } }))?.userId).toBe(
+      vitima.userId,
+    )
+    expect(
+      (await prisma.anonSession.findUnique({ where: { id: anonSession.id } }))?.consumidaEm,
+    ).not.toBeNull()
 
-    const anonSessionApos = await prisma.anonSession.findUnique({ where: { id: anonSession.id } })
-    expect(anonSessionApos?.consumidaEm).not.toBeNull()
-
-    // O atacante captura (ou enumera) o mesmo anon_session_id — já usado —
-    // e tenta se cadastrar mandando o mesmo cookie, esperando herdar a
-    // cotação da vítima.
-    const emailAtacante = `atacante-${Date.now()}@teste.com`
-    emailsCriados.push(emailAtacante)
-    const respostaAtacante = await chamarRota(
-      ['cadastro'],
+    // O atacante captura o mesmo id de sessão — já usado — e cria conta com
+    // ele, esperando herdar a cotação.
+    const atacante = await criarConta(
       {
         nome: 'Atacante',
         documento: '04030222404',
-        email: emailAtacante,
+        email: `atacante-${Date.now()}@teste.com`,
         senha: 'SenhaForte123!',
       },
-      { cookie: `anon_session_id=${anonSession.id}` },
+      anonSession.id,
     )
-    expect(respostaAtacante.status).toBe(201)
-    const jsonAtacante = await respostaAtacante.json()
 
-    // A cotação da vítima continua com a vítima — o ataque falha.
-    const quoteAposAtaque = await prisma.quote.findUnique({ where: { id: quoteDaVitima.id } })
-    expect(quoteAposAtaque?.userId).toBe(jsonVitima.userId)
-    expect(quoteAposAtaque?.userId).not.toBe(jsonAtacante.userId)
+    const apos = await prisma.quote.findUnique({ where: { id: quoteDaVitima.id } })
+    expect(apos?.userId).toBe(vitima.userId)
+    expect(apos?.userId).not.toBe(atacante.userId)
   })
 })
 
@@ -199,7 +214,7 @@ describe('POST /api/auth/login', () => {
     emailsCriados.push(email)
     const senha = 'SenhaForte123!'
 
-    await chamarRota(['cadastro'], {
+    await criarConta({
       nome: 'Login Ok',
       documento: '14570440991',
       email,
@@ -216,7 +231,7 @@ describe('POST /api/auth/login', () => {
     const email = `login-senha-errada-${Date.now()}@teste.com`
     emailsCriados.push(email)
 
-    await chamarRota(['cadastro'], {
+    await criarConta({
       nome: 'Senha Errada',
       documento: '94872215060',
       email,
@@ -231,7 +246,7 @@ describe('POST /api/auth/login', () => {
     const emailExistente = `login-existe-${Date.now()}@teste.com`
     emailsCriados.push(emailExistente)
 
-    await chamarRota(['cadastro'], {
+    await criarConta({
       nome: 'Existe',
       documento: '61957301813',
       email: emailExistente,
@@ -287,7 +302,7 @@ describe('POST /api/auth/login', () => {
     emailsCriados.push(email)
     const senha = 'SenhaForte123!'
 
-    await chamarRota(['cadastro'], {
+    await criarConta({
       nome: 'Sucesso Repetido',
       documento: '24967451926',
       email,
@@ -305,7 +320,7 @@ describe('POST /api/auth/login', () => {
     emailsCriados.push(email)
     const senha = 'SenhaForte123!'
 
-    await chamarRota(['cadastro'], {
+    await criarConta({
       nome: 'Zera Após Sucesso',
       documento: '32647126798',
       email,

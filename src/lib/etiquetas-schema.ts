@@ -49,6 +49,14 @@ export type EtiquetaResumo = {
   ultimoEvento: string | null
   ocorridoEm: string | null
   destinatarioNome: string
+  /**
+   * E-mail de quem recebe, quando o envio foi criado com um.
+   *
+   * Está aqui para a busca por e-mail ter o que casar e para a linha mostrar
+   * por que apareceu: procurar por um endereço e receber uma lista que não o
+   * exibe deixa quem procura sem saber se achou o envio certo.
+   */
+  destinatarioEmail: string | null
   destinoCidade: string | null
   destinoUf: string | null
   servico: string
@@ -57,6 +65,19 @@ export type EtiquetaResumo = {
   criadoEm: string
   /** Se o cliente ainda pode cancelar este envio. */
   podeCancelar: boolean
+  /**
+   * Se ainda há etapa futura na linha do tempo para antecipar. Falso quando o
+   * envio percorreu tudo, foi cancelado ou nem tem etiqueta emitida.
+   */
+  podeAvancarEtapa: boolean
+  /**
+   * De qual loja é este envio.
+   *
+   * Só vem preenchido na visão de administração, onde a lista mistura contas:
+   * sem ele, mil etiquetas de quatro lojas viram uma pilha em que não se sabe
+   * de quem é o quê. Para o lojista é sempre nulo — ali toda etiqueta é dele.
+   */
+  loja?: string | null
 }
 
 export type ListaEtiquetasResposta = {

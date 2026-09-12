@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { EnvioNaoEncontradoError } from '@/domain/errors'
+import { ehCodigoSandbox } from '@/domain/shipment/codigo-rastreio'
 import { codigoRastreioSchema } from '@/lib/rastreio-schema'
 import { obterIp } from '@/server/http/ip'
 import { consumirCota, type PoliticaCota } from '@/server/rate-limit'
@@ -15,6 +16,18 @@ type Params = { params: Promise<{ codigo: string }> }
  * requisições compartilham o mesmo contador: em produção a aplicação
  * precisa estar atrás de um proxy que fixe `x-real-ip`.
  */
+/**
+ * Nenhuma resposta desta rota pode ser guardada em cache.
+ *
+ * O caso comum e o comprador abrir o link ANTES de a etiqueta existir e
+ * receber 404 — e a propria mensagem o convida a voltar mais tarde. 404 e
+ * cacheavel por heuristica (RFC 9111), entao sem isto o "nao encontrado" de
+ * agora pode ser reservido horas depois, por qualquer intermediario no
+ * caminho, para um codigo que ja passou a existir. O mesmo vale para o 200:
+ * a linha do tempo muda com o relogio.
+ */
+const SEM_CACHE = { 'cache-control': 'no-store, max-age=0' } as const
+
 const COTA_RASTREIO: PoliticaCota = {
   escopo: 'rastreio',
   limite: 30,
@@ -38,34 +51,52 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
         codigo: 'LIMITE_CONSULTAS_EXCEDIDO',
         mensagem: 'Muitas consultas em pouco tempo. Tente novamente em alguns minutos.',
       },
-      { status: 429, headers: { 'Retry-After': String(cota.reabreEmSegundos) } },
+      { status: 429, headers: { ...SEM_CACHE, 'Retry-After': String(cota.reabreEmSegundos) } },
     )
   }
 
   const { codigo } = await params
-  const analise = codigoRastreioSchema.safeParse(decodeURIComponent(codigo))
+  const bruto = decodeURIComponent(codigo)
+  const analise = codigoRastreioSchema.safeParse(bruto)
   if (!analise.success) {
+    /*
+      Código de teste ganha resposta própria. Ele é nosso, foi gerado pelo
+      ambiente sandbox e simplesmente não tem rastreio público — devolver
+      `CODIGO_INVALIDO` fazia o integrador procurar erro de digitação onde só
+      faltava trocar a credencial de teste pela de produção.
+    */
+    if (ehCodigoSandbox(bruto)) {
+      return NextResponse.json(
+        {
+          codigo: 'CODIGO_SANDBOX',
+          mensagem:
+            'Este é um código do ambiente de teste e não tem rastreio público. Use um token de produção para gerar códigos rastreáveis.',
+        },
+        { status: 422, headers: SEM_CACHE },
+      )
+    }
+
     return NextResponse.json(
       { codigo: 'CODIGO_INVALIDO', mensagem: 'Código de rastreio inválido.' },
-      { status: 422 },
+      { status: 422, headers: SEM_CACHE },
     )
   }
 
   try {
     const rastreio = await rastrearEnvio(analise.data)
-    return NextResponse.json({ rastreio })
+    return NextResponse.json({ rastreio }, { headers: SEM_CACHE })
   } catch (error) {
     if (error instanceof EnvioNaoEncontradoError) {
       return NextResponse.json(
         { codigo: error.codigo, mensagem: 'Nenhum envio encontrado para este código.' },
-        { status: 404 },
+        { status: 404, headers: SEM_CACHE },
       )
     }
 
     console.error('Erro inesperado ao rastrear envio', { cause: error })
     return NextResponse.json(
       { codigo: 'ERRO_INTERNO', mensagem: 'Erro inesperado ao consultar o rastreio.' },
-      { status: 500 },
+      { status: 500, headers: SEM_CACHE },
     )
   }
 }

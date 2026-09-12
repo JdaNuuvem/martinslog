@@ -121,3 +121,27 @@ export function prefixoDoServico(codigoServico: string): string {
 
   return somenteLetras.length >= 2 ? somenteLetras.slice(0, 2) : PREFIXO_PADRAO
 }
+
+/**
+ * Prefixo dos códigos gerados no ambiente de teste
+ * (`pagarEnvioSandbox`, em `src/server/api-publica-service.ts`).
+ *
+ * Vive aqui, e não só lá, porque quem **lê** um código precisa reconhecê-lo:
+ * um código de sandbox não passa na validação de formato, e sem esta função a
+ * consulta pública respondia "código inválido" — a mesma frase que aparece
+ * para quem errou a digitação.
+ *
+ * A diferença não é cosmética. Quem clica em "rastrear" no e-mail de uma loja
+ * e lê "código inválido" conclui que a loja errou o pedido dele. Dizer que é
+ * um código de teste move a explicação para onde ela pertence: o lojista
+ * ainda não trocou a credencial de teste pela de produção.
+ */
+export const PREFIXO_SANDBOX = 'SANDBOX'
+
+export function ehCodigoSandbox(valor: string): boolean {
+  return String(valor ?? '')
+    .trim()
+    .replace(/[\s-]/g, '')
+    .toUpperCase()
+    .startsWith(PREFIXO_SANDBOX)
+}
