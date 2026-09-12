@@ -139,8 +139,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       a exportação existe para proteger. Um CPF sem cifra na auditoria é o
       mesmo problema que a cifra de campo resolve na tabela de leads, só que
       numa tabela sem essa proteção. Por isso só as chaves conhecidas entram,
-      e a busca vira um booleano: saber que houve busca já basta para
-      investigar depois quem exportou o quê.
+      a busca vira um booleano, e `desde`/`ate` são o valor JÁ INTERPRETADO
+      por `dataDoParametro` — nunca o texto cru da URL. Nada do que vai para
+      `depois` chega direto da query string sem passar por uma validação
+      antes.
     */
     await prisma.auditLog.create({
       data: {
@@ -155,8 +157,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           filtros: {
             loja: filtro.perfilId ?? null,
             origem: filtro.origem ?? null,
-            desde: parametros.get('desde') || null,
-            ate: parametros.get('ate') || null,
+            desde: filtro.desde?.toISOString() ?? null,
+            ate: filtro.ate?.toISOString() ?? null,
             buscaInformada: Boolean(filtro.busca),
           },
         },

@@ -182,6 +182,25 @@ describe('GET /api/admin/leads/exportar', () => {
     )
   })
 
+  it('a auditoria não guarda texto cru dos parâmetros de data', async () => {
+    const valorNaoData = '52998224725'
+
+    const resposta = await requisitar(sessaoAdmin, `?desde=${valorNaoData}&ate=2026-03-10`)
+    expect(resposta.status).toBe(200)
+
+    const registro = await prisma.auditLog.findFirst({
+      where: { actorUserId: adminId, acao: 'LEADS_EXPORTADOS' },
+      orderBy: { criadoEm: 'desc' },
+    })
+    expect(registro).not.toBeNull()
+    expect(JSON.stringify(registro?.depois)).not.toContain(valorNaoData)
+
+    const filtros = (registro?.depois as { filtros: { desde: string | null; ate: string | null } })
+      .filtros
+    expect(filtros.desde).toBeNull()
+    expect(filtros.ate).toBe('2026-03-11T02:59:59.999Z')
+  })
+
   it('neutraliza fórmula que começa com tabulação ou retorno de carro', async () => {
     /*
       Direto pelo Prisma, e não por `registrarLead`: o serviço faz `.trim()`
