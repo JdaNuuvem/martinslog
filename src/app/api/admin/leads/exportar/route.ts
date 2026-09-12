@@ -23,13 +23,15 @@ function celula(valor: string | number | null): string {
   const texto = String(valor ?? '')
 
   /*
-    Um valor começando por `=`, `+`, `-` ou `@` é interpretado como FÓRMULA
-    pelo Excel e pelo Google Sheets ao abrir o arquivo. Um nome cadastrado
-    como `=HYPERLINK(...)` vira código executado na máquina de quem abre a
+    Um valor começando por `=`, `+`, `-`, `@`, tabulação (`\t`) ou retorno de
+    carro (`\r`) é interpretado como FÓRMULA pelo Excel e pelo Google Sheets
+    ao abrir o arquivo — os dois últimos porque o programa ignora espaço em
+    branco antes de procurar o sinal de fórmula. Um nome cadastrado como
+    `=HYPERLINK(...)` vira código executado na máquina de quem abre a
     planilha — e o nome vem do comprador, que digitou o que quis no checkout.
     O apóstrofo à frente neutraliza isso.
   */
-  const seguro = /^[=+\-@]/.test(texto) ? `'${texto}` : texto
+  const seguro = /^[=+\-@\t\r]/.test(texto) ? `'${texto}` : texto
 
   return `"${seguro.replace(/"/g, '""')}"`
 }
@@ -130,6 +132,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       )
     }
 
+    /*
+      A tabela que registra acesso a dado pessoal não pode guardar o próprio
+      dado pessoal. Gravar `parametros.entries()` inteiro grava a `busca`
+      crua — e o termo digitado costuma SER o CPF, o telefone ou o e-mail que
+      a exportação existe para proteger. Um CPF sem cifra na auditoria é o
+      mesmo problema que a cifra de campo resolve na tabela de leads, só que
+      numa tabela sem essa proteção. Por isso só as chaves conhecidas entram,
+      e a busca vira um booleano: saber que houve busca já basta para
+      investigar depois quem exportou o quê.
+    */
     await prisma.auditLog.create({
       data: {
         actorUserId: guarda.sessao.userId,
@@ -140,7 +152,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           linhas: leads.length,
           totalNaBase: total,
           cpfCompleto,
-          filtros: Object.fromEntries(parametros.entries()),
+          filtros: {
+            loja: filtro.perfilId ?? null,
+            origem: filtro.origem ?? null,
+            desde: parametros.get('desde') || null,
+            ate: parametros.get('ate') || null,
+            buscaInformada: Boolean(filtro.busca),
+          },
         },
       },
     })

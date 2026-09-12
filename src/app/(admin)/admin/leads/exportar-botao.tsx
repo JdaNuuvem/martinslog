@@ -20,9 +20,16 @@ type Busca = {
 export function ExportarLeadsBotao({ parametros }: { parametros: Busca }) {
   const [cpfCompleto, setCpfCompleto] = useState(false)
 
+  /*
+    Só os filtros da tela — nunca `pagina`, e nunca repassar `cpfCompleto` da
+    própria URL da página. Sem essa lista fechada, abrir
+    `/admin/leads?cpfCompleto=true` geraria um link de CPF completo com a
+    caixa desmarcada: a caixa precisa ser a única forma de ligar isso.
+  */
   const query = new URLSearchParams()
-  for (const [chave, valor] of Object.entries(parametros)) {
-    if (chave !== 'pagina' && valor) query.set(chave, String(valor))
+  for (const chave of ['busca', 'loja', 'origem', 'desde', 'ate'] as const) {
+    const valor = parametros[chave]
+    if (valor) query.set(chave, valor)
   }
   if (cpfCompleto) query.set('cpfCompleto', 'true')
 

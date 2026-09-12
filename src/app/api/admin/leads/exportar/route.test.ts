@@ -158,6 +158,62 @@ describe('GET /api/admin/leads/exportar', () => {
     expect(corpo).not.toContain('Lead de Pedido')
   })
 
+  it('a auditoria não guarda o termo buscado', async () => {
+    const cpf = '52998224725'
+    await registrarLead({
+      tipo: 'PEDIDO_PAGO',
+      ocorridoEm: new Date(),
+      nome: 'Comprador Buscado por CPF',
+      telefone: telefoneDistinto(4001),
+      cpf,
+    })
+
+    const resposta = await requisitar(sessaoAdmin, `?busca=${cpf}`)
+    expect(resposta.status).toBe(200)
+
+    const registro = await prisma.auditLog.findFirst({
+      where: { actorUserId: adminId, acao: 'LEADS_EXPORTADOS' },
+      orderBy: { criadoEm: 'desc' },
+    })
+    expect(registro).not.toBeNull()
+    expect(JSON.stringify(registro?.depois)).not.toContain(cpf)
+    expect((registro?.depois as { filtros: { buscaInformada: boolean } }).filtros.buscaInformada).toBe(
+      true,
+    )
+  })
+
+  it('neutraliza fórmula que começa com tabulação ou retorno de carro', async () => {
+    /*
+      Direto pelo Prisma, e não por `registrarLead`: o serviço faz `.trim()`
+      no nome antes de gravar, o que já removeria o próprio caractere que
+      este teste precisa preservar para verificar a neutralização.
+    */
+    const agora = new Date()
+    await prisma.lead.createMany({
+      data: [
+        {
+          nome: '\t=1+1',
+          telefoneNormalizado: telefoneDistinto(4002),
+          primeiroContatoEm: agora,
+          ultimoContatoEm: agora,
+        },
+        {
+          nome: '\r=1+1',
+          telefoneNormalizado: telefoneDistinto(4003),
+          primeiroContatoEm: agora,
+          ultimoContatoEm: agora,
+        },
+      ],
+    })
+
+    const resposta = await requisitar(sessaoAdmin, '')
+    expect(resposta.status).toBe(200)
+
+    const corpo = await resposta.text()
+    expect(corpo).toContain("'\t=1+1")
+    expect(corpo).toContain("'\r=1+1")
+  })
+
   it('respeita o filtro de período, incluindo o próprio dia de "ate"', async () => {
     await registrarLead({
       tipo: 'PEDIDO_PAGO',
