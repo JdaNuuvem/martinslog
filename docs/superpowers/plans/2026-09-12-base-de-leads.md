@@ -430,14 +430,27 @@ Devolve o `id` do lead, ou `null` quando a entrada não trouxe nenhuma chave uti
 `src/server/lead-service.test.ts`:
 
 ```typescript
-import { afterEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '@/infra/db/client'
 import { registrarLead } from './lead-service'
 
 const CPF = '52998224725'
 const OUTRO_CPF = '11144477735'
 
-afterEach(async () => {
+/*
+  Limpa ANTES de cada teste, e não depois.
+
+  Outros arquivos da suíte criam leads como efeito colateral — todo teste que
+  registra pedido ou emite etiqueta passa a alimentar a base — e nenhum deles
+  os apaga, porque `LeadOrigem` não tem chave estrangeira para usuário, envio
+  ou pedido e a limpeza deles não cascateia até aqui. Limpando só no fim, o
+  primeiro teste deste arquivo herdaria os leads do arquivo que rodou antes, e
+  a contagem exata que ele afirma dependeria da ordem da suíte.
+
+  Apagar sem filtro é seguro porque `vitest.config.ts` roda um arquivo por vez
+  (`fileParallelism: false`).
+*/
+beforeEach(async () => {
   await prisma.lead.deleteMany({})
 })
 
@@ -975,7 +988,7 @@ Co-Authored-By: claude-flow <ruv@ruv.net>"
 `src/server/lead-ingestao.test.ts`:
 
 ```typescript
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '@/infra/db/client'
 import { criarCotacaoValida, criarUsuarioComSaldo } from '@/test/factories'
 import { criarEnvio, type EnderecoEnvio } from './shipment-service'
@@ -1007,7 +1020,20 @@ beforeAll(async () => {
   perfilId = perfil.id
 })
 
-afterEach(async () => {
+/*
+  Limpa ANTES de cada teste, e não depois.
+
+  Outros arquivos da suíte criam leads como efeito colateral — todo teste que
+  registra pedido ou emite etiqueta passa a alimentar a base — e nenhum deles
+  os apaga, porque `LeadOrigem` não tem chave estrangeira para usuário, envio
+  ou pedido e a limpeza deles não cascateia até aqui. Limpando só no fim, o
+  primeiro teste deste arquivo herdaria os leads do arquivo que rodou antes, e
+  a contagem exata que ele afirma dependeria da ordem da suíte.
+
+  Apagar sem filtro é seguro porque `vitest.config.ts` roda um arquivo por vez
+  (`fileParallelism: false`).
+*/
+beforeEach(async () => {
   await prisma.lead.deleteMany({})
 })
 
@@ -1546,14 +1572,27 @@ export type ResultadoLeads = {
 `src/server/admin/consulta-leads.test.ts`:
 
 ```typescript
-import { afterEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '@/infra/db/client'
 import { registrarLead } from '@/server/lead-service'
 import { listarLeads, obterLead } from './consulta-leads'
 
 const CPF = '52998224725'
 
-afterEach(async () => {
+/*
+  Limpa ANTES de cada teste, e não depois.
+
+  Outros arquivos da suíte criam leads como efeito colateral — todo teste que
+  registra pedido ou emite etiqueta passa a alimentar a base — e nenhum deles
+  os apaga, porque `LeadOrigem` não tem chave estrangeira para usuário, envio
+  ou pedido e a limpeza deles não cascateia até aqui. Limpando só no fim, o
+  primeiro teste deste arquivo herdaria os leads do arquivo que rodou antes, e
+  a contagem exata que ele afirma dependeria da ordem da suíte.
+
+  Apagar sem filtro é seguro porque `vitest.config.ts` roda um arquivo por vez
+  (`fileParallelism: false`).
+*/
+beforeEach(async () => {
   await prisma.lead.deleteMany({})
 })
 
