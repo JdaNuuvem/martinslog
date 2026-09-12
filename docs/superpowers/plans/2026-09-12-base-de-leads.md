@@ -12,7 +12,9 @@
 
 ## Global Constraints
 
-- **CPF nunca em claro no banco.** Só `cpfHash` (HMAC-SHA256 com `LEAD_FINGERPRINT_KEY`) e `cpfCifrado` (AES-256-GCM via `cifrar` de `src/infra/crypto/segredo.ts`).
+- **CPF nunca em claro no banco.** Só `cpfHash` (HMAC-SHA256 com `LEAD_FINGERPRINT_KEY`) e `cpfCifrado` (AES-256-GCM via `cifrarCampo` de `src/infra/crypto/campo.ts` — ver Task 9).
+- **Nunca decifrar com `decifrar` de `segredo.ts` em leitura de lead.** Ele roda `scryptSync` por valor (~59 ms, bloqueando o event loop); use `decifrarCampo`.
+- **Ordem de execução: 1, 2, 3, 9, 4, 5, 6, 7, 8.** A Task 9 foi acrescentada depois e precisa vir antes da 6.
 - **Negação administrativa é 404, nunca 403.** Use `exigirAdmin` (API) e `exigirAdminNaPagina` (página) de `src/server/admin/guarda.ts`.
 - **O papel vem da sessão, nunca da URL ou do corpo.**
 - **Registrar lead nunca derruba o chamador.** Toda chamada em `try/catch` com `console.error`, seguindo `avisarCompradorPorSms` em `src/server/shipment-service.ts:454`.
@@ -1535,7 +1537,7 @@ Co-Authored-By: claude-flow <ruv@ruv.net>"
 - Create: `src/lib/leads-schema.ts`
 
 **Interfaces:**
-- Consumes: `impressaoDigitalCpf`, `normalizarCpf`, `normalizarTelefoneLead`, `normalizarEmail` (Task 2); `decifrar` de `src/infra/crypto/segredo.ts`.
+- Consumes: `impressaoDigitalCpf`, `normalizarCpf`, `normalizarTelefoneLead`, `normalizarEmail` (Task 2); `decifrarCampo` de `src/infra/crypto/campo.ts` (Task 9).
 - Produces:
 
 ```typescript
@@ -1726,7 +1728,7 @@ Expected: FAIL — `Failed to resolve import "./consulta-leads"`.
 ```typescript
 import type { OrigemLead, Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
-import { decifrar } from '@/infra/crypto/segredo'
+import { decifrarCampo } from '@/infra/crypto/campo'
 import {
   impressaoDigitalCpf,
   normalizarCpf,
@@ -1853,7 +1855,7 @@ export async function listarLeads(filtro: FiltroLeads = {}): Promise<ResultadoLe
       tela ou tire um print. No detalhe, ler mil exige mil ações — e cada uma
       fica registrada.
     */
-    cpfMascarado: lead.cpfCifrado ? mascarar(decifrar(lead.cpfCifrado)) : null,
+    cpfMascarado: lead.cpfCifrado ? mascarar(decifrarCampo(lead.cpfCifrado)) : null,
     lojas: lead.origens
       .map((o) => (o.perfilId ? nomeDoPerfil.get(o.perfilId) : null))
       .filter((nome): nome is string => nome !== null && nome !== undefined),
@@ -1894,7 +1896,7 @@ export async function obterLead(leadId: string): Promise<LeadDetalhe | null> {
     nome: lead.nome,
     email: lead.email,
     telefone: lead.telefone,
-    cpfMascarado: lead.cpfCifrado ? mascarar(decifrar(lead.cpfCifrado)) : null,
+    cpfMascarado: lead.cpfCifrado ? mascarar(decifrarCampo(lead.cpfCifrado)) : null,
     lojas: [
       ...new Set(
         lead.origens
@@ -1943,7 +1945,7 @@ export async function revelarCpf(leadId: string, adminUserId: string): Promise<s
     },
   })
 
-  return decifrar(lead.cpfCifrado)
+  return decifrarCampo(lead.cpfCifrado)
 }
 ```
 
@@ -2120,7 +2122,7 @@ Co-Authored-By: claude-flow <ruv@ruv.net>"
 - Modify: `src/app/(admin)/admin/leads/page.tsx`
 
 **Interfaces:**
-- Consumes: `listarLeads`, `TETO_EXPORTACAO` (Task 6); `exigirAdmin` (guarda); `decifrar` de `src/infra/crypto/segredo.ts`.
+- Consumes: `listarLeads`, `TETO_EXPORTACAO` (Task 6); `exigirAdmin` (guarda); `decifrarCampo` de `src/infra/crypto/campo.ts` (Task 9).
 - Produces: `GET /api/admin/leads/exportar?...&cpfCompleto=true` devolvendo `text/csv`.
 
 - [ ] **Step 1: Escrever os testes que falham**
@@ -2165,7 +2167,7 @@ Expected: FAIL — `Failed to resolve import "./route"`.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/infra/db/client'
 import { exigirAdmin } from '@/server/admin/guarda'
-import { decifrar } from '@/infra/crypto/segredo'
+import { decifrarCampo } from '@/infra/crypto/campo'
 import { listarLeads, TETO_EXPORTACAO } from '@/server/admin/consulta-leads'
 
 /**
@@ -2253,7 +2255,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       })
 
       for (const registro of cifrados) {
-        if (registro.cpfCifrado) cpfPorLead.set(registro.id, decifrar(registro.cpfCifrado))
+        if (registro.cpfCifrado) cpfPorLead.set(registro.id, decifrarCampo(registro.cpfCifrado))
       }
     }
 
@@ -2341,6 +2343,261 @@ Co-Authored-By: claude-flow <ruv@ruv.net>"
 
 ---
 
+### Task 9: Cifra de campo com chave derivada uma vez
+
+> **Executar depois da Task 3 e antes da Task 4.** Acrescentada durante a execução.
+
+**Por que existe.** O `cifrar`/`decifrar` de `src/infra/crypto/segredo.ts` deriva
+uma chave nova por valor com `scryptSync` e sal aleatório. Medido: **58,9 ms por
+chamada, bloqueando o event loop**. Uma página de 50 leads trava o servidor
+inteiro por ~3 s; uma exportação de 10.000, por ~10 min — checkout, webhooks e
+rastreio param de responder para todos. Aquela primitiva foi feita para guardar
+uma chave de API por conta, raramente; para uma coluna lida em massa é a errada.
+
+Esta tarefa cria a cifra de campo: mesma AES-256-GCM, mesma
+`SECRET_ENCRYPTION_KEY`, chave derivada UMA vez, IV aleatório por valor.
+
+**Files:**
+- Create: `src/infra/crypto/campo.ts`
+- Create: `src/infra/crypto/campo.test.ts`
+- Modify: `src/server/lead-service.ts` (trocar `cifrar` por `cifrarCampo`)
+
+**Interfaces:**
+- Consumes: `SECRET_ENCRYPTION_KEY` do ambiente.
+- Produces:
+  - `cifrarCampo(texto: string): string`
+  - `decifrarCampo(cifrado: string): string`
+
+- [ ] **Step 1: Escrever o teste que falha**
+
+`src/infra/crypto/campo.test.ts`:
+
+```typescript
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { cifrarCampo, decifrarCampo } from './campo'
+
+const SEGREDO_DE_TESTE = 'segredo-de-teste-da-cifra-de-campo-com-mais-de-32-caracteres'
+let anterior: string | undefined
+
+beforeEach(() => {
+  anterior = process.env.SECRET_ENCRYPTION_KEY
+  process.env.SECRET_ENCRYPTION_KEY = SEGREDO_DE_TESTE
+})
+
+afterEach(() => {
+  process.env.SECRET_ENCRYPTION_KEY = anterior
+})
+
+describe('cifrarCampo / decifrarCampo', () => {
+  it('devolve o valor original', () => {
+    expect(decifrarCampo(cifrarCampo('52998224725'))).toBe('52998224725')
+  })
+
+  it('cifrar o mesmo valor duas vezes dá resultados diferentes', () => {
+    // IV aleatório por valor: sem ele, dois CPFs iguais teriam o mesmo texto
+    // cifrado, e quem lê o banco saberia quem compartilha documento com quem.
+    expect(cifrarCampo('52998224725')).not.toBe(cifrarCampo('52998224725'))
+  })
+
+  it('recusa valor adulterado em vez de devolver lixo', () => {
+    const cifrado = cifrarCampo('52998224725')
+    const partes = cifrado.split(':')
+    const conteudo = partes[3]!
+    const trocado = (conteudo[0] === 'a' ? 'b' : 'a') + conteudo.slice(1)
+    const adulterado = [partes[0], partes[1], partes[2], trocado].join(':')
+
+    expect(() => decifrarCampo(adulterado)).toThrow()
+  })
+
+  it('recusa etiqueta de autenticação encurtada', () => {
+    /*
+      GCM aceita, por padrão, etiquetas mais curtas que 16 bytes, e cada byte a
+      menos facilita forjar um valor. Sem exigir o tamanho, quem altera o banco
+      pode truncar a etiqueta e ter a adulteração aceita com muito menos
+      tentativas.
+    */
+    const partes = cifrarCampo('52998224725').split(':')
+    const curta = [partes[0], partes[1], partes[2]!.slice(0, 8), partes[3]].join(':')
+
+    expect(() => decifrarCampo(curta)).toThrow()
+  })
+
+  it('recusa formato desconhecido', () => {
+    expect(() => decifrarCampo('isto:nao:e:valido')).toThrow()
+    expect(() => decifrarCampo('')).toThrow()
+  })
+
+  it('lança sem segredo configurado, sem cair para valor padrão', () => {
+    delete process.env.SECRET_ENCRYPTION_KEY
+    expect(() => cifrarCampo('52998224725')).toThrow()
+  })
+
+  it('decifrar em massa não bloqueia o servidor', () => {
+    /*
+      A razão desta tarefa existir. O `decifrar` de `segredo.ts` custa ~59 ms
+      por chamada, bloqueando o event loop: mil chamadas passariam de um
+      minuto. O teto aqui é folgado de propósito — prova que a chave não é
+      derivada a cada valor, sem virar teste que falha por máquina lenta.
+    */
+    const cifrados = Array.from({ length: 1000 }, () => cifrarCampo('52998224725'))
+
+    const inicio = performance.now()
+    for (const c of cifrados) decifrarCampo(c)
+    const duracaoMs = performance.now() - inicio
+
+    expect(duracaoMs).toBeLessThan(2000)
+  })
+})
+```
+
+- [ ] **Step 2: Rodar e ver falhar**
+
+Run: `npx vitest run src/infra/crypto/campo.test.ts`
+Expected: FAIL — `Failed to resolve import "./campo"`.
+
+- [ ] **Step 3: Escrever a implementação**
+
+`src/infra/crypto/campo.ts`:
+
+```typescript
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto'
+
+/**
+ * Cifra de CAMPO: para dado pessoal guardado em coluna e lido em massa.
+ *
+ * Existe ao lado de `segredo.ts`, e não no lugar dele, porque os dois resolvem
+ * problemas diferentes. `segredo.ts` guarda a chave de API de terceiro de cada
+ * conta — poucas, lidas raramente — e deriva uma chave nova por valor com
+ * scrypt. Isso custa ~59 ms por chamada e BLOQUEIA O EVENT LOOP. Para uma
+ * coluna de CPF lida página a página e exportada aos milhares, o servidor
+ * inteiro pararia de responder enquanto um admin abre a tela.
+ *
+ * Aqui a chave é derivada UMA vez e reusada; cada valor ganha um IV aleatório.
+ * É o desenho padrão de cifra de campo, e a segurança é a mesma que importa: o
+ * texto cifrado é autenticado (GCM), e sem `SECRET_ENCRYPTION_KEY` nada é lido.
+ *
+ * O que se deixa de ter é o sal por valor, que protege uma senha humana fraca
+ * contra ataque pré-computado. A chave mestra tem 32+ caracteres e já vive na
+ * memória do processo, então esse sal não compraria proteção nenhuma aqui.
+ */
+
+const ALGORITMO = 'aes-256-gcm'
+const TAMANHO_IV = 12
+const TAMANHO_ETIQUETA = 16
+
+/** Versão do formato. Muda se o desenho mudar, para os valores antigos serem reconhecidos. */
+const VERSAO = 'c1'
+
+/**
+ * Sal fixo de domínio.
+ *
+ * Não é segredo e não precisa ser: ele separa a chave derivada aqui de
+ * qualquer outra derivada da mesma `SECRET_ENCRYPTION_KEY` com outro
+ * propósito. Trocar este texto torna ilegível todo valor já cifrado.
+ */
+const SAL_DE_DOMINIO = 'frete:cifra-de-campo:v1'
+
+let chaveEmCache: { segredo: string; chave: Buffer } | null = null
+
+/**
+ * A chave derivada, calculada uma vez por valor do segredo.
+ *
+ * O cache é por VALOR do segredo, e não por processo: se o ambiente trocar a
+ * variável (os testes fazem isso), a chave é derivada de novo em vez de seguir
+ * usando uma velha em silêncio.
+ */
+function chave(): Buffer {
+  const segredo = process.env.SECRET_ENCRYPTION_KEY
+
+  if (!segredo || segredo.length < 32) {
+    throw new Error(
+      'SECRET_ENCRYPTION_KEY ausente ou curta demais (mínimo 32 caracteres). ' +
+        'Sem ela, dado pessoal não pode ser guardado cifrado.',
+    )
+  }
+
+  if (chaveEmCache?.segredo === segredo) return chaveEmCache.chave
+
+  const derivada = scryptSync(segredo, SAL_DE_DOMINIO, 32)
+  chaveEmCache = { segredo, chave: derivada }
+  return derivada
+}
+
+/** Cifra um valor. A saída carrega versão, IV, etiqueta e conteúdo, separados por `:`. */
+export function cifrarCampo(texto: string): string {
+  const iv = randomBytes(TAMANHO_IV)
+  const cifra = createCipheriv(ALGORITMO, chave(), iv, { authTagLength: TAMANHO_ETIQUETA })
+
+  const conteudo = Buffer.concat([cifra.update(texto, 'utf8'), cifra.final()])
+  const etiqueta = cifra.getAuthTag()
+
+  return [VERSAO, iv.toString('hex'), etiqueta.toString('hex'), conteudo.toString('hex')].join(':')
+}
+
+/**
+ * Decifra o que `cifrarCampo` produziu.
+ *
+ * Valor adulterado, formato desconhecido ou etiqueta encurtada lançam — nunca
+ * devolvem lixo. O tamanho da etiqueta é EXIGIDO: por padrão o GCM aceita
+ * etiquetas mais curtas, e cada byte a menos facilita forjar um valor.
+ */
+export function decifrarCampo(cifrado: string): string {
+  const partes = cifrado.split(':')
+
+  if (partes.length !== 4 || partes[0] !== VERSAO) {
+    throw new Error('Valor cifrado em formato desconhecido.')
+  }
+
+  const [, ivHex, etiquetaHex, conteudoHex] = partes
+
+  if (etiquetaHex!.length !== TAMANHO_ETIQUETA * 2) {
+    throw new Error('Etiqueta de autenticação com tamanho inválido.')
+  }
+
+  const decifra = createDecipheriv(ALGORITMO, chave(), Buffer.from(ivHex!, 'hex'), {
+    authTagLength: TAMANHO_ETIQUETA,
+  })
+  decifra.setAuthTag(Buffer.from(etiquetaHex!, 'hex'))
+
+  return Buffer.concat([
+    decifra.update(Buffer.from(conteudoHex!, 'hex')),
+    decifra.final(),
+  ]).toString('utf8')
+}
+```
+
+- [ ] **Step 4: Rodar e ver passar**
+
+Run: `npx vitest run src/infra/crypto/campo.test.ts`
+Expected: PASS, 7 testes.
+
+- [ ] **Step 5: Trocar a cifra no `lead-service`**
+
+Em `src/server/lead-service.ts`:
+- troque `import { cifrar } from '@/infra/crypto/segredo'` por `import { cifrarCampo } from '@/infra/crypto/campo'`;
+- troque cada `cifrar(chaves.cpf)` por `cifrarCampo(chaves.cpf)`.
+
+Não há dado a migrar: nenhum `cpfCifrado` existe fora dos testes, que limpam a base.
+
+- [ ] **Step 6: Rodar os testes de lead e a verificação**
+
+Run: `npx vitest run src/infra/crypto/campo.test.ts src/server/lead-service.test.ts`
+Expected: PASS, todos.
+
+Run: `npm run typecheck && npx eslint src/infra/crypto/campo.ts src/infra/crypto/campo.test.ts src/server/lead-service.ts`
+Expected: só o erro pré-existente de `pode-enviar.test.ts`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/infra/crypto/campo.ts src/infra/crypto/campo.test.ts src/server/lead-service.ts
+git commit -m "feat: cifra de campo para dado pessoal lido em massa
+
+Co-Authored-By: claude-flow <ruv@ruv.net>"
+```
+
+---
+
 ## Autorrevisão do plano
 
 **Cobertura do spec**
@@ -2368,6 +2625,7 @@ Co-Authored-By: claude-flow <ruv@ruv.net>"
 | 404 e não 403 | 7 |
 | CSV com CPF mascarado por padrão e exportação registrada | 8 |
 | CSV leva todas as linhas do filtro, não só a primeira página | 6 (`todas`), 8 |
+| Decifrar em massa não bloqueia o servidor (desvio registrado do texto do spec) | 9 |
 
 Sem lacunas.
 
