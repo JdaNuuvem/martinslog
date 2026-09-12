@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '@/infra/db/client'
 import { registrarLead } from '@/server/lead-service'
-import { listarLeads, obterLead } from './consulta-leads'
+import { listarLeads, obterLead, revelarCpf } from './consulta-leads'
 
 const CPF = '52998224725'
 
@@ -116,5 +116,81 @@ describe('obterLead', () => {
 
   it('devolve null para id que não existe', async () => {
     expect(await obterLead('nao-existe')).toBeNull()
+  })
+})
+
+describe('revelarCpf', () => {
+  async function criarAdmin() {
+    return prisma.user.create({
+      data: {
+        tipo: 'PF',
+        papel: 'ADMIN',
+        documento: `admin-${Math.random().toString(36).slice(2)}`,
+        nome: 'Admin de Teste',
+        email: `admin-${Math.random().toString(36).slice(2)}@exemplo.com`,
+        senhaHash: 'hash-fake',
+      },
+    })
+  }
+
+  it('devolve o CPF completo e registra quem pediu', async () => {
+    await semear()
+    const lead = await prisma.lead.findFirstOrThrow({ where: { nome: 'Maria Aparecida' } })
+    const admin = await criarAdmin()
+
+    try {
+      const cpf = await revelarCpf(lead.id, admin.id)
+
+      expect(cpf).toBe(CPF)
+      expect(cpf).toMatch(/^\d{11}$/)
+
+      const auditorias = await prisma.auditLog.findMany({
+        where: { actorUserId: admin.id, entidade: 'Lead', entidadeId: lead.id },
+      })
+
+      expect(auditorias).toHaveLength(1)
+      expect(auditorias[0]?.acao).toBe('LEAD_CPF_REVELADO')
+    } finally {
+      await prisma.auditLog.deleteMany({ where: { actorUserId: admin.id } })
+      await prisma.user.delete({ where: { id: admin.id } })
+    }
+  })
+
+  it('lead sem CPF devolve null e não grava auditoria', async () => {
+    await semear()
+    const lead = await prisma.lead.findFirstOrThrow({ where: { nome: 'João Pedro' } })
+    const admin = await criarAdmin()
+
+    try {
+      const cpf = await revelarCpf(lead.id, admin.id)
+
+      expect(cpf).toBeNull()
+
+      const auditorias = await prisma.auditLog.findMany({
+        where: { entidade: 'Lead', entidadeId: lead.id },
+      })
+
+      expect(auditorias).toHaveLength(0)
+    } finally {
+      await prisma.user.delete({ where: { id: admin.id } })
+    }
+  })
+
+  it('lead inexistente devolve null e não grava auditoria', async () => {
+    const admin = await criarAdmin()
+
+    try {
+      const cpf = await revelarCpf('nao-existe', admin.id)
+
+      expect(cpf).toBeNull()
+
+      const auditorias = await prisma.auditLog.findMany({
+        where: { actorUserId: admin.id },
+      })
+
+      expect(auditorias).toHaveLength(0)
+    } finally {
+      await prisma.user.delete({ where: { id: admin.id } })
+    }
   })
 })
