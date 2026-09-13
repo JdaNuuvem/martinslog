@@ -136,10 +136,15 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       A mensagem já está gravada com o erro, então a tela a mostra como não
       entregue em vez de perder o que o atendente escreveu. 409 é "falta
       parear"; 502 é "quem recusou foi a Evolution, não nós".
+
+      `registro` devolve a mensagem gravada: sem ele a tela ficava com o balão
+      provisório E o gravado (que chega na consulta seguinte), dois balões de
+      erro para uma tentativa só.
     */
+    const registro = serializarMensagem(resultado.mensagem)
     return resultado.motivo === 'sem-conexao'
-      ? NextResponse.json({ codigo: 'SEM_CONEXAO', mensagem: resultado.erro }, { status: 409 })
-      : NextResponse.json({ codigo: 'ENVIO_RECUSADO', mensagem: resultado.erro }, { status: 502 })
+      ? NextResponse.json({ codigo: 'SEM_CONEXAO', mensagem: resultado.erro, registro }, { status: 409 })
+      : NextResponse.json({ codigo: 'ENVIO_RECUSADO', mensagem: resultado.erro, registro }, { status: 502 })
   } catch (erro) {
     return respostaDeErro(erro)
   }

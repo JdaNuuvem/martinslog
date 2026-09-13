@@ -127,7 +127,9 @@ export async function midiaDaMensagem(
 
   const item: ItemCache = {
     dados: Buffer.from(baixada.base64, 'base64'),
-    mimetype: mensagem.midiaMimetype ?? baixada.mimetype ?? 'application/octet-stream',
+    // O que a Evolution devolve vale mais que o gravado: áudio enviado em webm
+    // volta de lá já convertido para ogg/opus, e o rótulo antigo não tocaria.
+    mimetype: baixada.mimetype || mensagem.midiaMimetype || 'application/octet-stream',
   }
   guardarMidiaNoCache(mensagemId, item)
   return { ...item, nome: mensagem.midiaNome ?? baixada.fileName, tipo: mensagem.tipo }

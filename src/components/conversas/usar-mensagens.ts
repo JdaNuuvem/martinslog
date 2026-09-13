@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, mensagemDeErro, type Mensagem } from './api'
+import { api, ErroApi, mensagemDeErro, type Mensagem } from './api'
 import {
   PREFIXO_ID_LOCAL,
   marcoDaConsulta,
@@ -138,6 +138,15 @@ export function useMensagens(conversaId: string, aoChegarDoCliente: () => void) 
         if (mensagem.status === 'ERRO') reenvios.current.set(mensagem.id, envio)
         aplicar((lista) => substituirMensagem(lista, idLocal, mensagem), 'envio')
       } catch (e) {
+        if (e instanceof ErroApi && e.registro) {
+          // O servidor gravou a tentativa: o balão passa a ser o dele, e não
+          // um segundo balão que a consulta periódica traria depois.
+          const registro = e.registro
+          reenvios.current.delete(idLocal)
+          reenvios.current.set(registro.id, envio)
+          aplicar((lista) => substituirMensagem(lista, idLocal, registro), 'envio')
+          return
+        }
         const texto = mensagemDeErro(e)
         aplicar(
           (lista) => lista.map((m) => (m.id === idLocal ? { ...m, status: 'ERRO', erro: texto } : m)),

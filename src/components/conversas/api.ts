@@ -52,6 +52,8 @@ export class ErroApi extends Error {
     readonly codigo: string,
     mensagem: string,
     readonly status: number,
+    /** Envio recusado que o servidor gravou mesmo assim, com status ERRO. */
+    readonly registro: Mensagem | null = null,
   ) {
     super(mensagem)
   }
@@ -66,11 +68,12 @@ async function pedir<T>(url: string, init?: RequestInit): Promise<T> {
   }
   const corpo = (await resposta.json().catch(() => null)) as unknown
   if (!resposta.ok) {
-    const erro = (corpo ?? {}) as { codigo?: string; mensagem?: string }
+    const erro = (corpo ?? {}) as { codigo?: string; mensagem?: string; registro?: Mensagem }
     throw new ErroApi(
       erro.codigo ?? `HTTP_${resposta.status}`,
       erro.mensagem ?? 'Não foi possível concluir. Tente de novo.',
       resposta.status,
+      erro.registro ?? null,
     )
   }
   return corpo as T
