@@ -141,6 +141,34 @@ function desembrulhar(message: Bruto): Bruto {
   return atual
 }
 
+/**
+ * Texto de mensagens com botão, lista ou template — as de empresa (banco,
+ * concessionária, a própria Meta) e as respostas do cliente a elas.
+ *
+ * Medido em produção: eram 1 em cada 10 mensagens da caixa, todas vazias
+ * como "não suportada", quando o que importa nelas é o texto.
+ */
+function textoInterativo(m: Bruto): string | null {
+  const campo = (chave: string) => m[chave] as Bruto | undefined
+  const botoes = campo('buttonsMessage')
+  const interativa = campo('interactiveMessage')
+  const lista = campo('listMessage')
+  const modelo = campo('templateMessage')
+  const hidratado = (modelo?.hydratedTemplate ?? modelo?.hydratedFourRowTemplate) as Bruto | undefined
+
+  return (
+    texto(botoes?.contentText) ??
+    texto(campo('buttonsResponseMessage')?.selectedDisplayText) ??
+    texto((interativa?.body as Bruto | undefined)?.text) ??
+    texto(campo('listResponseMessage')?.title) ??
+    texto(lista?.description) ??
+    texto(lista?.title) ??
+    texto(hidratado?.hydratedContentText) ??
+    texto(campo('templateButtonReplyMessage')?.selectedDisplayText) ??
+    null
+  )
+}
+
 type Conteudo = Pick<
   MensagemLida,
   'tipo' | 'texto' | 'midiaMimetype' | 'midiaNome' | 'midiaTamanho' | 'midiaDuracao'
@@ -152,6 +180,9 @@ function conteudoDe(bruto: Bruto): Conteudo | null {
 
   const conversa = texto(m.conversation) ?? texto((m.extendedTextMessage as Bruto | undefined)?.text)
   if (conversa) return { tipo: 'TEXTO', texto: conversa, ...vazio }
+
+  const interativo = textoInterativo(m)
+  if (interativo) return { tipo: 'TEXTO', texto: interativo, ...vazio }
 
   const midias: Array<[string, TipoMensagemWhatsapp]> = [
     ['imageMessage', 'IMAGEM'],
