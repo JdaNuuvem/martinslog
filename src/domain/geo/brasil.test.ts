@@ -62,6 +62,12 @@ describe('endereços sem país', () => {
     }
   })
 
+  it('reconhece o laço local em IPv6', () => {
+    // `localhost` resolve para `::1` no Windows e no macOS; sem isto o próprio
+    // desenvolvedor cai na página "Atendemos apenas o Brasil".
+    expect(ehIpPrivado('::1')).toBe(true)
+  })
+
   it('reconhece a rede compartilhada de operadora', () => {
     // Muita operadora móvel brasileira entrega o cliente por CGNAT, e o IP
     // público real não aparece. Tratar como privado evita barrar celular.

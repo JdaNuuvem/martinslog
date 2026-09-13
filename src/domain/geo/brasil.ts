@@ -115,6 +115,9 @@ export function ehIpBrasileiro(ip: string): boolean {
  * inteira, achando que está protegendo.
  */
 export function ehIpPrivado(ip: string): boolean {
+  // Laço local em IPv6: é assim que `localhost` chega no Windows e no macOS.
+  if (ip.trim() === '::1') return true
+
   const valor = paraInteiro(ip)
   if (valor === null) return false
 
