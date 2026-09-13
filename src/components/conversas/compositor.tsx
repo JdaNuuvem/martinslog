@@ -20,7 +20,7 @@ type CompositorProps = {
 
 const ACEITOS = 'image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.txt,.csv,.zip'
 const BOTAO_ICONE =
-  'flex h-11 w-11 shrink-0 items-center justify-center rounded-pilula text-texto-secundario hover:bg-superficie-bloco hover:text-texto-principal focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand'
+  'flex h-11 w-11 shrink-0 items-center justify-center rounded-pilula text-[#54656f] hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand'
 
 /** Seis linhas do corpo (16px × 1,6) mais o respiro vertical do campo. */
 const ALTURA_MAXIMA_PX = 6 * 16 * 1.6 + 20
@@ -144,7 +144,7 @@ export function Compositor({ conversaId, perfilId, aoEnviar, anexoRecebido, aoRe
   }
 
   return (
-    <div className="relative border-t border-superficie-bloco bg-superficie-card px-2 py-2">
+    <div className="relative bg-[#f0f2f5] px-2 py-2">
       {aberto ? (
         <SeletorTemplates
           templates={filtrados}
@@ -235,14 +235,14 @@ export function Compositor({ conversaId, perfilId, aoEnviar, anexoRecebido, aoRe
               aria-expanded={modoBarra ? true : undefined}
               aria-controls={modoBarra ? ID_LISTA_TEMPLATES : undefined}
               aria-activedescendant={modoBarra && filtrados[indice] ? `template-${filtrados[indice].id}` : undefined}
-              className="min-h-11 flex-1 resize-none rounded-cartao border border-borda-campo bg-superficie-bloco px-4 py-2.5 text-corpo text-texto-principal focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+              className="min-h-11 flex-1 resize-none rounded-lg border-0 bg-white px-4 py-2.5 text-corpo text-[#111b21] placeholder:text-[#667781] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00a884]"
             />
             {texto.trim() ? (
               <button
                 type="button"
                 onClick={enviarTexto}
                 aria-label="Enviar mensagem"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pilula bg-brand text-white hover:bg-brand-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pilula bg-[#00a884] text-white hover:bg-[#008f72] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
               >
                 <IconeEnviar />
               </button>

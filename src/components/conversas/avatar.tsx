@@ -35,7 +35,7 @@ export function Avatar({ fotoUrl, nome, tamanho = 'lista' }: AvatarProps) {
   return (
     <span
       aria-hidden="true"
-      className={`${medida} flex shrink-0 items-center justify-center rounded-pilula bg-brand-bg font-bold text-brand-texto`}
+      className={`${medida} flex shrink-0 items-center justify-center rounded-pilula bg-[#dfe5e7] font-medium text-[#54656f]`}
     >
       {letras || <IconePerfil />}
     </span>

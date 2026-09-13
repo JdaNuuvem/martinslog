@@ -16,7 +16,7 @@ type CabecalhoProps = {
 }
 
 const BOTAO =
-  'flex h-10 w-10 shrink-0 items-center justify-center rounded-pilula text-texto-secundario hover:bg-superficie-bloco hover:text-texto-principal focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand'
+  'flex h-10 w-10 shrink-0 items-center justify-center rounded-pilula text-[#54656f] hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand'
 
 export function CabecalhoConversa(props: CabecalhoProps) {
   const { conversa, roboPausado, alternandoRobo, buscaAberta } = props
@@ -24,15 +24,15 @@ export function CabecalhoConversa(props: CabecalhoProps) {
   const telefone = conversa.telefone ? telefoneFormatado(conversa.telefone) : null
 
   return (
-    <header className="flex items-center gap-2 border-b border-superficie-bloco bg-superficie-card px-2 py-2 sm:px-4">
+    <header className="flex items-center gap-2 bg-[#f0f2f5] px-2 py-2 sm:px-4">
       <button type="button" onClick={props.aoVoltar} aria-label="Voltar para a lista de conversas" className={`${BOTAO} lg:hidden`}>
         <IconeVoltar />
       </button>
 
       <Avatar fotoUrl={conversa.fotoUrl} nome={conversa.nome} tamanho="cabecalho" />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <h2 className="truncate text-corpo font-bold text-texto-principal">{nome}</h2>
-        {telefone && telefone !== nome ? <p className="truncate text-rotulo text-texto-secundario">{telefone}</p> : null}
+      <div className="flex min-w-0 flex-1 flex-col leading-tight">
+        <h2 className="truncate text-corpo font-medium text-[#111b21]">{nome}</h2>
+        {telefone && telefone !== nome ? <p className="truncate text-rotulo text-[#667781]">{telefone}</p> : null}
       </div>
 
       {/*
@@ -87,8 +87,8 @@ export function CabecalhoConversa(props: CabecalhoProps) {
         aria-label={roboPausado ? 'Devolver a conversa ao robô' : 'Assumir a conversa do robô'}
         className={`flex shrink-0 items-center gap-2 rounded-pilula border px-3 py-1.5 text-dado font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:opacity-60 ${
           roboPausado
-            ? 'border-brand bg-brand-bg text-brand-texto'
-            : 'border-borda-campo text-texto-secundario hover:text-texto-principal'
+            ? 'border-[#00a884] bg-[#d9fdd3] text-[#008069]'
+            : 'border-[#d1d7db] bg-white text-[#54656f] hover:text-[#111b21]'
         }`}
       >
         <IconeRobo width={18} height={18} />

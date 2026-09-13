@@ -151,9 +151,9 @@ export function CaixaDeEntrada({ perfilIdInicial }: { perfilIdInicial: string | 
               aoAtualizarResumo={lista.atualizar}
             />
           ) : (
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-superficie-bloco p-8 text-center">
-              <p className="text-subtitulo font-bold text-texto-principal">Escolha uma conversa</p>
-              <p className="max-w-leitura text-dado text-texto-secundario">
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 border-b-[6px] border-b-[#25d366] bg-[#f0f2f5] p-8 text-center">
+              <p className="text-subtitulo font-light text-[#41525d]">Escolha uma conversa</p>
+              <p className="max-w-leitura text-dado text-[#667781]">
                 Responda por texto, áudio ou anexo pelo WhatsApp conectado. Digite “/” no campo para usar um template.
               </p>
             </div>

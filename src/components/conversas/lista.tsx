@@ -100,7 +100,7 @@ export function ListaConversas(props: ListaProps) {
             value={props.textoBusca}
             onChange={(e) => props.aoMudarBusca(e.target.value)}
             placeholder="Pesquisar nome, telefone ou mensagem"
-            className="w-full rounded-pilula border border-borda-campo bg-superficie-bloco py-1.5 pl-9 pr-3 text-dado text-texto-principal focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+            className="w-full rounded-lg border-0 bg-[#f0f2f5] py-1.5 pl-9 pr-3 text-dado text-[#111b21] placeholder:text-[#667781] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00a884]"
           />
         </label>
 
@@ -162,7 +162,7 @@ export function ListaConversas(props: ListaProps) {
           </div>
         ) : null}
 
-        <ul aria-label="Lista de conversas" onKeyDown={navegar} className="divide-y divide-superficie-bloco">
+        <ul aria-label="Lista de conversas" onKeyDown={navegar} className="divide-y divide-[#e9edef]">
           {conversas.map((c) => (
             <ItemConversa key={c.id} conversa={c} selecionada={c.id === props.selecionadaId} aoAbrir={props.aoAbrir} />
           ))}
