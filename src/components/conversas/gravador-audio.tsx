@@ -131,7 +131,7 @@ export function GravadorAudio({ aoEnviar, aoCancelar, aoErro }: GravadorProps) {
         <IconeLixeira />
       </button>
 
-      <div className="flex flex-1 items-center gap-3 rounded-pilula bg-superficie-bloco px-4 py-2">
+      <div className="flex flex-1 items-center gap-3 rounded-lg bg-white px-4 py-2">
         <span className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-pilula bg-erro motion-reduce:animate-none" aria-hidden="true" />
         <span className="font-mono text-dado tabular-nums text-texto-principal" aria-live="off">
           {duracaoLegivel(segundos)}
@@ -140,7 +140,7 @@ export function GravadorAudio({ aoEnviar, aoCancelar, aoErro }: GravadorProps) {
           {Array.from({ length: 24 }, (_, i) => (
             <span
               key={i}
-              className="w-1 animate-pulse rounded-pilula bg-brand/60 motion-reduce:animate-none"
+              className="w-1 animate-pulse rounded-pilula bg-[#00a884]/60 motion-reduce:animate-none"
               style={{ height: `${30 + ((i * 37) % 70)}%`, animationDelay: `${(i % 6) * 120}ms` }}
             />
           ))}
@@ -153,7 +153,7 @@ export function GravadorAudio({ aoEnviar, aoCancelar, aoErro }: GravadorProps) {
         onClick={() => terminar('enviar')}
         disabled={inicio === null}
         aria-label="Enviar áudio"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pilula bg-brand text-white hover:bg-brand-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-60"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pilula bg-[#00a884] text-white hover:bg-[#008f72] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-60"
       >
         <IconeEnviar />
       </button>

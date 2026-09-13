@@ -21,7 +21,7 @@ type ConteudoProps = {
  */
 export function TextoRico({ texto, termo }: { texto: string; termo: string }) {
   return (
-    <p className="whitespace-pre-wrap break-words text-corpo text-texto-principal">
+    <p className="whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-[#111b21]">
       {segmentarTexto(texto, termo).map((s, i) => {
         const conteudo = s.destaque ? <mark className="rounded-sm bg-alerta/40 text-inherit">{s.valor}</mark> : s.valor
         return s.tipo === 'link' ? (
@@ -30,7 +30,7 @@ export function TextoRico({ texto, termo }: { texto: string; termo: string }) {
             href={hrefDoLink(s.valor)}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-brand-texto underline underline-offset-2"
+            className="text-[#027eb5] underline-offset-2 hover:underline"
           >
             {conteudo}
           </a>
@@ -108,7 +108,7 @@ export function ConteudoMensagem({ mensagem, termo, aoAbrirImagem }: ConteudoPro
             rel="noopener noreferrer"
             className="flex min-w-52 items-center gap-3 rounded-campo bg-black/5 p-3 hover:bg-black/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
           >
-            <IconeDocumento width={28} height={28} className="shrink-0 text-brand-texto" />
+            <IconeDocumento width={28} height={28} className="shrink-0 text-[#54656f]" />
             <span className="flex min-w-0 flex-col">
               <span className="truncate text-dado font-medium text-texto-principal">{midia.nome ?? 'Documento'}</span>
               <span className="text-rotulo text-texto-secundario">

@@ -81,6 +81,19 @@ h3 {
   text-wrap: balance;
 }
 
+/**
+ * Papel de parede da conversa do WhatsApp: o bege do WhatsApp Web com
+ * desenhos de traço fino (balão, pacote, caminhão, câmera...) em mosaico.
+ *
+ * Desenho próprio, e não o do WhatsApp: a cara é a mesma, a arte não é
+ * copiada. Em SVG inline para não custar uma ida a mais ao servidor.
+ */
+.fundo-whatsapp {
+  background-color: #efeae2;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 260 260'%3E%3Cg fill='none' stroke='%23cfc5b4' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 30h36a8 8 0 0 1 8 8v18a8 8 0 0 1-8 8H36l-10 8v-8h-6a8 8 0 0 1-8-8V38a8 8 0 0 1 8-8z'/%3E%3Cpath d='M110 44c-4-8-16-6-16 3 0 8 16 17 16 17s16-9 16-17c0-9-12-11-16-3z'/%3E%3Cpath d='M200 22l5 10 11 2-8 8 2 11-10-5-10 5 2-11-8-8 11-2z'/%3E%3Cpath d='M40 120l22-10 22 10v26l-22 10-22-10zM40 120l22 10 22-10M62 130v26'/%3E%3Crect x='140' y='100' width='22' height='38' rx='4'/%3E%3Cpath d='M148 132h6'/%3E%3Crect x='200' y='110' width='34' height='24' rx='4'/%3E%3Ccircle cx='217' cy='122' r='7'/%3E%3Cpath d='M208 110l3-5h12l3 5'/%3E%3Cpath d='M30 200v-24l20-5v24'/%3E%3Ccircle cx='26' cy='200' r='4'/%3E%3Ccircle cx='46' cy='195' r='4'/%3E%3Ccircle cx='110' cy='200' r='14'/%3E%3Cpath d='M104 204c3 4 9 4 12 0M105 195h.01M115 195h.01'/%3E%3Cpath d='M170 190h30v22h-30zM200 198h12l8 8v6h-20'/%3E%3Ccircle cx='180' cy='214' r='4'/%3E%3Ccircle cx='210' cy='214' r='4'/%3E%3Ccircle cx='130' cy='250' r='2'/%3E%3Ccircle cx='240' cy='60' r='2'/%3E%3Ccircle cx='90' cy='90' r='2'/%3E%3Ccircle cx='250' cy='170' r='2'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 260px 260px;
+}
+
 /** Evita a última linha do parágrafo com uma palavra sozinha. */
 p {
   text-wrap: pretty;

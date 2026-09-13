@@ -104,7 +104,7 @@ export function AreaMensagens(props: AreaProps) {
         aria-relevant="additions"
         aria-label="Mensagens da conversa"
         tabIndex={0}
-        className="h-full overflow-y-auto bg-superficie-bloco px-3 pb-4 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand sm:px-8"
+        className="fundo-whatsapp h-full overflow-y-auto px-3 pb-4 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand sm:px-10 xl:px-16"
       >
         {temMais ? (
           <div className="flex justify-center pt-3">
@@ -112,31 +112,38 @@ export function AreaMensagens(props: AreaProps) {
               type="button"
               onClick={carregarAntigas}
               disabled={carregandoAntigas}
-              className="rounded-pilula bg-superficie-card px-4 py-1.5 text-dado font-medium text-brand-texto shadow-elevado focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:opacity-60"
+              className="rounded-lg bg-white px-4 py-1.5 text-dado text-[#54656f] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:opacity-60"
             >
               {carregandoAntigas ? 'Carregando…' : 'Carregar mensagens anteriores'}
             </button>
           </div>
         ) : null}
 
-        {carregando ? <p className="pt-8 text-center text-dado text-texto-secundario">Carregando mensagens…</p> : null}
+        {carregando ? (
+          <p className="mx-auto mt-8 w-fit rounded-lg bg-white/90 px-4 py-1.5 text-center text-dado text-[#54656f]">
+            Carregando mensagens…
+          </p>
+        ) : null}
         {!carregando && mensagens.length === 0 ? (
-          <p className="pt-8 text-center text-dado text-texto-secundario">Nenhuma mensagem nesta conversa ainda.</p>
+          <p className="mx-auto mt-8 w-fit rounded-lg bg-[#ffeecd] px-4 py-1.5 text-center text-dado text-[#54656f]">
+            Nenhuma mensagem nesta conversa ainda.
+          </p>
         ) : null}
 
         {grupos.map((grupo) => (
-          <section key={grupo.chave} aria-label={grupo.rotulo} className="flex flex-col gap-1.5">
-            <div className="sticky top-0 z-10 flex justify-center py-2">
-              <span className="rounded-pilula bg-superficie-card px-3 py-1 text-rotulo font-bold uppercase text-texto-secundario shadow-elevado">
+          <section key={grupo.chave} aria-label={grupo.rotulo} className="flex flex-col">
+            <div className="sticky top-0 z-10 flex justify-center pb-1 pt-3">
+              <span className="rounded-lg bg-white px-3 py-1 text-[0.78rem] text-[#54656f] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
                 {grupo.rotulo}
               </span>
             </div>
-            {grupo.mensagens.map((m) => (
+            {grupo.mensagens.map((m, i) => (
               <BalaoMensagem
                 key={m.id}
                 mensagem={m}
                 termo={props.termo}
                 destacada={m.id === idFoco}
+                inicioDaSequencia={i === 0 || (grupo.mensagens[i - 1]!.autor === 'CLIENTE') !== (m.autor === 'CLIENTE')}
                 podeTentarDeNovo={m.status === 'ERRO' && props.podeTentarDeNovo(m.id)}
                 aoTentarDeNovo={props.aoTentarDeNovo}
                 aoAbrirImagem={props.aoAbrirImagem}
@@ -151,7 +158,7 @@ export function AreaMensagens(props: AreaProps) {
           type="button"
           onClick={irParaOFim}
           aria-label="Ir para a mensagem mais recente"
-          className="absolute bottom-4 right-4 flex h-10 w-10 items-center justify-center rounded-pilula bg-superficie-card text-texto-secundario shadow-flutuante focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+          className="absolute bottom-4 right-4 flex h-10 w-10 items-center justify-center rounded-pilula bg-white text-[#54656f] shadow-flutuante focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
         >
           <IconeSetaBaixo />
         </button>

@@ -79,7 +79,7 @@ export function PlayerAudio({ url, duracao, doCliente }: PlayerAudioProps) {
         onClick={alternar}
         aria-label={tocando ? 'Pausar áudio' : 'Tocar áudio'}
         className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-pilula text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-          doCliente ? 'bg-texto-secundario' : 'bg-brand'
+          doCliente ? 'bg-[#8696a0]' : 'bg-[#00a884]'
         }`}
       >
         {tocando ? <IconePausa /> : <IconePlay width={16} height={16} />}
@@ -100,9 +100,9 @@ export function PlayerAudio({ url, duracao, doCliente }: PlayerAudioProps) {
             setAtual(Number(e.target.value))
           }}
           style={{ backgroundSize: `${progresso}% 100%` }}
-          className="h-1 w-full cursor-pointer appearance-none rounded-pilula bg-borda-campo bg-gradient-to-r from-brand to-brand bg-no-repeat accent-brand disabled:cursor-default"
+          className="h-1 w-full cursor-pointer appearance-none rounded-pilula bg-[#c7cdd1] bg-gradient-to-r from-[#00a884] to-[#00a884] bg-no-repeat accent-[#00a884] disabled:cursor-default"
         />
-        <span className="text-rotulo text-texto-secundario">
+        <span className="text-rotulo text-[#667781]">
           {falhou ? 'Não foi possível tocar' : duracaoLegivel(tocando || atual > 0 ? atual : duracaoConhecida)}
         </span>
       </div>
