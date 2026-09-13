@@ -26,6 +26,19 @@ const base = {
 }
 
 describe('lerMensagem', () => {
+  it.each([
+    [{ buttonsMessage: { contentText: 'Quer a segunda via?', buttons: [] } }, 'Quer a segunda via?'],
+    [{ buttonsResponseMessage: { selectedButtonId: 'nao', selectedDisplayText: 'Não salvar' } }, 'Não salvar'],
+    [{ interactiveMessage: { body: { text: 'Como avalia o atendimento?' } } }, 'Como avalia o atendimento?'],
+    [{ listResponseMessage: { title: '2ª Via' } }, '2ª Via'],
+    [{ listMessage: { description: 'Escolha uma opção', sections: [] } }, 'Escolha uma opção'],
+    [{ templateMessage: { hydratedTemplate: { hydratedContentText: 'Olá, Aldezir.' } } }, 'Olá, Aldezir.'],
+  ])('lê o texto de mensagem com botão, lista ou template (%#)', (message, esperado) => {
+    const lida = lerMensagem({ ...base, key: { id: 'B1', fromMe: false, remoteJid: '5511999990000@s.whatsapp.net' }, message })
+    expect(lida?.tipo).toBe('TEXTO')
+    expect(lida?.texto).toBe(esperado)
+  })
+
   it('preserva o @lid como jid e não inventa telefone a partir dele', () => {
     const lida = lerMensagem({
       ...base,
