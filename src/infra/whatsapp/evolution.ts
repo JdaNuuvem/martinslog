@@ -75,10 +75,14 @@ export class EvolutionProvider implements WhatsappProvider {
             rastreio: com prévia, o WhatsApp busca a página e o comprador
             recebe um cartão que ocupa a tela inteira, escondendo o texto que
             importa.
+
+            `text` na raiz, e não `textMessage: { text }`: o corpo antigo é da
+            v1. A 2.3.7 exige `number` e `text` (`textMessageSchema` em
+            src/validate/message.schema.ts) e recusava o envio com 400.
           */
           body: JSON.stringify({
             number: mensagem.para,
-            textMessage: { text: mensagem.texto },
+            text: mensagem.texto,
             linkPreview: false,
           }),
           signal: controle.signal,

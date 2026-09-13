@@ -96,8 +96,9 @@ describe('janela de silêncio na fila', () => {
 
     const decisao = await podeEnviar(perfilId, '5511900002005', madrugada)
     expect(decisao.pode).toBe(false)
-    if (decisao.pode) throw new Error('deveria ter segurado')
-    expect(decisao.motivo).toBe('silencio')
+    expect(decisao.pode === false && decisao.motivo).toBe('silencio')
+    // Estreita a união para o TypeScript: só o silêncio tem `tentarEm`.
+    if (decisao.pode || decisao.motivo !== 'silencio') throw new Error('deveria ter segurado')
     expect(decisao.tentarEm.getTime()).toBeGreaterThan(madrugada.getTime())
   })
 

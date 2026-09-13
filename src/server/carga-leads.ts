@@ -72,7 +72,9 @@ export async function coletarAparicoes(): Promise<EntradaLead[]> {
   })
 
   const conversas = await prisma.conversa.findMany({
-    select: { id: true, perfilId: true, contato: true, nomeContato: true, criadoEm: true },
+    // Conversa `@lid` não tem telefone e sai com `null`, que `registrarLead`
+    // descarta — não há chave para reconhecer essa pessoa depois.
+    select: { id: true, perfilId: true, telefone: true, nomeContato: true, criadoEm: true },
   })
 
   const entradas: EntradaLead[] = [
@@ -110,7 +112,7 @@ export async function coletarAparicoes(): Promise<EntradaLead[]> {
       conversaId: c.id,
       ocorridoEm: c.criadoEm,
       nome: c.nomeContato,
-      telefone: c.contato,
+      telefone: c.telefone,
     })),
   ]
 

@@ -1,23 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { exigirAdmin } from '@/server/admin/guarda'
-import { listarPerfis } from '@/server/perfil-service'
-import { listarConversas } from '@/server/conversa-service'
+import { listarConversasCaixa } from '@/server/whatsapp/caixa-service'
+import { respostaDeErro } from '@/server/whatsapp/resposta-http'
 
 /**
- * Lista de conversas da loja, mais recente primeiro.
+ * Lista de conversas no formato ANTIGO, para a tela que ainda o usa.
  *
- * Só para administradores, como o resto da Evolution: aqui aparece o que
- * compradores escreveram, que é conteúdo de terceiros.
+ * Delega para a caixa de entrada nova (`/api/whatsapp/conversas`) e só
+ * traduz os nomes. `contato` era o telefone; conversa `@lid` não tem
+ * telefone, e aqui mostra o jid para a linha não sair em branco.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const guarda = await exigirAdmin(request)
   if (!guarda.autorizado) return guarda.resposta
 
-  const perfis = await listarPerfis(guarda.sessao.userId)
-  const perfil = perfis[0]
-  if (!perfil) return NextResponse.json({ conversas: [] })
-
-  return NextResponse.json({
-    conversas: await listarConversas(guarda.sessao.userId, perfil.id),
-  })
+  try {
+    const { conversas } = await listarConversasCaixa(guarda.sessao.userId, {
+      perfilId: request.nextUrl.searchParams.get('perfilId'),
+    })
+    return NextResponse.json({
+      conversas: conversas.map((c) => ({
+        id: c.id,
+        contato: c.telefone ?? c.jid,
+        nomeContato: c.nome,
+        ultimaMensagemEm: c.ultimaMensagemEm,
+        naoLidas: c.naoLidas,
+        roboPausado: c.roboPausado,
+        previa: c.previa,
+      })),
+    })
+  } catch (erro) {
+    return respostaDeErro(erro)
+  }
 }
