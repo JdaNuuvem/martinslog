@@ -5,6 +5,7 @@ import { decifrarCampo } from '@/infra/crypto/campo'
 import { listarLeads, TETO_EXPORTACAO, type FiltroLeads } from '@/server/admin/consulta-leads'
 import { dataDoParametro } from '@/lib/filtro-periodo'
 import { ORIGENS, buscaLeadsSchema } from '@/lib/leads-schema'
+import { formatarCpf } from '@/lib/formatar-cpf'
 
 /**
  * `GET /api/admin/leads/exportar` — a base filtrada, em CSV.
@@ -17,15 +18,6 @@ import { ORIGENS, buscaLeadsSchema } from '@/lib/leads-schema'
  * para — o registro é a única forma de responder depois quem levou esses
  * dados e quando.
  */
-
-/**
- * CPF com pontos e hífen. Os onze dígitos crus o Excel lê como NÚMERO e come
- * o zero à esquerda; formatado, vira texto e sai inteiro. Começa sempre por
- * dígito, então não aciona o neutralizador de fórmula.
- */
-function formatarCpf(cpf: string): string {
-  return `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9, 11)}`
-}
 
 /** Escapa um campo para CSV, protegendo contra injeção de fórmula. */
 function celula(valor: string | number | null): string {

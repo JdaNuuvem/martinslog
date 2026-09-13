@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatarCpf } from '@/lib/formatar-cpf'
 
 /**
  * Botão "ver CPF" do detalhe do lead.
@@ -39,7 +40,7 @@ export function RevelarCpf({ leadId, cpfMascarado }: { leadId: string; cpfMascar
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-3">
-        <span className="text-texto-principal">{cpf ?? cpfMascarado}</span>
+        <span className="text-texto-principal">{cpf ? formatarCpf(cpf) : cpfMascarado}</span>
         {cpf ? null : (
           <button
             type="button"
