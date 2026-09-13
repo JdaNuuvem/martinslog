@@ -183,8 +183,13 @@ export async function sincronizarHistorico(perfilId: string): Promise<ResultadoS
       if (!jidDeConversa(jid)) continue
 
       const conhecida = conversas.get(jid)
-      // Chat sem nenhuma mensagem importada seria uma linha vazia na lista.
-      if (!conhecida && !chat.lastMessage) continue
+      /*
+        Chat sem nenhuma mensagem importada seria uma linha vazia na lista — e
+        no TOPO dela, carimbada com a hora da importação. `lastMessage` não
+        basta: medido em produção, vinha preenchido com reação ou aviso de
+        sistema, que não viram mensagem.
+      */
+      if (!conhecida) continue
 
       const nomeDoChat =
         chat.pushName && !nomesDaLoja.has(chat.pushName) && chat.lastMessage?.key?.fromMe !== true

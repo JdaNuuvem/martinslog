@@ -100,7 +100,12 @@ describe('lojas e conversas', () => {
   it('lista as lojas com nome de exibição e estado do celular', async () => {
     const lojas = await listarLojas(donoId)
     expect(lojas).toHaveLength(2)
-    expect(lojas[1]).toEqual({ perfilId, nome: 'Loja Pareada', conectado: true, numero: '5511900001111' })
+    expect(lojas[1]).toEqual({
+      perfilId,
+      nome: expect.stringMatching(/^Loja Pareada \(caixa-\d+\)$/),
+      conectado: true,
+      numero: '5511900001111',
+    })
   })
 
   it('sem perfilId usa a loja pareada, pagina 50 por vez e segue pelo cursor', async () => {
