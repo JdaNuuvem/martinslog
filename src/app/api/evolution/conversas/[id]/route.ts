@@ -2,20 +2,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { DomainError } from '@/domain/errors'
 import { exigirAdmin } from '@/server/admin/guarda'
+import { assumirConversa, devolverAoRobo } from '@/server/conversa-service'
 import {
-  assumirConversa,
-  devolverAoRobo,
-  enviarNaConversa,
-  lerConversa,
-} from '@/server/conversa-service'
+  conversaDaConta,
+  listarMensagens,
+  marcarConversaLida,
+} from '@/server/whatsapp/caixa-service'
+import { enviarConteudo } from '@/server/whatsapp/envio-service'
 
 type Params = { params: Promise<{ id: string }> }
 
 /**
- * Uma conversa: ler o histórico, responder, assumir do robô ou devolver.
+ * Uma conversa no formato ANTIGO: ler o histórico, responder, assumir do robô
+ * ou devolver. Delega para a caixa de entrada nova e traduz os nomes.
  *
- * `GET` marca como lida — abrir a conversa é o ato de ler. Um botão "marcar
- * como lida" seria trabalho manual para registrar o que já aconteceu.
+ * `GET` marca como lida — era o contrato desta rota, e a tela antiga conta
+ * com isso.
  */
 
 const responderSchema = z.object({
@@ -26,6 +28,11 @@ const acaoSchema = z.object({
   acao: z.enum(['assumir', 'devolver-ao-robo']),
 })
 
+/** Conversa de outra conta responde 404, e não 403. */
+function naoEncontrada(): NextResponse {
+  return NextResponse.json({ mensagem: 'Conversa não encontrada.' }, { status: 404 })
+}
+
 export async function GET(request: NextRequest, { params }: Params): Promise<NextResponse> {
   const guarda = await exigirAdmin(request)
   if (!guarda.autorizado) return guarda.resposta
@@ -33,30 +40,28 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
   const { id } = await params
 
   try {
-    const conversa = await lerConversa(guarda.sessao.userId, id)
-    if (!conversa) return NextResponse.json({ mensagem: 'Conversa não encontrada.' }, { status: 404 })
+    const conversa = await conversaDaConta(guarda.sessao.userId, id)
+    const { mensagens } = await listarMensagens(guarda.sessao.userId, id, { limite: 200 })
+    await marcarConversaLida(guarda.sessao.userId, id)
 
     return NextResponse.json({
       conversa: {
         id: conversa.id,
-        contato: conversa.contato,
+        contato: conversa.telefone ?? conversa.jid,
         nomeContato: conversa.nomeContato,
         roboPausadoAte: conversa.roboPausadoAte,
-        mensagens: conversa.mensagens.map((m) => ({
+        mensagens: mensagens.map((m) => ({
           id: m.id,
           autor: m.autor,
-          texto: m.texto,
+          // A tela antiga só sabe desenhar texto.
+          texto: m.texto ?? `[${m.tipo.toLowerCase()}]`,
           erro: m.erro,
           ocorridoEm: m.ocorridoEm,
         })),
       },
     })
   } catch (erro) {
-    if (erro instanceof DomainError) {
-      // Conversa de outra conta responde 404, e não 403: confirmar que ela
-      // existe já diria que aquele telefone falou com alguma loja daqui.
-      return NextResponse.json({ mensagem: 'Conversa não encontrada.' }, { status: 404 })
-    }
+    if (erro instanceof DomainError) return naoEncontrada()
     throw erro
   }
 }
@@ -66,8 +71,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   if (!guarda.autorizado) return guarda.resposta
 
   const { id } = await params
-  const corpo = await request.json().catch(() => ({}))
-  const analisado = responderSchema.safeParse(corpo)
+  const analisado = responderSchema.safeParse(await request.json().catch(() => ({})))
   if (!analisado.success) {
     return NextResponse.json(
       { codigo: 'CORPO_INVALIDO', mensagem: 'Escreva alguma coisa antes de enviar.' },
@@ -75,14 +79,19 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     )
   }
 
-  const conversa = await lerConversa(guarda.sessao.userId, id)
-  if (!conversa) return NextResponse.json({ mensagem: 'Conversa não encontrada.' }, { status: 404 })
+  let conversa
+  try {
+    conversa = await conversaDaConta(guarda.sessao.userId, id)
+  } catch (erro) {
+    if (erro instanceof DomainError) return naoEncontrada()
+    throw erro
+  }
 
-  const resultado = await enviarNaConversa({
-    perfilId: conversa.perfilId,
-    contato: conversa.contato,
-    texto: analisado.data.texto,
+  const resultado = await enviarConteudo({
+    conversa,
     autor: 'ATENDENTE',
+    conteudo: { tipo: 'texto', texto: analisado.data.texto },
+    exigirProvedorEvolution: false,
   })
 
   if (!resultado.ok) {
@@ -102,8 +111,7 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
   if (!guarda.autorizado) return guarda.resposta
 
   const { id } = await params
-  const corpo = await request.json().catch(() => ({}))
-  const analisado = acaoSchema.safeParse(corpo)
+  const analisado = acaoSchema.safeParse(await request.json().catch(() => ({})))
   if (!analisado.success) {
     return NextResponse.json({ codigo: 'CORPO_INVALIDO' }, { status: 400 })
   }
@@ -116,9 +124,7 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     await devolverAoRobo(guarda.sessao.userId, id)
     return NextResponse.json({ roboPausadoAte: null })
   } catch (erro) {
-    if (erro instanceof DomainError) {
-      return NextResponse.json({ mensagem: 'Conversa não encontrada.' }, { status: 404 })
-    }
+    if (erro instanceof DomainError) return naoEncontrada()
     throw erro
   }
 }

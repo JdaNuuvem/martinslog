@@ -3,14 +3,26 @@ import { timingSafeEqual } from 'crypto'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { env } from '@/env'
-import { enviarNaConversa, registrarEntrada, roboPodeResponder } from '@/server/conversa-service'
+import {
+  atualizarStatusMensagem,
+  enviarNaConversa,
+  registrarMensagem,
+  roboPodeResponder,
+} from '@/server/conversa-service'
 import { responder } from '@/server/robo-atendimento'
 import { pediuParaParar, registrarNaoPerturbe } from '@/server/pode-enviar'
+import {
+  lerMensagem,
+  statusDaEvolution,
+  telefoneDoJid,
+  type RegistroEvolution,
+} from '@/domain/whatsapp/mensagem-evolution'
+import { dispararSincronizacao } from '@/server/whatsapp/importacao-service'
 
 type Params = { params: Promise<{ token: string }> }
 
 /**
- * Entrada de mensagens da Evolution.
+ * Entrada de eventos da Evolution.
  *
  * Pública por necessidade — o webhook chega de fora de qualquer sessão — e por
  * isso o segredo vai no caminho. Sem ele, quem descobrisse a URL escreveria
@@ -20,23 +32,21 @@ type Params = { params: Promise<{ token: string }> }
  * Responde 200 mesmo para evento que não interessa. Webhook que recebe erro é
  * webhook que a Evolution reentrega em laço, e um evento de tipo desconhecido
  * não melhora na segunda tentativa.
+ *
+ * Nomes de evento como a Evolution 2.3.7 os manda no corpo: `messages.upsert`,
+ * `messages.update`, `connection.update` (`sendDataWebhook` em
+ * whatsapp.baileys.service.ts). A forma em maiúsculas com `_` também é aceita,
+ * por ser a que se usa para CONFIGURAR o webhook.
  */
 
-/** Só o que vira mensagem na caixa de entrada. O resto é ruído de protocolo. */
 const EVENTO_MENSAGEM = 'messages.upsert'
+const EVENTO_STATUS = 'messages.update'
+const EVENTO_CONEXAO = 'connection.update'
 
 type PayloadEvolution = {
   event?: string
   instance?: string
-  data?: {
-    key?: { id?: string; remoteJid?: string; fromMe?: boolean }
-    pushName?: string
-    message?: {
-      conversation?: string
-      extendedTextMessage?: { text?: string }
-    }
-    messageTimestamp?: number | string
-  }
+  data?: unknown
 }
 
 /**
@@ -52,17 +62,8 @@ function segredoConfere(recebido: string, esperado: string): boolean {
   return timingSafeEqual(a, b)
 }
 
-/** O telefone de quem escreveu, sem o sufixo de rede do WhatsApp. */
-function telefoneDe(remoteJid: string | undefined): string | null {
-  if (!remoteJid) return null
-  const numero = remoteJid.split('@')[0]?.replace(/\D/g, '')
-  return numero || null
-}
-
-function textoDe(mensagem: PayloadEvolution['data']): string | null {
-  return (
-    mensagem?.message?.conversation ?? mensagem?.message?.extendedTextMessage?.text ?? null
-  )
+function ignorado(motivo: string): NextResponse {
+  return NextResponse.json({ ok: true, ignorado: motivo })
 }
 
 export async function POST(request: NextRequest, { params }: Params): Promise<NextResponse> {
@@ -80,60 +81,102 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   try {
     corpo = (await request.json()) as PayloadEvolution
   } catch {
-    return NextResponse.json({ ok: true, ignorado: 'corpo ilegível' })
+    return ignorado('corpo ilegível')
   }
 
-  if (corpo.event?.toLowerCase() !== EVENTO_MENSAGEM) {
-    return NextResponse.json({ ok: true, ignorado: corpo.event ?? 'sem evento' })
-  }
-
-  /*
-    Mensagem que NÓS mandamos volta neste mesmo evento. Gravá-la encheria a
-    caixa de entrada com o próprio eco, e a loja veria as próprias mensagens
-    como se o cliente as tivesse escrito.
-  */
-  if (corpo.data?.key?.fromMe) {
-    return NextResponse.json({ ok: true, ignorado: 'eco da propria loja' })
-  }
-
-  const instancia = corpo.instance
-  const idExterno = corpo.data?.key?.id
-  const de = telefoneDe(corpo.data?.key?.remoteJid)
-  const texto = textoDe(corpo.data)
-
-  if (!instancia || !idExterno || !de || !texto) {
-    // Áudio, imagem, figurinha: chegam sem texto. Ignorar é melhor que gravar
-    // uma linha vazia que a tela mostraria como mensagem em branco.
-    return NextResponse.json({ ok: true, ignorado: 'sem texto ou sem identificacao' })
-  }
+  const evento = corpo.event?.toLowerCase().replace(/_/g, '.')
+  if (!corpo.instance) return ignorado('sem instancia')
 
   const config = await prisma.evolutionConfig.findUnique({
-    where: { instancia },
+    where: { instancia: corpo.instance },
     select: {
       perfilId: true,
-      perfil: { select: { nome: true, nomeExibicao: true } },
+      conectadoEm: true,
+      perfil: { select: { nome: true, nomeExibicao: true, whatsappProvedor: true } },
     },
   })
-  if (!config) {
-    return NextResponse.json({ ok: true, ignorado: 'instancia sem loja' })
+  if (!config) return ignorado('instancia sem loja')
+
+  if (evento === EVENTO_CONEXAO) return tratarConexao(config, corpo.data)
+  if (evento === EVENTO_STATUS) return tratarStatus(config.perfilId, corpo.data)
+  if (evento === EVENTO_MENSAGEM) return tratarMensagem(config, corpo)
+  return ignorado(corpo.event ?? 'sem evento')
+}
+
+type ConfigDaInstancia = {
+  perfilId: string
+  conectadoEm: Date | null
+  perfil: { nome: string; nomeExibicao: string | null; whatsappProvedor: 'META' | 'EVOLUTION' }
+}
+
+/**
+ * Celular pareou (ou voltou): carimba a conexão e importa o histórico.
+ *
+ * A importação não é esperada — ela leva mais que o timeout do webhook, e a
+ * Evolution reentregaria o evento, disparando outra por cima.
+ */
+async function tratarConexao(config: ConfigDaInstancia, data: unknown): Promise<NextResponse> {
+  const dados = (data ?? {}) as { state?: string; wuid?: string }
+  if (dados.state !== 'open') return NextResponse.json({ ok: true, conexao: dados.state ?? null })
+
+  const numero = telefoneDoJid(dados.wuid)
+  await prisma.evolutionConfig.update({
+    where: { perfilId: config.perfilId },
+    data: {
+      // Só carimba quando abre, e não sobrescreve: a primeira conexão é
+      // informação que não se recupera.
+      conectadoEm: config.conectadoEm ?? new Date(),
+      ultimoErro: null,
+      ...(numero ? { numero } : {}),
+    },
+  })
+
+  dispararSincronizacao(config.perfilId)
+  return NextResponse.json({ ok: true, conexao: 'open' })
+}
+
+/** Tiques de entregue e lido. Às vezes vêm em lote. */
+async function tratarStatus(perfilId: string, data: unknown): Promise<NextResponse> {
+  const lista = (Array.isArray(data) ? data : [data]) as Array<{
+    keyId?: string
+    key?: { id?: string }
+    status?: string
+  } | null>
+
+  let atualizadas = 0
+  for (const item of lista) {
+    const idExterno = item?.keyId ?? item?.key?.id
+    const status = statusDaEvolution(item?.status)
+    if (!idExterno || !status) continue
+    atualizadas += await atualizarStatusMensagem(perfilId, idExterno, status)
   }
+  return NextResponse.json({ ok: true, atualizadas })
+}
 
-  const carimbo = Number(corpo.data?.messageTimestamp ?? 0)
-  const ocorridoEm = carimbo > 0 ? new Date(carimbo * 1000) : new Date()
+async function tratarMensagem(
+  config: ConfigDaInstancia,
+  corpo: PayloadEvolution,
+): Promise<NextResponse> {
+  const lida = lerMensagem(corpo.data as RegistroEvolution)
+  // Grupo, reação, apagar: não é mensagem da caixa de entrada.
+  if (!lida) return ignorado('sem conteudo de conversa')
 
-  const registro = await registrarEntrada({
+  const registro = await registrarMensagem({
     perfilId: config.perfilId,
-    contato: de,
-    nomeContato: corpo.data?.pushName ?? null,
-    texto,
-    idExterno,
-    ocorridoEm,
+    lida,
     payload: corpo as Prisma.InputJsonValue,
   })
 
-  if (!registro || registro.repetida) {
-    return NextResponse.json({ ok: true, repetida: true })
-  }
+  if (registro.repetida) return NextResponse.json({ ok: true, repetida: true })
+
+  /*
+    `fromMe` é a loja respondendo pelo próprio celular. Grava (é parte da
+    conversa) e para aqui: o robô respondendo à própria loja seria um laço.
+  */
+  if (lida.fromMe) return NextResponse.json({ ok: true, autor: 'ATENDENTE' })
+
+  const texto = lida.tipo === 'TEXTO' ? lida.texto : null
+  if (!texto) return NextResponse.json({ ok: true, robo: 'sem-texto' })
 
   /*
     "PARE" antes de qualquer resposta automática.
@@ -143,28 +186,40 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     antes de registrar a saída é exatamente o que transforma incômodo em
     denúncia — que, no WhatsApp não oficial, derruba o número.
 
-    A confirmação é enviada mesmo com o bloqueio já gravado: ela é resposta a
-    um pedido dele, não mensagem da loja, e sem ela a pessoa não tem como
-    saber se funcionou.
+    A confirmação é enviada mesmo com o bloqueio já gravado, e mesmo em loja
+    cujo provedor automático é a Meta: ela é resposta a um pedido dele, não
+    mensagem da loja, e sem ela a pessoa não tem como saber se funcionou.
   */
   if (pediuParaParar(texto)) {
     await registrarNaoPerturbe({
       perfilId: config.perfilId,
-      contato: de,
+      // Sem telefone (`@lid`), o jid é o que identifica a pessoa nesta loja.
+      contato: registro.telefone ?? lida.jid,
       origem: 'CLIENTE',
       motivo: texto.slice(0, 200),
     })
 
     await enviarNaConversa({
       perfilId: config.perfilId,
-      contato: de,
+      jid: lida.jid,
       texto:
         'Pronto, não vamos mais te mandar mensagens sobre pedidos. ' +
         'Se mudar de ideia, é só escrever aqui.',
       autor: 'ROBO',
+      automatico: false,
     })
 
     return NextResponse.json({ ok: true, robo: 'nao-perturbe' })
+  }
+
+  /*
+    O robô é disparo automático, e automático segue o provedor da loja. Uma
+    loja marcada META com celular pareado usa a Evolution para ATENDER, não
+    para falar sozinha — sem esta trava, cada mensagem recebida gerava uma
+    resposta do robô falhada na tela.
+  */
+  if (config.perfil.whatsappProvedor !== 'EVOLUTION') {
+    return NextResponse.json({ ok: true, robo: 'provedor-sem-automacao' })
   }
 
   /*
@@ -181,7 +236,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const nomeLoja = config.perfil.nomeExibicao ?? config.perfil.nome
   const resposta = await responder({
     perfilId: config.perfilId,
-    contato: de,
+    contato: registro.telefone ?? '',
     texto,
     nomeLoja,
   })
@@ -192,7 +247,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   await enviarNaConversa({
     perfilId: config.perfilId,
-    contato: de,
+    jid: lida.jid,
     texto: resposta.texto,
     autor: 'ROBO',
   })

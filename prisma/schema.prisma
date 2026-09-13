@@ -661,6 +661,7 @@ model Perfil {
   respostasAutomaticas RespostaAutomatica[]
   naoPerturbe          NaoPerturbe[]
   campanhas            Campanha[]
+  templatesWhatsapp    TemplateWhatsapp[]
 
   /// Dois perfis com o mesmo nome na mesma conta tornam a lista inútil — é
   /// por ele que a pessoa escolhe no seletor do topo.
@@ -739,6 +740,13 @@ model EvolutionConfig {
   /// conectou", diferente de "caiu".
   conectadoEm  DateTime?
   ultimoErro   String?
+  /// Última importação completa do histórico. Nulo é "nunca importou", e é o
+  /// que faz a primeira abertura da caixa de entrada puxar o que o celular tem.
+  sincronizadoEm     DateTime?
+  /// Trava da importação. Uma coluna, e não lock em memória: duas abas, ou o
+  /// webhook de conexão junto com a tela, podem cair em processos diferentes.
+  /// Vence sozinha — importação que morreu no meio não pode travar para sempre.
+  sincronizandoDesde DateTime?
   criadoEm     DateTime  @default(now())
   atualizadoEm DateTime  @updatedAt
 
@@ -917,11 +925,26 @@ enum AutorMensagem {
 model Conversa {
   id          String  @id @default(cuid())
   perfilId    String
-  /// Telefone do comprador, só dígitos, como a Evolution entrega.
-  contato     String
+  /**
+   * Endereço do contato no WhatsApp, completo: `...@lid` ou `...@s.whatsapp.net`.
+   * É a chave, e não o telefone, porque o WhatsApp novo esconde o número: 333
+   * de 335 conversas do primeiro celular pareado chegaram como `@lid`, um
+   * identificador que NÃO é telefone. Tirar dígitos dele e chamar de telefone
+   * — o que se fazia antes — inventava números que não existem.
+   */
+  jid         String
+  /// Só dígitos, e só quando o jid é `@s.whatsapp.net` (ou a Evolution contou
+  /// o número por trás do `@lid`). Nulo é "não sabemos", nunca "não tem".
+  telefone    String?
   /// Nome que a pessoa escolheu no WhatsApp. Texto de terceiro, nunca
   /// identidade confirmada — não use para decidir nada.
   nomeContato String?
+  fotoUrl     String?
+
+  /// Prévia da última mensagem, pelo mesmo motivo de `ultimaMensagemEm`: a
+  /// lista não deve ter que ler a tabela de mensagens para desenhar uma linha.
+  previa     String?
+  previaTipo TipoMensagemWhatsapp @default(TEXTO)
 
   /// Ordenação da lista. Redundante com a última mensagem, e de propósito:
   /// sem isto, listar conversas por atividade exigiria juntar com a tabela de
@@ -946,9 +969,57 @@ model Conversa {
   mensagens ConversaMensagem[]
   loja      Perfil             @relation(fields: [perfilId], references: [id], onDelete: Cascade)
 
-  @@unique([perfilId, contato])
+  @@unique([perfilId, jid])
   @@index([perfilId, ultimaMensagemEm])
+  @@index([perfilId, telefone])
   @@map("conversas")
+}
+
+/// O que uma mensagem de WhatsApp carrega. A tela desenha cada um de um jeito
+/// — player de áudio, miniatura, cartão de arquivo — e sem o tipo gravado ela
+/// teria que abrir o payload cru para decidir.
+enum TipoMensagemWhatsapp {
+  TEXTO
+  AUDIO
+  IMAGEM
+  VIDEO
+  DOCUMENTO
+  FIGURINHA
+  OUTRO
+}
+
+/// Os tiques do WhatsApp. Só avança: `messages.update` chega fora de ordem, e
+/// um "entregue" atrasado não pode desfazer um "lido".
+enum StatusMensagemWhatsapp {
+  ENVIANDO
+  ENVIADA
+  ENTREGUE
+  LIDA
+  ERRO
+}
+
+/// Resposta pronta do atendimento, só para o WhatsApp.
+///
+/// Separada de `MensagemTemplate` (aviso automático por evento, com nome de
+/// template aprovado na Meta) e do SMS: aqui é o atendente escolhendo um texto
+/// na hora, dentro de uma conversa já aberta. Nada disto sai sozinho.
+model TemplateWhatsapp {
+  id           String   @id @default(cuid())
+  perfilId     String
+  titulo       String
+  /// Palavra para achar rápido ("rastreio"). Única por loja quando existe —
+  /// dois atalhos iguais tornariam o atalho inútil. Nulos não colidem.
+  atalho       String?
+  texto        String
+  ordem        Int      @default(0)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  perfil Perfil @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+
+  @@unique([perfilId, atalho])
+  @@index([perfilId, ordem])
+  @@map("templates_whatsapp")
 }
 
 /// Uma mensagem da conversa, nas duas direções.
@@ -960,7 +1031,19 @@ model ConversaMensagem {
   id         String        @id @default(cuid())
   conversaId String
   autor      AutorMensagem
-  texto      String
+  /// Texto, ou a legenda da mídia. Nulo em áudio e figurinha, que não têm.
+  texto      String?
+  tipo       TipoMensagemWhatsapp   @default(TEXTO)
+  status     StatusMensagemWhatsapp @default(ENVIADA)
+
+  /// Metadados da mídia. O arquivo em si NÃO mora aqui: fica na Evolution e é
+  /// baixado sob demanda. Guardar 16 MB por áudio no Postgres transformaria o
+  /// backup do banco num backup de WhatsApp.
+  midiaMimetype String?
+  midiaNome     String?
+  midiaTamanho  Int?
+  /// Segundos, para áudio e vídeo.
+  midiaDuracao  Int?
 
   /// Id no provedor. Único para o webhook poder reentregar sem duplicar, e
   /// nulo enquanto uma mensagem nossa não foi aceita pelo provedor.

@@ -148,7 +148,8 @@ export async function obterConexao(
                 webhook: {
                   url: `${process.env.APP_URL}/api/evolution/webhook/${env.EVOLUTION_WEBHOOK_TOKEN}`,
                   byEvents: false,
-                  events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'],
+                  // MESSAGES_UPDATE traz os tiques de entregue/lido.
+                  events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE', 'MESSAGES_UPDATE'],
                 },
               }
             : {}),

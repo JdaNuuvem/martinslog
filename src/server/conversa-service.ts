@@ -1,9 +1,17 @@
-import type { AutorMensagem, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
+import type { AutorMensagem, StatusMensagemWhatsapp } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { NaoAutorizadoError } from '@/domain/errors'
 import { acharPerfil } from '@/server/perfil-service'
-import { credenciaisDoServidor, whatsappProvider } from '@/infra/whatsapp'
 import { normalizarTelefone } from '@/infra/whatsapp/cloud-api'
+import {
+  jidDoTelefone,
+  previaDe,
+  statusAnterioresA,
+  telefoneDoJid,
+  type MensagemLida,
+} from '@/domain/whatsapp/mensagem-evolution'
+import { enviarConteudo, PAUSA_DO_ROBO_MINUTOS } from '@/server/whatsapp/envio-service'
 import { registrarLead } from './lead-service'
 
 /**
@@ -14,189 +22,217 @@ import { registrarLead } from './lead-service'
  * O que muda entre elas é só o autor.
  */
 
+export { PAUSA_DO_ROBO_MINUTOS }
+
+function colisaoDeChave(erro: unknown): boolean {
+  return erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002'
+}
+
 /**
- * Quanto tempo o robô fica calado depois que um humano responde.
+ * Achar ou criar a conversa daquele contato naquela loja.
  *
- * Prazo, e não interruptor: ninguém lembra de devolver a conversa ao robô
- * depois de atender, e sem expirar sozinho toda conversa tocada uma vez
- * ficaria sem automação para sempre. Meia hora cobre o vaivém de um
- * atendimento sem prender a conversa até o dia seguinte.
+ * Procura pelo jid e, quando se sabe o telefone, também pelo jid de telefone:
+ * a mesma pessoa pode ter aparecido antes como `...@s.whatsapp.net` e agora
+ * como `...@lid`. Duas conversas para a mesma pessoa partiriam o histórico ao
+ * meio, e o atendente responderia sem ver o que já foi dito.
  */
-const PAUSA_DO_ROBO_MINUTOS = 30
+export async function conversaDoJid(
+  perfilId: string,
+  dados: { jid: string; telefone?: string | null; nome?: string | null; fotoUrl?: string | null },
+): Promise<{ id: string; perfilId: string; jid: string; telefone: string | null; criada: boolean; ultimaMensagemEm: Date }> {
+  const candidatos = [dados.jid]
+  if (dados.telefone) candidatos.push(jidDoTelefone(dados.telefone))
 
-export type ResumoConversa = {
-  id: string
-  contato: string
-  nomeContato: string | null
-  ultimaMensagemEm: Date
-  naoLidas: number
-  roboPausado: boolean
-  previa: string | null
-}
-
-/** Achar ou criar a conversa daquele telefone naquela loja. */
-async function conversaDoContato(perfilId: string, contato: string, nomeContato?: string | null) {
-  return prisma.conversa.upsert({
-    where: { perfilId_contato: { perfilId, contato } },
-    create: { perfilId, contato, nomeContato: nomeContato ?? null },
-    // O nome muda quando a pessoa troca no WhatsApp. Só sobrescreve com valor
-    // presente: um push name ausente não deve apagar o que já se sabia.
-    update: nomeContato ? { nomeContato } : {},
+  const achadas = await prisma.conversa.findMany({
+    where: { perfilId, jid: { in: candidatos } },
+    select: { id: true, perfilId: true, jid: true, telefone: true, nomeContato: true, ultimaMensagemEm: true },
   })
+  const existente = achadas.find((c) => c.jid === dados.jid) ?? achadas[0]
+
+  if (existente) {
+    // Só sobrescreve com valor presente: um push name ausente não deve apagar
+    // o que já se sabia.
+    const mudancas = {
+      ...(dados.telefone && !existente.telefone ? { telefone: dados.telefone } : {}),
+      ...(dados.nome && dados.nome !== existente.nomeContato ? { nomeContato: dados.nome } : {}),
+      ...(dados.fotoUrl ? { fotoUrl: dados.fotoUrl } : {}),
+    }
+    if (Object.keys(mudancas).length > 0) {
+      await prisma.conversa.update({ where: { id: existente.id }, data: mudancas })
+    }
+    return { ...existente, telefone: existente.telefone ?? dados.telefone ?? null, criada: false }
+  }
+
+  try {
+    const criada = await prisma.conversa.create({
+      data: {
+        perfilId,
+        jid: dados.jid,
+        telefone: dados.telefone ?? null,
+        nomeContato: dados.nome ?? null,
+        fotoUrl: dados.fotoUrl ?? null,
+      },
+      select: { id: true, perfilId: true, jid: true, telefone: true, ultimaMensagemEm: true },
+    })
+    return { ...criada, criada: true }
+  } catch (erro) {
+    // Duas mensagens da mesma pessoa nova chegando juntas: a outra criou.
+    if (!colisaoDeChave(erro)) throw erro
+    const outra = await prisma.conversa.findUniqueOrThrow({
+      where: { perfilId_jid: { perfilId, jid: dados.jid } },
+      select: { id: true, perfilId: true, jid: true, telefone: true, ultimaMensagemEm: true },
+    })
+    return { ...outra, criada: false }
+  }
 }
 
 /**
- * Grava o que o comprador escreveu.
+ * Grava uma mensagem que chegou pelo webhook — do cliente, ou do próprio
+ * celular da loja (`fromMe`).
  *
  * Idempotente por `idExterno`: o webhook reentrega quando não recebe 200 a
  * tempo, e sem isso a mesma mensagem apareceria duas vezes na tela.
+ *
+ * `fromMe` vira ATENDENTE: é alguém da loja respondendo pelo aparelho. Não
+ * conta como não lida e não passa pelo robô. O `pushName` dela é o nome da
+ * LOJA, então não vira nome da conversa.
  */
-export async function registrarEntrada(entrada: {
+export async function registrarMensagem(entrada: {
   perfilId: string
-  contato: string
-  nomeContato?: string | null
-  texto: string
-  idExterno: string
-  ocorridoEm: Date
-  payload: Prisma.InputJsonValue
-}): Promise<{ conversaId: string; repetida: boolean } | null> {
+  lida: MensagemLida
+  payload?: Prisma.InputJsonValue
+}): Promise<{ conversaId: string; repetida: boolean; telefone: string | null }> {
+  const { lida } = entrada
+
   const jaExiste = await prisma.conversaMensagem.findUnique({
-    where: { idExterno: entrada.idExterno },
-    select: { conversaId: true },
+    where: { idExterno: lida.idExterno },
+    select: { conversa: { select: { id: true, telefone: true } } },
   })
-  if (jaExiste) return { conversaId: jaExiste.conversaId, repetida: true }
+  if (jaExiste) {
+    return { conversaId: jaExiste.conversa.id, repetida: true, telefone: jaExiste.conversa.telefone }
+  }
 
-  const conversa = await conversaDoContato(entrada.perfilId, entrada.contato, entrada.nomeContato)
+  const autor: AutorMensagem = lida.fromMe ? 'ATENDENTE' : 'CLIENTE'
+  const conversa = await conversaDoJid(entrada.perfilId, {
+    jid: lida.jid,
+    telefone: lida.telefone,
+    nome: lida.fromMe ? null : lida.pushName,
+  })
 
-  await prisma.$transaction([
-    prisma.conversaMensagem.create({
-      data: {
-        conversaId: conversa.id,
-        autor: 'CLIENTE',
-        texto: entrada.texto,
-        idExterno: entrada.idExterno,
-        ocorridoEm: entrada.ocorridoEm,
-        payload: entrada.payload,
-      },
-    }),
-    prisma.conversa.update({
-      where: { id: conversa.id },
-      data: {
-        ultimaMensagemEm: entrada.ocorridoEm,
-        naoLidas: { increment: 1 },
-      },
-    }),
-  ])
+  // Mensagem atrasada (reentrega de ontem) não pode jogar a conversa para o
+  // topo nem trocar a prévia pela de uma mensagem mais velha.
+  const maisNova = conversa.criada || lida.ocorridoEm >= conversa.ultimaMensagemEm
+
+  try {
+    await prisma.$transaction([
+      prisma.conversaMensagem.create({
+        data: {
+          conversaId: conversa.id,
+          autor,
+          tipo: lida.tipo,
+          texto: lida.texto,
+          status: 'ENVIADA',
+          midiaMimetype: lida.midiaMimetype,
+          midiaNome: lida.midiaNome,
+          midiaTamanho: lida.midiaTamanho,
+          midiaDuracao: lida.midiaDuracao,
+          idExterno: lida.idExterno,
+          ocorridoEm: lida.ocorridoEm,
+          payload: entrada.payload,
+        },
+      }),
+      prisma.conversa.update({
+        where: { id: conversa.id },
+        data: {
+          ...(maisNova
+            ? {
+                ultimaMensagemEm: lida.ocorridoEm,
+                previa: previaDe(lida.tipo, lida.texto),
+                previaTipo: lida.tipo,
+              }
+            : {}),
+          ...(autor === 'CLIENTE' ? { naoLidas: { increment: 1 } } : {}),
+        },
+      }),
+    ])
+  } catch (erro) {
+    // A reentrega passou pela checagem junto com a original.
+    if (colisaoDeChave(erro)) return { conversaId: conversa.id, repetida: true, telefone: conversa.telefone }
+    throw erro
+  }
 
   /*
     Quem chama a loja no WhatsApp entra na base mesmo sem ter comprado — é o
-    lead no sentido literal. Traz só telefone, e às vezes o apelido do
-    perfil, que por isso perde do nome vindo de um envio.
+    lead no sentido literal. Só com telefone: um `@lid` não reconhece ninguém
+    da próxima vez.
   */
-  try {
-    await registrarLead({
-      tipo: 'CONVERSA',
-      perfilId: entrada.perfilId,
-      conversaId: conversa.id,
-      ocorridoEm: entrada.ocorridoEm,
-      nome: entrada.nomeContato,
-      telefone: entrada.contato,
-    })
-  } catch (error) {
-    console.error('Falha ao registrar o lead da conversa', { cause: error })
+  if (autor === 'CLIENTE' && conversa.telefone) {
+    try {
+      await registrarLead({
+        tipo: 'CONVERSA',
+        perfilId: entrada.perfilId,
+        conversaId: conversa.id,
+        ocorridoEm: lida.ocorridoEm,
+        nome: lida.pushName,
+        telefone: conversa.telefone,
+      })
+    } catch (error) {
+      console.error('Falha ao registrar o lead da conversa', { cause: error })
+    }
   }
 
-  return { conversaId: conversa.id, repetida: false }
+  return { conversaId: conversa.id, repetida: false, telefone: conversa.telefone }
 }
 
 /**
- * Manda uma mensagem pela conversa e registra o que aconteceu.
+ * Tique de entregue/lido vindo de `messages.update`. Só avança: o evento chega
+ * fora de ordem, e um "entregue" atrasado não desfaz um "lido".
+ */
+export async function atualizarStatusMensagem(
+  perfilId: string,
+  idExterno: string,
+  status: StatusMensagemWhatsapp,
+): Promise<number> {
+  const { count } = await prisma.conversaMensagem.updateMany({
+    // Pela loja da instância: o evento de uma instância não mexe em mensagem
+    // de outra loja, ainda que alguém forje o id.
+    where: { idExterno, conversa: { perfilId }, status: { in: statusAnterioresA(status) } },
+    data: { status },
+  })
+  return count
+}
+
+/**
+ * Manda um texto pela conversa de um contato, por telefone ou jid.
  *
- * `autor` separa o que o robô respondeu do que uma pessoa escreveu. Os dois
- * saem pelo mesmo número — a distinção é para o painel, não para o comprador.
- *
- * Quando é ATENDENTE, o robô é silenciado: duas respostas para a mesma
- * pergunta, uma humana e uma automática, é pior que só a automática.
+ * É a porta de quem não tem a conversa aberta: robô, campanha, confirmação do
+ * "PARE". `automatico` diz se o disparo é da máquina — e aí só sai por loja
+ * com provedor EVOLUTION — ou resposta a um pedido da própria pessoa.
  */
 export async function enviarNaConversa(entrada: {
   perfilId: string
-  contato: string
+  contato?: string
+  jid?: string
   texto: string
   autor: Extract<AutorMensagem, 'ROBO' | 'ATENDENTE'>
+  automatico?: boolean
 }): Promise<{ ok: true } | { ok: false; erro: string }> {
-  const para = normalizarTelefone(entrada.contato)
-  if (!para) return { ok: false, erro: 'Telefone inválido.' }
+  const telefoneNormalizado = entrada.contato ? normalizarTelefone(entrada.contato) : null
+  const jid = entrada.jid ?? (telefoneNormalizado ? jidDoTelefone(telefoneNormalizado) : null)
+  if (!jid) return { ok: false, erro: 'Telefone inválido.' }
 
-  const loja = await prisma.perfil.findUnique({
-    where: { id: entrada.perfilId },
-    select: { whatsappProvedor: true, evolutionConfig: true },
+  const conversa = await conversaDoJid(entrada.perfilId, {
+    jid,
+    telefone: telefoneDoJid(jid) ?? telefoneNormalizado,
   })
 
-  const conversa = await conversaDoContato(entrada.perfilId, entrada.contato)
-
-  const servidor = credenciaisDoServidor()
-  if (loja?.whatsappProvedor !== 'EVOLUTION' || !servidor || !loja.evolutionConfig?.conectadoEm) {
-    /*
-      Só pela Evolution. A API oficial da Meta não manda texto livre fora da
-      janela de 24h — ela exigiria um template aprovado, e uma resposta de
-      atendimento não é template.
-
-      Grava a tentativa com o motivo em vez de só devolver o erro. Sem isto, o
-      que o atendente escreveu desaparecia da tela junto com o aviso de falha,
-      e ele não tinha como saber se chegou a mandar — nem o que tinha escrito.
-    */
-    const motivo = 'Esta loja não está com o WhatsApp pareado pela Evolution.'
-    await prisma.conversaMensagem.create({
-      data: {
-        conversaId: conversa.id,
-        autor: entrada.autor,
-        texto: entrada.texto,
-        erro: motivo,
-      },
-    })
-    return { ok: false, erro: motivo }
-  }
-
-  const resultado = await whatsappProvider('EVOLUTION').enviar(
-    {
-      tipo: 'EVOLUTION',
-      baseUrl: servidor.baseUrl,
-      apiKey: servidor.apiKey,
-      instancia: loja.evolutionConfig.instancia,
-    },
-    { para, texto: entrada.texto, template: null },
-  )
-
-  const agora = new Date()
-
-  await prisma.$transaction([
-    prisma.conversaMensagem.create({
-      data: {
-        conversaId: conversa.id,
-        autor: entrada.autor,
-        texto: entrada.texto,
-        // Mensagem que não saiu fica registrada com o motivo, em vez de
-        // sumir: o atendente precisa ver que a resposta dele não chegou.
-        idExterno: resultado.ok ? resultado.idExterno : null,
-        erro: resultado.ok ? null : resultado.mensagem,
-        ocorridoEm: agora,
-      },
-    }),
-    prisma.conversa.update({
-      where: { id: conversa.id },
-      data: {
-        ultimaMensagemEm: agora,
-        ...(entrada.autor === 'ATENDENTE'
-          ? {
-              naoLidas: 0,
-              roboPausadoAte: new Date(agora.getTime() + PAUSA_DO_ROBO_MINUTOS * 60 * 1000),
-            }
-          : {}),
-      },
-    }),
-  ])
-
-  return resultado.ok ? { ok: true } : { ok: false, erro: resultado.mensagem }
+  const resultado = await enviarConteudo({
+    conversa,
+    autor: entrada.autor,
+    conteudo: { tipo: 'texto', texto: entrada.texto },
+    exigirProvedorEvolution: entrada.automatico ?? entrada.autor === 'ROBO',
+  })
+  return resultado.ok ? { ok: true } : { ok: false, erro: resultado.erro }
 }
 
 /** O robô deve responder nesta conversa, ou um humano assumiu? */
@@ -209,66 +245,19 @@ export async function roboPodeResponder(conversaId: string): Promise<boolean> {
   return conversa.roboPausadoAte.getTime() <= Date.now()
 }
 
-export async function listarConversas(
-  userId: string,
-  perfilId: string,
-): Promise<ResumoConversa[]> {
-  if (!(await acharPerfil(userId, perfilId))) throw new NaoAutorizadoError('Perfil não encontrado.')
-
-  const conversas = await prisma.conversa.findMany({
-    where: { perfilId },
-    orderBy: { ultimaMensagemEm: 'desc' },
-    take: 100,
-    include: {
-      // Só a última, para a prévia da lista. Carregar o histórico inteiro de
-      // cem conversas para mostrar uma linha de cada seria o caminho curto
-      // para a tela demorar a abrir.
-      mensagens: { orderBy: { ocorridoEm: 'desc' }, take: 1, select: { texto: true } },
-    },
-  })
-
-  const agora = Date.now()
-  return conversas.map((c) => ({
-    id: c.id,
-    contato: c.contato,
-    nomeContato: c.nomeContato,
-    ultimaMensagemEm: c.ultimaMensagemEm,
-    naoLidas: c.naoLidas,
-    roboPausado: Boolean(c.roboPausadoAte && c.roboPausadoAte.getTime() > agora),
-    previa: c.mensagens[0]?.texto ?? null,
-  }))
-}
-
-export async function lerConversa(userId: string, conversaId: string) {
-  const conversa = await prisma.conversa.findUnique({
-    where: { id: conversaId },
-    include: { mensagens: { orderBy: { ocorridoEm: 'asc' }, take: 200 } },
-  })
-  if (!conversa) return null
-  if (!(await acharPerfil(userId, conversa.perfilId))) {
-    throw new NaoAutorizadoError('Conversa não encontrada.')
-  }
-
-  // Abrir a conversa é o ato de ler. Zerar aqui evita um botão "marcar como
-  // lida" que ninguém clica e um contador que nunca zera.
-  if (conversa.naoLidas > 0) {
-    await prisma.conversa.update({ where: { id: conversaId }, data: { naoLidas: 0 } })
-  }
-
-  return conversa
-}
-
-/** Assume a conversa: o robô fica calado pelo prazo padrão. */
-export async function assumirConversa(userId: string, conversaId: string): Promise<Date> {
+async function exigirConversaDaConta(userId: string, conversaId: string): Promise<void> {
   const conversa = await prisma.conversa.findUnique({
     where: { id: conversaId },
     select: { perfilId: true },
   })
-  if (!conversa) throw new NaoAutorizadoError('Conversa não encontrada.')
-  if (!(await acharPerfil(userId, conversa.perfilId))) {
+  if (!conversa || !(await acharPerfil(userId, conversa.perfilId))) {
     throw new NaoAutorizadoError('Conversa não encontrada.')
   }
+}
 
+/** Assume a conversa: o robô fica calado pelo prazo padrão. */
+export async function assumirConversa(userId: string, conversaId: string): Promise<Date> {
+  await exigirConversaDaConta(userId, conversaId)
   const ate = new Date(Date.now() + PAUSA_DO_ROBO_MINUTOS * 60 * 1000)
   await prisma.conversa.update({ where: { id: conversaId }, data: { roboPausadoAte: ate } })
   return ate
@@ -276,13 +265,6 @@ export async function assumirConversa(userId: string, conversaId: string): Promi
 
 /** Devolve a conversa ao robô antes do prazo. */
 export async function devolverAoRobo(userId: string, conversaId: string): Promise<void> {
-  const conversa = await prisma.conversa.findUnique({
-    where: { id: conversaId },
-    select: { perfilId: true },
-  })
-  if (!conversa) throw new NaoAutorizadoError('Conversa não encontrada.')
-  if (!(await acharPerfil(userId, conversa.perfilId))) {
-    throw new NaoAutorizadoError('Conversa não encontrada.')
-  }
+  await exigirConversaDaConta(userId, conversaId)
   await prisma.conversa.update({ where: { id: conversaId }, data: { roboPausadoAte: null } })
 }

@@ -137,7 +137,12 @@ describe('carregarLeads', () => {
       })
       await emitirPara(pessoa)
       await prisma.conversa.create({
-        data: { perfilId, contato: pessoa.telefone, nomeContato: 'pessoa' },
+        data: {
+          perfilId,
+          jid: `${pessoa.telefone}@s.whatsapp.net`,
+          telefone: pessoa.telefone,
+          nomeContato: 'pessoa',
+        },
       })
 
       // O fluxo ao vivo já alimentou a base; apagá-la simula o histórico que

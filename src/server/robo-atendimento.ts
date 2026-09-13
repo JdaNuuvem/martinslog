@@ -107,6 +107,13 @@ async function enviosDoTelefone(perfilId: string, contato: string) {
   const semPais = digitos.startsWith('55') ? digitos.slice(2) : digitos
   const finalDoNumero = semPais.slice(-8)
 
+  /*
+    Sem oito dígitos não há busca. Conversa `@lid` chega sem telefone, e
+    `string_contains: ''` casa com TODO envio da loja — o robô responderia a
+    um desconhecido com o rastreio de outros compradores.
+  */
+  if (finalDoNumero.length < 8) return []
+
   return prisma.shipment.findMany({
     where: {
       perfilId,
