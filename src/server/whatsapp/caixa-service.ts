@@ -101,7 +101,10 @@ export async function listarLojas(userId: string): Promise<LojaCaixa[]> {
   })
   return perfis.map((p) => ({
     perfilId: p.id,
-    nome: p.nomeExibicao ?? p.nome,
+    // O identificador junto do nome de exibição: lojas diferentes podem usar a
+    // mesma marca, e escolher a loja errada no seletor é responder pelo celular
+    // errado.
+    nome: p.nomeExibicao && p.nomeExibicao !== p.nome ? `${p.nomeExibicao} (${p.nome})` : p.nome,
     conectado: Boolean(p.evolutionConfig?.conectadoEm),
     numero: p.evolutionConfig?.numero ?? null,
   }))
