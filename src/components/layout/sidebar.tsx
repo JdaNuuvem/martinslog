@@ -2,11 +2,12 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useRef, type RefObject } from 'react'
+import { useEffect, useRef, type ReactElement, type RefObject, type SVGProps } from 'react'
 import {
   IconeAdmin,
   IconeAjuda,
   IconeCalcular,
+  IconeConversas,
   IconeConvide,
   IconeEtiquetas,
   IconeFechar,
@@ -21,6 +22,8 @@ import {
 import { useLogout } from './usar-logout'
 
 export const SIDEBAR_ID = 'menu-navegacao'
+
+type ItemMenu = { rotulo: string; href: string; Icone: (props: SVGProps<SVGSVGElement>) => ReactElement }
 
 const ITENS = [
   { rotulo: 'Calcular', href: '/', Icone: IconeCalcular },
@@ -47,6 +50,17 @@ const ITENS = [
  */
 const ITEM_ADMIN = { rotulo: 'Administração', href: '/admin', Icone: IconeAdmin } as const
 
+/**
+ * A caixa de entrada do WhatsApp, logo abaixo de "WhatsApp".
+ *
+ * Item separado da conexão porque são usos diferentes: conectar o número é
+ * coisa de uma vez; atender conversa é o dia inteiro, e não deveria custar
+ * um clique a mais dentro da tela de configuração. Só para administradores,
+ * como a própria tela e as rotas `/api/whatsapp/*` — mostrar a lojista um
+ * link que responde 404 seria desenhar um caminho quebrado.
+ */
+const ITEM_CONVERSAS = { rotulo: 'Conversas', href: '/conversas', Icone: IconeConversas } as const
+
 type SidebarProps = {
   aberta: boolean
   onFechar: () => void
@@ -66,7 +80,9 @@ type SidebarProps = {
  */
 export function Sidebar({ aberta, onFechar, botaoMenuRef, autenticado, ehAdmin = false }: SidebarProps) {
   const pathname = usePathname()
-  const itens = ehAdmin ? [...ITENS, ITEM_ADMIN] : ITENS
+  const itens: readonly ItemMenu[] = ehAdmin
+    ? [...ITENS.flatMap((item): ItemMenu[] => (item.href === '/whatsapp' ? [item, ITEM_CONVERSAS] : [item])), ITEM_ADMIN]
+    : ITENS
 
   /**
    * Item destacado: o de rota mais específica que casa com a página atual.
