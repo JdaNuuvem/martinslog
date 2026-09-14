@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/infra/db/client'
 import { ValorInvalidoError } from '@/domain/errors'
+import type { StatusShipment } from '@/domain/shipment/estados'
 import {
   normalizarDias,
   ordenarPorConexoes,
@@ -105,7 +106,7 @@ export async function removerTemplate(userId: string): Promise<void> {
 export async function statusPorCodigoDaConta(
   userId: string,
   cliente: ClientePrisma = prisma,
-): Promise<Record<string, string>> {
+): Promise<Record<string, StatusShipment>> {
   const template = await obterTemplate(userId, cliente)
   if (!template) return {}
 

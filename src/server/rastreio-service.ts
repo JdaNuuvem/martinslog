@@ -4,6 +4,7 @@ import { statusDoEvento } from '@/domain/simulacao/roteiro'
 import type { StatusShipment } from '@/domain/shipment/estados'
 import type { RastreioResposta } from '@/lib/rastreio-schema'
 import { sincronizarEnvio } from './sincronizar-envio-service'
+import { statusPorCodigoDaConta } from './template-rastreio-service'
 
 /**
  * Consulta pública de um envio pelo código de rastreio
@@ -27,13 +28,17 @@ import { sincronizarEnvio } from './sincronizar-envio-service'
  * pode derrubar a consulta: a página do cliente mostra o status persistido,
  * que está atrasado mas é verdadeiro, em vez de um erro.
  */
-function statusVisivel(codigo: string | undefined, persistido: StatusShipment): StatusShipment {
+function statusVisivel(
+  codigo: string | undefined,
+  persistido: StatusShipment,
+  statusPorCodigo?: Record<string, StatusShipment>,
+): StatusShipment {
   if (!codigo) {
     return persistido
   }
 
   try {
-    return statusDoEvento(codigo)
+    return statusDoEvento(codigo, statusPorCodigo)
   } catch {
     return persistido
   }
@@ -53,8 +58,17 @@ export async function rastrearEnvio(
   // mais — nenhum caminho dela toca em carteira.
   const envioParaSincronizar = await prisma.shipment.findFirst({
     where: { codigoRastreio },
-    select: { id: true },
+    select: { id: true, userId: true },
   })
+
+  // Mapa código→status do template da conta, para que os nós exclusivos da
+  // paleta (tentativas numeradas, transferência entre filiais, cobranças)
+  // sejam reconhecidos aqui como são no motor. Sem isto a sincronização
+  // parava nesses eventos, deixando `Shipment.status` congelado até um
+  // "conserto" manual furar os prazos do fluxo personalizado.
+  const statusPorCodigo = envioParaSincronizar
+    ? await statusPorCodigoDaConta(envioParaSincronizar.userId)
+    : undefined
 
   if (envioParaSincronizar) {
     // A sincronização é benefício, não requisito da consulta: se ela falhar,
@@ -62,7 +76,7 @@ export async function rastrearEnvio(
     // persistido atrasado, o que a derivação do último evento visível
     // compensa na resposta.
     try {
-      await sincronizarEnvio(envioParaSincronizar.id, agora)
+      await sincronizarEnvio(envioParaSincronizar.id, agora, statusPorCodigo)
     } catch (error) {
       console.error('Falha ao sincronizar envio durante a consulta de rastreio', {
         cause: error,
@@ -92,7 +106,7 @@ export async function rastrearEnvio(
     // O status persistido pode estar atrás do relógio até a próxima
     // sincronização; o último evento visível é a fonte da verdade do que o
     // cliente pode ver agora.
-    status: statusVisivel(ultimoVisivel?.codigo, envio.status),
+    status: statusVisivel(ultimoVisivel?.codigo, envio.status, statusPorCodigo),
     servico: envio.service.nome,
     prazoDias: envio.service.prazoBase,
     criadoEm: envio.criadoEm.toISOString(),

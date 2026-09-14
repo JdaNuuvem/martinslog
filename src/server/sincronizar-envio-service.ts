@@ -10,6 +10,7 @@ import {
 import { statusDoEvento } from '@/domain/simulacao/roteiro'
 import { enviarAtualizacao } from './email-service'
 import { enfileirarEvento, type Evento } from './webhook-service'
+import { statusPorCodigoDaConta } from './template-rastreio-service'
 
 /**
  * Eventos de webhook que nascem aqui, e só aqui.
@@ -243,6 +244,12 @@ export async function sincronizarEnviosPendentesDoUsuario(
   userId: string,
   agora: Date = new Date(),
 ): Promise<number> {
+  // O template pode usar códigos exclusivos da paleta (tentativas numeradas,
+  // transferência entre filiais, cobranças) que o motor por cenário não
+  // conhece. Sem este mapa, `statusOuNulo` devolve `null` para eles e a
+  // varredura considera o envio "em dia" mesmo parado no meio do percurso.
+  const statusPorCodigo = await statusPorCodigoDaConta(userId)
+
   const candidatos = await prisma.shipment.findMany({
     where: {
       userId,
@@ -267,7 +274,7 @@ export async function sincronizarEnviosPendentesDoUsuario(
       return false
     }
 
-    const derivado = statusOuNulo(ultimo.codigo)
+    const derivado = statusOuNulo(ultimo.codigo, statusPorCodigo)
     return derivado !== null && derivado !== envio.status
   })
 
@@ -275,7 +282,7 @@ export async function sincronizarEnviosPendentesDoUsuario(
 
   for (const envio of desatualizados) {
     try {
-      await sincronizarEnvio(envio.id, agora)
+      await sincronizarEnvio(envio.id, agora, statusPorCodigo)
       sincronizados += 1
     } catch (error) {
       /*

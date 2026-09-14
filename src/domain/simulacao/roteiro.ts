@@ -15,6 +15,7 @@ import {
   unidadeTratamento,
 } from './unidades'
 import { escalasDaRota, escalasSugeridas } from './corredor'
+import { PALETA } from '../rastreio/template-rastreio'
 
 const MINUTOS_POR_DIA = 1440
 
@@ -105,6 +106,24 @@ const STATUS_POR_CODIGO: Readonly<Record<CodigoEvento, StatusShipment>> = {
 }
 
 /**
+ * Status dos códigos exclusivos da paleta do template de rastreio
+ * (`TRANSFERENCIA_FILIAL`, `TENTATIVA_ENTREGA_1..5`, `AGUARDANDO_TRIBUTO`,
+ * `TAXA_ALFANDEGA`, entre outros que não têm equivalente no motor por
+ * cenário). Serve de **fallback** quando quem chama `statusDoEvento` não
+ * tem o `statusPorCodigo` da conta em mãos — o cron de varredura e a
+ * consulta pública de rastreio, por exemplo.
+ *
+ * Sem isto, um evento desses códigos derrubava a sincronização
+ * silenciosamente (`sincronizarEnvio` parava no primeiro código
+ * intraduzível) e o envio nunca alcançava `DELIVERED` pelo caminho normal —
+ * o que levava a "consertos" manuais que inventavam uma data de entrega
+ * sem relação com os prazos configurados no template.
+ */
+const STATUS_PADRAO_DO_TEMPLATE: Readonly<Record<string, StatusShipment>> = Object.fromEntries(
+  PALETA.map((item) => [item.codigo, item.statusResultante]),
+)
+
+/**
  * Status de envio produzido por um evento.
  *
  * Aceita `string` porque o código pode ter sido criado por uma conta, e
@@ -118,7 +137,10 @@ export function statusDoEvento(
   codigo: string,
   statusPorCodigo?: Readonly<Record<string, StatusShipment>>,
 ): StatusShipment {
-  const status = statusPorCodigo?.[codigo] ?? STATUS_POR_CODIGO[codigo as CodigoEvento]
+  const status =
+    statusPorCodigo?.[codigo] ??
+    STATUS_POR_CODIGO[codigo as CodigoEvento] ??
+    STATUS_PADRAO_DO_TEMPLATE[codigo]
 
   if (!status) {
     throw new ValorInvalidoError(
